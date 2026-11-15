@@ -29,6 +29,32 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #ov input,#pause input{font:inherit;font-size:14px;background:#05070e;color:#cfe8ff;border:1px solid #29f0ff55;padding:6px 8px;width:290px;outline:none}
 #ov input:focus{border-color:#29f0ff}
 #nogl{display:none;color:#ff3f5a;margin-top:10px}
+#ov button.alt,#tut button.alt{background:#0e1424;color:#29f0ff;border:1px solid #29f0ff;box-shadow:none;margin-left:8px}
+#ov button.alt:hover,#tut button.alt:hover{background:#ff3fa4;color:#05060c;border-color:#ff3fa4}
+#tut{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,10,40,.85),rgba(3,4,10,.96));z-index:2;overflow:auto}
+#tut .box{width:560px;max-width:92vw;padding:28px 34px;border:1px solid #29f0ff55;background:#0a0d1acc;box-shadow:0 0 40px #29f0ff22;margin:16px}
+#tut h1{margin:0 0 4px;font-size:34px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff,0 0 30px #ff3fa4}
+#tut h1 span{color:#ff3fa4}
+#tut .sub{color:#8aa;margin-bottom:16px;letter-spacing:2px}
+#tut .note{color:#7f8fa8;font-size:12px;line-height:1.4}
+#tut button{font:inherit;cursor:pointer}
+#tut button.alt{font-size:16px;letter-spacing:3px;padding:9px 24px}
+#tut button.room{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:10px 14px;margin:7px 0;background:#0e1424;color:#cfe8ff;border:1px solid #29f0ff44}
+#tut button.room:hover{background:#18233a;border-color:#29f0ff}
+#tut .room .n{font-size:24px;color:#ff3fa4;width:26px;text-align:center}
+#tut .room .t{flex:1;font-size:16px;letter-spacing:2px}
+#tut .room small{display:block;color:#7f8fa8;font-size:12px;letter-spacing:0;margin-top:3px}
+#tut .room .ok{color:#3dff7a;font-size:22px;width:24px}
+#card{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:4;background:rgba(3,4,10,.55)}
+#card .box{width:520px;max-width:90vw;padding:24px 30px;border:1px solid #ff3fa477;background:#0a0d1af2;box-shadow:0 0 40px #ff3fa433}
+#card h2{margin:0 0 12px;letter-spacing:5px;color:#29f0ff;text-shadow:0 0 12px #29f0ff}
+#card p{line-height:1.5;color:#c3d2e6;margin:8px 0;font-size:15px}
+#card b{color:#ffcc33}
+#cardBtns{margin-top:18px;display:flex;flex-direction:column;gap:8px}
+#cardBtns button{font:inherit;font-size:15px;letter-spacing:2px;padding:10px;background:#0e1424;color:#cfe8ff;border:1px solid #29f0ff55;cursor:pointer}
+#cardBtns button:hover{background:#18233a;border-color:#29f0ff}
+#cardBtns button.primary{background:#29f0ff;color:#05060c;font-weight:bold;box-shadow:0 0 16px #29f0ff88}
+#cardBtns button.primary:hover{background:#ff3fa4;box-shadow:0 0 16px #ff3fa4}
 #pause{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:3}
 #pause .box{min-width:300px;text-align:center;padding:26px 30px;border:1px solid #29f0ff55;background:#0a0d1aee;box-shadow:0 0 40px #29f0ff22}
 #pause h2{margin:0 0 18px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff}
@@ -48,9 +74,11 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <button id="resume">RESUME</button>
 <button id="restart">RESTART (SAME LEVEL)</button>
 <button id="newlevel">NEW LEVEL</button>
+<button id="tutrestart" style="display:none">RESTART ROOM</button>
+<button id="tutmenu" style="display:none">TUTORIAL MENU</button>
 <button id="tomenu">MAIN MENU</button>
-<div class="seedrow"><span>SEED</span><input id="seedOut" readonly><button id="copyseed">COPY</button></div>
-<div class="hint">ESC to resume · restart keeps your bot settings</div>
+<div class="seedrow" id="seedrow"><span>SEED</span><input id="seedOut" readonly><button id="copyseed">COPY</button></div>
+<div class="hint" id="phint">ESC to resume · restart keeps your bot settings</div>
 </div></div>
 <div id="ov"><div class="box">
 <h1>GRAVITY<span>SHIFT</span></h1>
@@ -75,9 +103,17 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <div id="skilldesc"></div>
 <div class="lab">SEED</div><div><input id="seedIn" placeholder="random — or type a number / word" maxlength="40"></div>
 </div>
-<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button></div>
+<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button> <button id="tutbtn" class="alt">TUTORIAL</button></div>
 <div id="nogl">WebGL is not available in this browser, so the 3D arena can't be drawn.</div>
 </div></div>
+<div id="tut"><div class="box">
+<h1>GRAVITY<span>SHIFT</span></h1>
+<div class="sub">TUTORIAL // PRACTICE ROOMS</div>
+<div id="tutlist"></div>
+<p class="note">ESC in any room opens the menu — restart the room, pick another one, or go back to the main menu.</p>
+<div style="text-align:center;margin-top:10px"><button id="tutback" class="alt">BACK</button></div>
+</div></div>
+<div id="card"><div class="box"><h2 id="cardT"></h2><div id="cardB"></div><div id="cardBtns"></div></div></div>
 <script>
 /*__SCRIPT__*/
 </script>

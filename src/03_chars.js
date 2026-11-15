@@ -23,7 +23,7 @@ const headPos=e=>V(e.x,e.y+e.h-6,e.z);
 const chestPos=e=>V(e.x,e.y+e.h*.62,e.z);
 
 function spawn(e){
-  const pts=spawnPoints();
+  const pts=TUT.on&&TUT.cp&&!e.isBot?[TUT.cp]:spawnPoints();
   let best=null,bs=-1;
   for(let k=0;k<40;k++){
     const p=pts[rnd()*pts.length|0];if(!p)continue;

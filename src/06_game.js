@@ -40,7 +40,7 @@ function doRotate(key,kicker,stop){
   for(const e of chars)if(e.ai){e.ai.path=null;e.ai.kickGoal=null;e.ai.wander=null;}
   const piv=player&&player.alive?V(player.x,player.y+48,player.z):V(L/2,L/2,L/2);
   world.rot={t:0,dur:.8,axis:r.axis,a0:r.a0,pivot:piv,kicker};
-  world.rotCD=4;world.lastKicker=kicker;world.lastKickT=world.time;world.shake=14;world.flash=.5;world.turns++;world.timeScale=.35;
+  world.rotCD=TUT.on?1:4;world.lastKicker=kicker;world.lastKickT=world.time;world.shake=14;world.flash=.5;world.turns++;world.timeScale=.35;
   sfx('rotate');
   for(let i=0;i<60;i++)addPart(kicker.x+(rnd()-.5)*40,kicker.y+10,kicker.z+(rnd()-.5)*40,(rnd()-.5)*500,rnd()*300,(rnd()-.5)*500,.8+rnd()*.6,rnd()<.5?[1,.25,.64]:[.16,.94,1],3,'spark');
   feed.unshift({t:3.5,text:`${kicker.name} ⟳ TURNED THE ARENA`,color:'#ff3fa4'});
@@ -62,8 +62,8 @@ const keys={},pressed={};let mouseDown=false,mouseRight=false,locked=false;
 const SENS=.0024;
 const cv=document.getElementById('c'),hud=document.getElementById('hud'),hctx=hud.getContext('2d');
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k]=true;keys[k]=true;
-  if(k==='escape'&&gameState==='play'){setPaused(!paused);}
-  if(k==='enter'&&gameState==='over')newMatch();
+  if(k==='escape'&&gameState==='play'&&!TUT.cardOpen){setPaused(!paused);}
+  if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch();}
   if(['w','a','s','d',' ','c','e','r','shift'].includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0)mouseDown=true;if(e.button===2)mouseRight=true;
@@ -74,9 +74,11 @@ addEventListener('contextmenu',e=>e.preventDefault());
 function lockMouse(){try{const r=cv.requestPointerLock&&cv.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(e){}}
 // Esc while the mouse is captured only releases the capture (the key never reaches the page), so losing it mid-game pauses
 document.addEventListener('pointerlockchange',()=>{const was=locked;locked=document.pointerLockElement===cv;
-  if(was&&!locked&&gameState==='play'&&!paused)setPaused(true);});
+  if(was&&!locked&&gameState==='play'&&!paused&&!TUT.cardOpen)setPaused(true);});
 function setPaused(v){
   paused=v;const pm=document.getElementById('pause');if(pm)pm.style.display=v?'flex':'none';
+  for(const [id,show] of [['restart',!TUT.on],['newlevel',!TUT.on],['seedrow',!TUT.on],['tutrestart',TUT.on],['tutmenu',TUT.on]]){const el=document.getElementById(id);if(el)el.style.display=show?'':'none';}
+  {const h=document.getElementById('phint');if(h)h.textContent=TUT.on?'ESC to resume · restart puts the room back to the start':'ESC to resume · restart keeps your bot settings';}
   for(const k in keys)keys[k]=false;mouseDown=mouseRight=false;
   if(v&&document.pointerLockElement===cv&&document.exitPointerLock)document.exitPointerLock();
 }
@@ -90,7 +92,9 @@ function wirePause(){
     const fallback=()=>{const i=q('seedOut');i.focus();i.select();try{document.execCommand('copy')?done('COPIED'):done('Ctrl+C');}catch(e){done('Ctrl+C');}};
     try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(v).then(()=>done('COPIED'),fallback);else fallback();}catch(e){fallback();}
   };
-  q('tomenu').onclick=()=>{setPaused(false);gameState='menu';q('ov').style.display='flex';};
+  q('tomenu').onclick=()=>{setPaused(false);TUT.on=false;gameState='menu';q('ov').style.display='flex';};
+  q('tutrestart').onclick=()=>{setPaused(false);startTutorial(TUT.id);};
+  q('tutmenu').onclick=()=>{openTutMenu();};
 }
 wirePause();
 addEventListener('mousemove',e=>{if(gameState!=='play'||paused)return;
@@ -161,6 +165,7 @@ function step(dt,first){
   if(props.some(b=>b.dead))props=props.filter(b=>!b.dead);
   updateSpiders(dt);
   updateBullets(dt);updateRockets(dt);updateDolls(dt);updateParts(dt);
+  if(TUT.on)tutStep(dt);
 }
 
 // ---------- render ----------
@@ -183,6 +188,7 @@ function render(){
   cubeBegin();
   for(const b of props)drawProp(b);
   for(const s of spiders)drawSpider(s);
+  drawDrones();
   for(const d of dolls)drawDoll(d);
   // bullets & rockets
   for(const b of bullets){const tail=V(b.x-b.vx*.03,b.y-b.vy*.03,b.z-b.vz*.03);drawSeg(tail,V(b.x,b.y,b.z),1.6,b.col,b.col,null,1);}
@@ -232,20 +238,22 @@ function drawHUD(){
     if(p.hidden){c.fillStyle='#b06bff';c.globalAlpha=.7+.3*Math.sin(world.time*4);c.fillText('◈ CLOAKED',24,H-88);c.globalAlpha=1;}
     else{c.fillStyle='rgba(176,107,255,.25)';c.fillRect(24,H-94,100,5);c.fillStyle='#b06bff';c.fillRect(24,H-94,100*clamp(p.crouchT/STEALTH_T,0,1),5);}
   }
+  const TH=TUT.on?(TUT.cfg&&TUT.cfg.hud)||{}:null;
   // gravity status
-  c.textAlign='center';
+  c.textAlign='center';if(!TH||TH.gravity){
   const ready=world.rotCD<=0&&!world.rot;
   c.fillStyle=ready?'#ff3fa4':'#7a5068';c.fillText(ready?'◆ GRAVITY PANELS ARMED ◆':`GRAVITY PANELS RECHARGING ${world.rotCD.toFixed(1)}s`,W/2,26);
   c.font='11px "Courier New",monospace';c.fillStyle='#778';c.fillText(`ARENA TURNS: ${world.turns}`,W/2,42);
-  if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText('[E] KICK THE PANEL — TURN THE ARENA',W/2,H/2+70);c.globalAlpha=1;}
+  if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText('[E] KICK THE PANEL — TURN THE ARENA',W/2,H/2+70);c.globalAlpha=1;}}
   // scoreboard + feed
   c.textAlign='right';c.font='bold 13px "Courier New",monospace';
-  const sorted=[...chars].sort((a,b)=>b.kills-a.kills);
+  const sorted=!TH||TH.score?[...chars].sort((a,b)=>b.kills-a.kills):[];
+  if(sorted.length){
   c.fillStyle='rgba(5,6,14,.7)';c.fillRect(W-196,12,184,22+sorted.length*18);
-  c.fillStyle='#889';c.fillText(`FRAGS / ${FRAG_LIMIT}`,W-20,28);
+  c.fillStyle='#889';c.fillText(`FRAGS / ${world.fragLimit||FRAG_LIMIT}`,W-20,28);
   sorted.forEach((q,i)=>{c.fillStyle=q.color;c.textAlign='left';c.fillText((q===p?'▶ ':'  ')+q.name,W-188,48+i*18);c.textAlign='right';c.fillText(`${q.kills}  ${q.deaths}`,W-20,48+i*18);});
   c.font='12px "Courier New",monospace';
-  feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+sorted.length*18+i*16);});c.globalAlpha=1;
+  feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+sorted.length*18+i*16);});c.globalAlpha=1;}
   // crosshair
   const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*6+(Math.hypot(p.vx,p.vz)>60?3:0);
   c.strokeStyle=hm?'#fff':'#29f0ff';c.lineWidth=2;c.beginPath();
@@ -256,8 +264,9 @@ function drawHUD(){
   c.textAlign='center';
   if(!locked&&gameState==='play'&&!paused){c.font='12px "Courier New",monospace';c.fillStyle='#889';c.fillText('click to capture the mouse',W/2,H-16);}
   if(!p.alive&&gameState==='play'){c.font='bold 26px "Courier New",monospace';c.fillStyle='#ff3f5a';c.fillText('SIGNAL LOST',W/2,H/2-40);c.font='14px "Courier New",monospace';c.fillStyle='#aab';c.fillText(`re-deploying in ${Math.max(0,p.respawn).toFixed(1)}s`,W/2,H/2-18);}
+  if(TUT.on)tutHUD(c);
   if(paused){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);}
-  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(winner===p?'YOU WIN THE ARENA':`${winner.name} WINS`,W/2,H/2-10);c.font='16px "Courier New",monospace';c.fillStyle='#ccd';c.fillText('press ENTER for a new arena',W/2,H/2+24);}
+  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(winner===p?(TUT.on?'YOU WIN':'YOU WIN THE ARENA'):`${winner.name} WINS`,W/2,H/2-10);c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
   if(world.flash>0){c.fillStyle=`rgba(255,63,164,${world.flash*.3})`;c.fillRect(0,0,W,H);}
 }
 
@@ -285,6 +294,7 @@ function seedNumber(label){
   let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;
 }
 function newMatch(seed){
+  TUT.on=false;drones=[];world.fragLimit=FRAG_LIMIT;
   // the seed decides the level, its decoration, furniture and starting spots; gameplay stays random
   const label=seed!==undefined&&seed!==null&&String(seed).trim()!==''?String(seed).trim():String((Math.random()*1e6)|0);
   world.seedLabel=label;

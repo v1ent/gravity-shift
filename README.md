@@ -23,6 +23,8 @@ A third-person arena shooter set on a neon construction site, where you can kick
 
 ## Features
 
+- A tutorial with five practice rooms: advanced traversal, a drone shooting range, rocket jumping, an arena-shift corridor puzzle and a first fight against an easy bot
+
 - Gravity turns: the level, its decoration, props, fighters and projectiles all rotate together
 - Seeded level generation — share a seed to replay the same arena
 - Bots with a view cone, reaction time and four skill levels (or 0 bots to explore)
@@ -51,6 +53,7 @@ Then open `index.html` in a browser.
 | `src/04b_spiders.js` | Spiders |
 | `src/05_ai.js` | Bots |
 | `src/06_game.js` | Game loop, input, camera, HUD, menus |
+| `src/07_tutorial.js` | Tutorial rooms, drones, objectives |
 
 ## How AI was used
 

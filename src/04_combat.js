@@ -80,7 +80,7 @@ function kill(e,src,dir){
   else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,text:`${e.name} ✕ self-destructed`,color:'#888'});}
   makeDoll(e,dir);sfx('die',e);
   for(let i=0;i<30;i++)addPart(e.x,e.y+30,e.z,(rnd()-.5)*500,rnd()*300,(rnd()-.5)*500,.9,e.col,3,'spark');
-  if(killer&&!killer.isSpider&&killer.kills>=FRAG_LIMIT&&gameState==='play'){gameState='over';winner=killer;}
+  if(killer&&!killer.isSpider&&killer.kills>=(world.fragLimit||FRAG_LIMIT)&&gameState==='play'){gameState='over';winner=killer;}
 }
 
 // ---------- rifle ----------
@@ -138,6 +138,7 @@ function updateBullets(dt){
         }
       }
       if(dead)break;
+      {const dr=droneHit(b.x,b.y,b.z,13);if(dr){hitDrone(dr);if(b.owner===player)player.hitMarker=.18;dead=true;break;}}
       for(const sp2 of spiders){if(!sp2.alive||sp2.spawnT>0)continue;if(Math.hypot(b.x-sp2.p.x,b.y-sp2.p.y-4,b.z-sp2.p.z)<11){hurtSpider(sp2,b.dmg*(1-b.fall*(1-Math.max(0,b.life)/b.life0)),b.owner);if(b.owner===player)player.hitMarker=.18;dead=true;break;}}
       if(dead)break;
       for(const p of props){if(p.dead)continue;
@@ -176,6 +177,7 @@ function updateRockets(dt){
       for(const e of chars){if(e===r.owner||!e.alive)continue;
         if(Math.abs(r.x-e.x)<e.w/2+4&&Math.abs(r.z-e.z)<e.w/2+4&&r.y>e.y-2&&r.y<e.y+e.h+2){boom=true;break;}}
       if(boom)break;
+      if(droneHit(r.x,r.y,r.z,16)){boom=true;break;}
       for(const sp2 of spiders){if(sp2.alive&&Math.hypot(r.x-sp2.p.x,r.y-sp2.p.y,r.z-sp2.p.z)<14){boom=true;break;}}
       if(boom)break;
       for(const p of props){if(p.dead)continue;if(Math.abs(r.x-p.x)<p.w/2+3&&Math.abs(r.z-p.z)<p.d/2+3&&r.y>p.y-2&&r.y<p.y+p.h+2){boom=true;break;}}
@@ -208,10 +210,11 @@ function explode(c,o){
     else{
       e.vx+=dir.x*push;e.vz+=dir.z*push;e.vy=Math.min(Math.max(e.vy,0)*.4+dir.y*push,940);
       e.grounded=false;e.coyote=0;e.y+=2;if(overlapSolid(e.x,e.y,e.z,e.w,e.h))e.y-=2;
-      if(e===src&&o.rocket){e.rocketJump=true;e.runJump=false;e.fallStart=e.y;}
+      if(e===src&&o.rocket){e.rocketJump=true;e.runJump=false;e.fallStart=e.y;if(TUT.on&&TUT.cfg&&TUT.cfg.onRJ&&e===player)TUT.cfg.onRJ(air,e.vy);}
       else if(push>380){e.knocked=true;e.stun=.45;e.bav=10*f;e.tumbleHold=0;}
     }
   }
+  for(const dr of drones)if(dr.alive&&dr.delay<=0&&vlen(vsub(dr.p,c))<RAD*.85)hitDrone(dr);
   for(const sp2 of spiders){if(!sp2.alive)continue;const d=vlen(vsub(sp2.p,c));if(d<RAD)hurtSpider(sp2,o.dmg*(1-d/RAD)*1.3,src);}
   for(const p of props){
     if(p.dead)continue;
