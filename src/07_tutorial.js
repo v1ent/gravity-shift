@@ -218,7 +218,7 @@ TUT_BUILD.rj=()=>{
       const p=player,pct=Math.round(dmg);TUT.rjLaunch=p.y;TUT.rjApex=p.y;TUT.healT=0;
       if(kind==='perfect'){const o=TUT.cfg.obj[1];tsfx('ding');toast(`PERFECT ROCKET JUMP  −${pct}%`,'#3dff7a',2);
         if(!o.done){o.n++;if(o.n>=o.need)objDone(1,'✓ PERFECT ×3');}}
-      else if(kind==='air')toast(`ROCKET JUMP  −${pct}% — you jumped a bit early`,'#ffcc33',2.4);
+      else if(kind==='air'){tsfx('ding');toast(`GOOD ROCKET JUMP  −${pct}% — for PERFECT, fire first, then jump`,'#ffcc33',2.6);}
       else{toast(`NO JUMP  −${pct}% — jump just before the blast!`,'#ff8a2a',2.8);objDone(0,'✓ NOW TRY IT WITH A JUMP');}
     },
     update(dt,p){

@@ -1424,7 +1424,7 @@ const ROCKET_V0=60,ROCKET_LOB=.22,ROCKET_ACC=1100,ROCKET_VMAX=650,ROCKET_R=230,R
 // airborne targets: little damage, huge directional push
 const AIR_PUSH=2.6,GROUND_PUSH=.6,AIR_DMG=.3,FRAG_LIMIT=15;
 // rocket jumps: a blast at your feet always launches you; jumping just before it (within RJ_WINDOW) makes it cheap
-const RJ_WINDOW=.6,RJ_DMG_GROUND=60,RJ_DMG_PERFECT=18,RJ_DMG_AIR=28,RJ_VY_GROUND=760,RJ_VY_AIR=880,RJ_FLOAT=.75;
+const RJ_WINDOW=.6,RJ_DMG_GROUND=60,RJ_DMG_PERFECT=18,RJ_DMG_AIR=21,RJ_VY_GROUND=760,RJ_VY_AIR=880,RJ_FLOAT=.75;
 // shotgun: found on the level, replaces the pistol until you die
 const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.11,SG_DMG=10,SG_RANGE=620;
 const magOf=e=>e.weapon==='shotgun'?SG_MAG:MAG,reloadOf=e=>e.weapon==='shotgun'?SG_RELOAD:RELOAD;
@@ -1583,7 +1583,8 @@ function fireRocket(e){
   const d=vnorm(vsub(tgt,sh));
   const m=vadd(sh,vscale(d,12));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=sh;
-  rockets.push({x:start.x,y:start.y,z:start.z,d,sp:ROCKET_V0,owner:e,life:5,age:0});noise(e,800,e);
+  const midAir=!e.grounded&&e.state==='normal'; // fired in mid-air (jump first, then shoot): no slow lob, the motor fires at once
+  rockets.push({x:start.x,y:start.y,z:start.z,d,sp:midAir?ROCKET_VMAX*.8:ROCKET_V0,owner:e,life:5,age:midAir?ROCKET_LOB:0,born:world.time});noise(e,800,e);
   e.rfireCD=RFIRE_CD;e.rockets--;e.recoil=1.4;
   if(e.rockets<=0)e.rreload=RRELOAD;
   sfx('rocket',e);if(e===player)world.shake=Math.max(world.shake,3);
@@ -1608,7 +1609,7 @@ function updateRockets(dt){
     // flare + smoke trail
     if(rnd()<dt*60)addPart(r.x,r.y,r.z,(rnd()-.5)*30,(rnd()-.5)*30,(rnd()-.5)*30,.9,[.5,.45,.55],9,'smoke');
     addPart(r.x-r.d.x*4,r.y-r.d.y*4,r.z-r.d.z*4,-r.d.x*60+(rnd()-.5)*40,-r.d.y*60+(rnd()-.5)*40,-r.d.z*60+(rnd()-.5)*40,.25,rnd()<.5?[1,.6,.15]:[1,.85,.4],8,'flame');
-    if(boom){rockets.splice(n,1);explode(V(r.x,r.y,r.z),{radius:ROCKET_R,dmg:ROCKET_DMG,push:ROCKET_PUSH,src:r.owner,rocket:true,direct:r.hit||null});}
+    if(boom){rockets.splice(n,1);explode(V(r.x,r.y,r.z),{radius:ROCKET_R,dmg:ROCKET_DMG,push:ROCKET_PUSH,src:r.owner,rocket:true,direct:r.hit||null,born:r.born});}
   }
 }
 // explosion: area push + damage. Airborne targets are thrown much harder but hurt less; your own blast hurts you a third as much.
@@ -1624,7 +1625,7 @@ function explode(c,o){
     const air=!e.grounded&&e.state!=='down';
     let dir=vnorm(vsub(ctr,c));if(d<6)dir=V(0,1,0);
     dir=vnorm(V(dir.x,dir.y+.35,dir.z)); // explosions lift
-    if(e===src&&o.rocket&&e.state!=='down'){rocketJump(e,c,f,air,dir);continue;}
+    if(e===src&&o.rocket&&e.state!=='down'){rocketJump(e,c,f,air,dir,o.born);continue;}
     const push=o.push*f*(air?AIR_PUSH:GROUND_PUSH);
     const dmg=direct?999:o.dmg*f*(air?AIR_DMG:1);
     if(direct)e.gibbed=true;
@@ -1817,10 +1818,12 @@ function drawProp(b){
 }
 
 // your own rocket at your feet: always a launch. Timing decides the price.
-function rocketJump(e,c,f,air,dir){
+function rocketJump(e,c,f,air,dir,born){
   const fs=clamp(f/.55,0,1);if(fs<=0)return;            // full strength anywhere in the inner half of the blast
   const sinceJump=world.time-(e.jumpAt===undefined?-99:e.jumpAt);
-  const kind=!air?'ground':sinceJump<RJ_WINDOW?'perfect':'air';
+  // perfect = fire first, then jump before the blast. Jumping first and firing in mid-air works almost as well.
+  const jumpedAfterFire=born===undefined||e.jumpAt>=born-.03;
+  const kind=!air?'ground':(sinceJump<RJ_WINDOW&&jumpedAfterFire)?'perfect':'air';
   const dmg=(kind==='ground'?RJ_DMG_GROUND:kind==='perfect'?RJ_DMG_PERFECT:RJ_DMG_AIR)*fs;
   if(e.state==='hang'||e.state==='climbup'||e.state==='kick'||e.state==='slide'||e.state==='getup'){e.state='normal';e.h=56;}
   if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}
@@ -2772,7 +2775,7 @@ TUT_BUILD.rj=()=>{
       const p=player,pct=Math.round(dmg);TUT.rjLaunch=p.y;TUT.rjApex=p.y;TUT.healT=0;
       if(kind==='perfect'){const o=TUT.cfg.obj[1];tsfx('ding');toast(`PERFECT ROCKET JUMP  −${pct}%`,'#3dff7a',2);
         if(!o.done){o.n++;if(o.n>=o.need)objDone(1,'✓ PERFECT ×3');}}
-      else if(kind==='air')toast(`ROCKET JUMP  −${pct}% — you jumped a bit early`,'#ffcc33',2.4);
+      else if(kind==='air'){tsfx('ding');toast(`GOOD ROCKET JUMP  −${pct}% — for PERFECT, fire first, then jump`,'#ffcc33',2.6);}
       else{toast(`NO JUMP  −${pct}% — jump just before the blast!`,'#ff8a2a',2.8);objDone(0,'✓ NOW TRY IT WITH A JUMP');}
     },
     update(dt,p){
