@@ -1,0 +1,635 @@
+// =====================================================================
+//  CHARACTERS — movement, parkour, stealth, knockdowns, procedural pose
+//  units: px (1 block = 32px ≈ 1 m, a fighter is 56px tall)
+// =====================================================================
+const G=1500,WALK=95,RUN=215,JUMPV=640,RUNJUMPV=590,MAXFALL=950;
+const CROUCH_SPD=48,CROUCH_H=36,SLIDE_H=26,SLIDE_DUR=.7,SLIDE_FRIC=280,STAM_DRAIN=1/2.4,STAM_REGEN=1/3.5,STEALTH_T=1.6;
+const STEALTH_ON=false; // cloaking is switched off for now (players and bots)
+const HARD_FALL=10*T,GETUP_DUR=.8,KICK_DUR=.6,KICK_HIT=.42,KICK_DMG=15,KICK_PUSH=560;
+const MAG=10,RELOAD=2,FIRE_CD=.42,BULLET_SPEED=1300,PISTOL_SPEED=3900,DMG=25,HEAD_DMG=45;
+const RMAG=3,RRELOAD=3.2,RFIRE_CD=.8;
+const THIGH=14,SHIN=14,TORSO=17,UPPER=11,FORE=11;
+let chars=[],player=null;
+
+function makeChar(name,color,isBot){
+  return {name,color,col:hexRGB(color),isBot,x:0,y:0,z:0,w:20,h:56,vx:0,vy:0,vz:0,hp:100,alive:false,respawn:.5,
+    grounded:false,coyote:0,jumpBuf:0,cut:false,yaw:0,pitch:0,bodyYaw:0,legYaw:0,state:'normal',st:{},grabCD:0,
+    weapon:'pistol',hasShotgun:false,stash:{pistol:MAG,shotgun:0},fireCD:0,ammo:MAG,reload:0,rockets:RMAG,rreload:0,rfireCD:0,stam:1,stamDelay:0,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,
+    kickCD:0,stun:0,knocked:false,recoil:0,flinch:0,land:0,takeoff:0,phase:0,ba:0,bav:0,baAxis:0,tumbleHold:0,runW:0,accS:0,prevFwd:0,
+    kills:0,deaths:0,invuln:0,lastHit:null,lastHitT:-99,poseBlend:1,pose:null,kickPrompt:false,rocketJump:false,airT:0,
+    ctl:{mx:0,mz:0,jump:false,jumpHeld:false,sprint:false,crouch:false,crouchPressed:false,fire:false,alt:false,kick:false,reload:false,grab:false,aimYaw:0,aimPitch:0},ai:null};
+}
+const headPos=e=>V(e.x,e.y+e.h-6,e.z);
+const chestPos=e=>V(e.x,e.y+e.h*.62,e.z);
+
+function spawn(e){
+  const pts=spawnPoints();
+  let best=null,bs=-1;
+  for(let k=0;k<40;k++){
+    const p=pts[rnd()*pts.length|0];if(!p)continue;
+    if(overlapSolid(p.x,p.y,p.z,20,56))continue;
+    let md=1e9;for(const o of chars)if(o!==e&&o.alive)md=Math.min(md,Math.hypot(o.x-p.x,o.y-p.y,o.z-p.z));
+    for(const b of props)if(Math.abs(b.x-p.x)<30&&Math.abs(b.z-p.z)<30&&Math.abs(b.y-p.y)<50)md=0;
+    if(md>bs){bs=md;best=p;}
+  }
+  if(!best)best={x:L/2,y:T,z:L/2};
+  Object.assign(e,{x:best.x,y:best.y,z:best.z,h:56,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,stash:{pistol:MAG,shotgun:0},ammo:MAG,reload:0,rockets:RMAG,rreload:0,
+    stam:1,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,ba:0,bav:0,tumbleHold:0,invuln:1.2,poseBlend:1,land:.6,lastHit:null,rocketJump:false});
+  // face the middle of the arena
+  e.yaw=e.bodyYaw=e.legYaw=yawOf(L/2-e.x,L/2-e.z);e.pitch=0;e.ctl.aimYaw=e.yaw;e.ctl.aimPitch=0;
+  e.pose=null;
+  for(let i=0;i<14;i++)addPart(e.x+(rnd()-.5)*20,e.y+rnd()*56,e.z+(rnd()-.5)*20,(rnd()-.5)*60,rnd()*120,(rnd()-.5)*60,.6,e.col,3,'spark');
+}
+
+// ---------- parkour helpers ----------
+const CARDS=[[1,0],[-1,0],[0,1],[0,-1]];
+function cardOf(dx,dz){return Math.abs(dx)>=Math.abs(dz)?[Math.sign(dx)||1,0]:[0,Math.sign(dz)||1];}
+// column of blocks right in front of the body in cardinal direction d
+function frontCell(e,d,extra){
+  const x=e.x+d[0]*(e.w/2+(extra||3)),z=e.z+d[1]*(e.w/2+(extra||3));
+  return [Math.floor(x/T),Math.floor(z/T)];
+}
+function standSpotOn(e,d,ci,ck,ly){
+  // a spot just inside the ledge top along d, same lateral position
+  let x=e.x,z=e.z;
+  if(d[0]>0)x=ci*T+e.w/2+2;else if(d[0]<0)x=(ci+1)*T-e.w/2-2;
+  if(d[1]>0)z=ck*T+e.w/2+2;else if(d[1]<0)z=(ck+1)*T-e.w/2-2;
+  return V(x,ly,z);
+}
+// ledge in front (cardinal d) near head height; validated so you can never pass through solid blocks
+function findLedge(e,d,reach){
+  reach=reach||14;
+  for(const extra of [3,16]){
+    const [ci,ck]=frontCell(e,d,extra);
+    if(ci===Math.floor(e.x/T)&&ck===Math.floor(e.z/T))continue;
+    const top=e.y+e.h;
+    for(let r=Math.floor((top-22)/T)-1;r<=Math.floor((top+reach)/T);r++){
+      const ly=(r+1)*T;
+      if(ly<top-22||ly>top+reach)continue;
+      if(!(solid(tile(ci,r,ck))&&!solid(tile(ci,r+1,ck))&&!solid(tile(ci,r+2,ck))))continue;
+      const sp=standSpotOn(e,d,ci,ck,ly);
+      if(overlapSolid(sp.x,sp.y,sp.z,e.w,e.h))continue;
+      if(ly<=top-6){ // low ledge: vault — rise straight up beside it
+        if(overlapSolid(e.x,ly,e.z,e.w,e.h))continue;
+        return {ci,ck,r,ly,low:true,stand:sp};
+      }
+      // hang spot against the face
+      let hx=e.x,hz=e.z;
+      if(d[0]>0)hx=ci*T-e.w/2-.5;else if(d[0]<0)hx=(ci+1)*T+e.w/2+.5;
+      if(d[1]>0)hz=ck*T-e.w/2-.5;else if(d[1]<0)hz=(ck+1)*T+e.w/2+.5;
+      const hy=ly-4-e.h;
+      if(overlapSolid(hx,hy,hz,e.w,e.h))continue;
+      const dist=Math.hypot(hx-e.x,hz-e.z);
+      if(dist>e.w)continue;
+      if(dist>12){let bl=false;for(let s=1;s<=4;s++){const t=s/4;if(overlapSolid(lerp(e.x,hx,t),hy,lerp(e.z,hz,t),e.w,e.h)){bl=true;break;}}if(bl)continue;}
+      if(overlapSolid(hx,ly,hz,e.w,e.h))continue;
+      return {ci,ck,r,ly,low:false,stand:sp,hang:V(hx,hy,hz)};
+    }
+  }
+  return null;
+}
+// 1- or 2-block obstacle right in front with room to get over it
+function lowObstacle(e,d){
+  const [ci,ck]=frontCell(e,d,3);
+  if(ci===Math.floor(e.x/T)&&ck===Math.floor(e.z/T))return null;
+  const r0=Math.floor((e.y+1)/T);
+  let h=0;while(h<3&&solid(tile(ci,r0+h,ck)))h++;
+  if(h<1||h>2)return null;
+  const ly=(r0+h)*T;
+  if(overlapSolid(e.x,ly,e.z,e.w,e.h))return null;
+  // land beyond if the obstacle is thin, otherwise on top
+  const bi=ci+d[0],bk=ck+d[1];
+  let sp;
+  if(!solid(tile(bi,r0+h,bk))&&!solid(tile(bi,r0+h+1,bk))&&!solid(tile(bi,r0+h-1,bk))&&h===2)sp=V(bi*T+T/2-d[0]*6,ly,bk*T+T/2-d[1]*6);
+  else sp=standSpotOn(e,d,ci,ck,ly);
+  if(d[0]===0)sp.x=e.x;if(d[1]===0)sp.z=e.z;
+  if(overlapSolid(sp.x,sp.y,sp.z,e.w,e.h))return null;
+  return {h,ly,stand:sp};
+}
+// a live gravity panel within kicking reach in cardinal direction d (also through furniture)
+function kickableSide(e,d){
+  const axis=d[0]?'x':'z',s=d[0]||d[1];
+  const edge=(axis==='x'?e.x:e.z)+s*e.w/2;
+  const lat=axis==='x'?e.z:e.x;
+  for(let dist=1;dist<=96;dist+=3){
+    const p=edge+s*dist,c=Math.floor(p/T),l=Math.floor(lat/T);
+    if(c===Math.floor((axis==='x'?e.x:e.z)/T))continue;
+    let hit=false,live=false;
+    for(const yy of [e.y+8,e.y+30,e.y+50]){
+      const r=Math.floor(yy/T),i=axis==='x'?c:l,k=axis==='x'?l:c;
+      if(solid(tile(i,r,k))){hit=true;if(isLiveK(i,r,k))live=true;}
+    }
+    if(!hit)continue;
+    if(!live)return null;
+    const face=s>0?c*T:(c+1)*T,gap=(face-edge)*s;
+    if(gap<=14)return {stop:face};
+    // furniture wedged in between transmits the kick
+    const iv=[];
+    for(const b of props){if(b.dead||b.y>e.y+52||b.y+b.h<e.y+6)continue;
+      const bl=axis==='x'?b.z:b.x;if(Math.abs(bl-lat)>b.w/2+e.w/2)continue;
+      const bc=axis==='x'?b.x:b.z;const n=(bc-b.w/2-edge)*s,f=(bc+b.w/2-edge)*s;iv.push(s>0?[n,f]:[(bc+b.w/2-edge)*s,(bc-b.w/2-edge)*s]);}
+    let cur=0,tol=14,first=null;
+    for(let k=0;k<5;k++){
+      let bf=-1,bn=null;for(const [n,f] of iv)if(n>=cur-8&&n<=cur+tol&&f>cur&&f>bf){bf=f;bn=n;}
+      if(bf<0)break;if(first===null)first=bn;cur=bf;tol=8;
+      if(gap-cur<=8)return {stop:edge+s*first};
+    }
+    return null;
+  }
+  return null;
+}
+
+// ---------- update ----------
+function updateChar(e,dt){
+  const c=e.ctl;
+  if(!e.alive){if(gameState==='play'){e.respawn-=dt;if(e.respawn<=0)spawn(e);}return;}
+  e.wasBox=e.boxSupport;e.boxSupport=false;
+  e.invuln=Math.max(0,e.invuln-dt);e.fireCD-=dt;e.rfireCD-=dt;e.grabCD-=dt;e.kickCD-=dt;e.stun-=dt;
+  e.recoil=Math.max(0,e.recoil-dt*5);e.flinch=Math.max(0,e.flinch-dt*5);e.hitMarker=Math.max(0,(e.hitMarker||0)-dt);
+  const ctrl=e.stun<=0&&e.state!=='down'&&e.state!=='getup';
+  let mx=ctrl?c.mx:0,mz=ctrl?c.mz:0;const mag=Math.hypot(mx,mz);if(mag>1){mx/=mag;mz/=mag;}
+  if(ctrl&&c.jump)e.jumpBuf=.13;else e.jumpBuf-=dt;
+  e.yaw=c.aimYaw;e.pitch=clamp(c.aimPitch,-1.35,1.35);
+  // weapon switch (mouse wheel / Q / 1 / 2) once you own a shotgun
+  if(ctrl&&e.hasShotgun&&(c.swap||(c.select&&c.select!==e.weapon))){
+    const to=c.select&&c.select!==e.weapon?c.select:(e.weapon==='shotgun'?'pistol':'shotgun');
+    e.stash[e.weapon]=e.ammo;e.weapon=to;e.ammo=e.stash[to];e.reload=0;e.fireCD=Math.max(e.fireCD,.35);e.recoil=.6;sfx('swap',e);
+    if(e.ammo<=0)e.reload=reloadOf(e);
+  }
+  // reloads
+  if(e.reload>0){e.reload-=dt;if(e.reload<=0){e.reload=0;e.ammo=magOf(e);sfx('reload',e);}}
+  else if(c.reload&&e.ammo<magOf(e))e.reload=reloadOf(e);
+  if(e.rreload>0){e.rreload-=dt;if(e.rreload<=0){e.rreload=0;e.rockets=RMAG;sfx('reload',e);}}
+  // tumble spring
+  if(e.tumbleHold>0)e.tumbleHold-=dt;
+  else{const k=e.stun>0?18:55,d=e.stun>0?3:9;e.bav+=(-k*e.ba-d*e.bav)*dt;e.ba+=e.bav*dt;if(Math.abs(e.ba)<.002&&Math.abs(e.bav)<.01){e.ba=0;e.bav=0;}}
+  const prevState=e.state,prevVy=e.vy,wasGround=e.grounded;
+  e.kickPrompt=false;
+  const moving=Math.hypot(mx,mz)>.15;
+  // stamina
+  const sprintOK=ctrl&&c.sprint&&moving&&!e.crouch&&e.stam>.02&&e.state==='normal';
+  if(e.grounded)e.sprinting=sprintOK;else if(!sprintOK&&!e.runJump)e.sprinting=false;
+  if(e.sprinting&&e.grounded){e.stam=Math.max(0,e.stam-dt*STAM_DRAIN);e.stamDelay=.8;}
+  else{e.stamDelay-=dt;if(e.stamDelay<=0)e.stam=Math.min(1,e.stam+dt*STAM_REGEN);}
+  const hsp=Math.hypot(e.vx,e.vz);
+
+  if(e.state==='normal'){
+    if(ctrl&&e.grounded&&c.crouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
+    else if(e.crouch&&(!c.crouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}}
+    // body faces aim, except sprinting/diving where it faces travel
+    if((e.sprinting&&e.grounded)||e.runJump){if(hsp>20)e.bodyYaw=yawOf(e.vx,e.vz);}
+    else e.bodyYaw=e.yaw;
+    // legs follow travel; walking backwards keeps the legs facing the aim (backpedal)
+    let back=false;
+    if(hsp>15){const my=yawOf(e.vx,e.vz),d=angDiff(my,e.bodyYaw);
+      if(Math.abs(d)>1.9){back=true;e.legYaw=e.legYaw+angDiff(my+Math.PI,e.legYaw)*Math.min(1,dt*10);}
+      else e.legYaw=e.legYaw+angDiff(my,e.legYaw)*Math.min(1,dt*10);}
+    else e.legYaw=e.legYaw+angDiff(e.bodyYaw,e.legYaw)*Math.min(1,dt*6);
+    let spd=e.crouch?CROUCH_SPD:e.sprinting?RUN:WALK*(back?.85:1);
+    if(!e.grounded)spd=e.runJump?RUN:Math.max(WALK,Math.min(RUN,hsp));
+    const acc=e.grounded?(moving?(e.sprinting?900:1100):1600):(e.stun>0?120:500);
+    const tx=mx*spd,tz=mz*spd,dvx=tx-e.vx,dvz=tz-e.vz,dl=Math.hypot(dvx,dvz),st=Math.min(dl,acc*dt);
+    if(dl>0){e.vx+=dvx/dl*st;e.vz+=dvz/dl*st;}
+    if(ctrl&&c.crouchPressed&&e.grounded&&e.sprinting&&hsp>140)startSlide(e);
+  }
+  if(e.state==='normal'){
+    if(e.jumpBuf>0&&e.coyote>0){
+      if(e.crouch){if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}else e.jumpBuf=0;}
+      if(e.jumpBuf>0){
+        const run=e.sprinting&&Math.hypot(e.vx,e.vz)>140;
+        if(run){e.runJump=true;e.vy=RUNJUMPV;const s=RUN*1.08/Math.max(1,Math.hypot(e.vx,e.vz));e.vx*=s;e.vz*=s;e.cut=false;}
+        else{e.vy=JUMPV;e.cut=true;}
+        e.grounded=false;e.coyote=0;e.jumpBuf=0;e.takeoff=1;
+      }
+    }
+    if(!c.jumpHeld&&e.cut&&e.vy>180){e.vy*=.5;e.cut=false;}
+    if(e.vy<=0)e.cut=false;
+    e.vy-=G*dt;e.vy=Math.max(e.vy,-MAXFALL);
+    if(!e.grounded&&(e.fallStart===undefined||e.vy>=0))e.fallStart=e.y;
+    const landed=moveBody(e,dt);
+    e.grounded=landed||(e.vy<=0&&groundProbe(e));
+    if(e.grounded)e.coyote=.1;else e.coyote-=dt;
+    if(e.grounded&&!wasGround){
+      e.runJump=false;
+      const imp=-prevVy;
+      e.land=clamp(imp/900,.15,1);e.poseBlend=Math.max(e.poseBlend,.4);
+      if(imp>300){sfx('land',e);for(let i=0;i<8;i++)addPart(e.x+(rnd()-.5)*20,e.y+2,e.z+(rnd()-.5)*20,(rnd()-.5)*200,rnd()*60,(rnd()-.5)*200,.4,[.48,.52,.63],5,'dust');}
+      const fell=e.fallStart!==undefined?e.fallStart-e.y:0;
+      if(imp>=MAXFALL-5&&fell>(e.rocketJump?16:11)*T){const kk=world.time-world.lastKickT<5?world.lastKicker:null;damage(e,Math.min(50,(fell-11*T)/T*5+15),kk,V(0,-1,0));}
+      const limit=e.rocketJump?HARD_FALL*1.6:HARD_FALL;
+      if(e.alive&&((fell>limit&&imp>700)||(e.knocked&&imp>120)))enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
+      e.fallStart=e.y;e.knocked=false;e.rocketJump=false;
+    }
+    // step up single blocks while walking; vault 2-block obstacles while sprinting
+    if(e.state==='normal'&&e.grounded&&moving&&(e.hitX||e.hitZ||Math.hypot(e.vx,e.vz)<30)){
+      const d=cardOf(mx,mz),ob=lowObstacle(e,d);
+      if(ob&&(ob.h===1||e.sprinting)){
+        const speed=ob.h===2;
+        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,dur:ob.h===1?.2:.32,exitV:e.sprinting?RUN:WALK};
+        e.vx=e.vy=e.vz=0;e.poseBlend=.5;if(speed)sfx('whoosh',e);
+      }
+    }
+    // ledge grab: diving hands-first grabs automatically; moving toward a ledge or holding SPACE reaches for it
+    if(e.state==='normal'&&!e.grounded&&e.grabCD<=0&&ctrl){
+      const dirs=[];
+      if(e.runJump)dirs.push(cardOf(e.vx,e.vz));
+      if(moving)dirs.push(cardOf(mx,mz));
+      if(c.grab)dirs.push(cardOf(Math.sin(e.yaw),Math.cos(e.yaw)));
+      const reach=c.grab?32:e.runJump?22:14;
+      const tried={};
+      for(const d of dirs){
+        const key=d.join(',');if(tried[key])continue;tried[key]=1;
+        const lg=findLedge(e,d,reach);if(!lg)continue;
+        if(lg.low&&e.vy<420){
+          e.jumpBuf=0;e.runJump=false;e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:lg.stand,ly:lg.ly,d,vault:true,dur:.3};e.vx=e.vy=e.vz=0;e.poseBlend=.6;e.bodyYaw=e.legYaw=yawOf(d[0],d[1]);break;
+        }else if(!lg.low&&(e.vy<160||(c.grab&&e.vy<320)||e.runJump)){
+          e.runJump=false;e.state='hang';e.st={d,lg};e.x=lg.hang.x;e.y=lg.hang.y;e.z=lg.hang.z;e.vx=e.vy=e.vz=0;e.poseBlend=1;e.bodyYaw=e.legYaw=yawOf(d[0],d[1]);sfx('land',e);break;
+        }
+      }
+    }
+    // gravity-wall kick
+    if(e.state==='normal'){
+      const can=(e.grounded||e.wasBox)&&world.rotCD<=0&&!world.rot&&!world.pendingRot;
+      if(can){
+        const aimC=cardOf(Math.sin(e.yaw),Math.cos(e.yaw));
+        const order=[aimC,...CARDS.filter(d=>d[0]!==aimC[0]||d[1]!==aimC[1])];
+        for(const d of order){const ks=kickableSide(e,d);if(ks){e.kickPrompt=true;
+          if(ctrl&&c.kick&&e.kickCD<=0){if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}
+            if(!e.crouch){e.state='kick';e.st={t:0,d,hit:false,done:false};e.bodyYaw=e.legYaw=yawOf(d[0],d[1]);e.kickCD=.8;e.poseBlend=.7;e.trail=[];sfx('whoosh',e);}}
+          break;}}
+      }
+      if(ctrl&&c.kick&&e.kickCD<=0&&e.state==='normal'&&!(e.crouch&&overlapSolid(e.x,e.y,e.z,e.w,56))){
+        e.crouch=false;e.h=56;const d=cardOf(Math.sin(e.yaw),Math.cos(e.yaw));
+        e.state='kick';e.st={t:0,d,free:true,yaw:e.yaw,hit:false,done:false};e.bodyYaw=e.legYaw=e.yaw;e.kickCD=.7;e.poseBlend=.7;e.trail=[];sfx('whoosh',e);
+      }
+    }
+  }else if(e.state==='slide'){
+    const s=e.st;s.t+=dt;
+    const sp=Math.hypot(e.vx,e.vz),ns=Math.max(0,sp-SLIDE_FRIC*dt);if(sp>0){e.vx*=ns/sp;e.vz*=ns/sp;}
+    e.vy=Math.max(e.vy-G*dt,-MAXFALL);
+    const l=moveBody(e,dt);e.grounded=l||(e.vy<=0&&groundProbe(e));
+    if(rnd()<dt*30)addPart(e.x,e.y+2,e.z,-e.vx*.3+(rnd()-.5)*40,rnd()*40,-e.vz*.3+(rnd()-.5)*40,.35,[.48,.52,.63],4,'dust');
+    const fw=V(Math.sin(s.yaw),0,Math.cos(s.yaw));
+    let hit=meleeHit(e,fw,e.w/2+18,32,s.hitSet);
+    if(e.hitX||e.hitZ){
+      const d=cardOf(fw.x,fw.z);
+      const ks=(world.rotCD<=0&&!world.rot&&!world.pendingRot)?kickableSide(e,d):null;
+      if(ks){world.pendingRot={key:dirKey(d[0],d[1]),kicker:e,stop:ks.stop};world.hitstop=.16;sfx('kick',e);world.shake=Math.max(world.shake,10);}
+      else sfx('land',e);
+      hit=true;
+    }
+    if(hit)world.hitstop=Math.max(world.hitstop,.06);
+    if(hit||s.t>=SLIDE_DUR||Math.hypot(e.vx,e.vz)<55||!e.grounded)endSlide(e);
+  }else if(e.state==='hang'){
+    e.vx=e.vy=e.vz=0;const d=e.st.d;
+    const toward=(mx*d[0]+mz*d[1])>.5,away=(mx*d[0]+mz*d[1])<-.5;
+    if(ctrl&&(c.jump||c.grab&&!e.st.held||toward)){
+      e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:e.st.lg.stand,ly:e.st.lg.ly,d,dur:.6};e.poseBlend=1;
+    }else if(ctrl&&(c.crouchPressed||away)){e.state='normal';e.grabCD=.35;e.poseBlend=1;}
+    else if(!solid(tile(e.st.lg.ci,e.st.lg.r,e.st.lg.ck))){e.state='normal';e.grabCD=.3;}
+    if(e.st&&e.st.lg)e.st.held=c.grab;
+  }else if(e.state==='climbup'){
+    const s=e.st;s.t+=dt/s.dur;const t=Math.min(1,s.t);
+    const d=s.d,sa=s.s0,sb=s.s1;
+    if(s.speed){e.y=lerp(sa.y,sb.y,easeOut(Math.min(1,t/.45)));const u=smooth(t);e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);}
+    else{e.y=lerp(sa.y,sb.y,easeOut(Math.min(1,t/.6)));const u=easeInOut(clamp((t-.4)/.6,0,1));e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);}
+    if(s.t>=1){
+      e.state='normal';e.x=sb.x;e.y=sb.y;e.z=sb.z;e.vy=0;
+      const ev=s.exitV||0;e.vx=d[0]*ev;e.vz=d[1]*ev;e.poseBlend=.5;
+      if(overlapSolid(e.x,e.y,e.z,e.w,e.h))pushOut(e);
+      e.grounded=groundProbe(e);e.coyote=.1;if(!e.grounded)e.fallStart=e.y;
+    }
+  }else if(e.state==='kick'){
+    const s=e.st;s.t+=dt/KICK_DUR;
+    e.vx=approach(e.vx,0,2000*dt);e.vz=approach(e.vz,0,2000*dt);e.vy=Math.max(e.vy-G*dt,-MAXFALL);
+    const l=moveBody(e,dt);e.grounded=l||(e.vy<=0&&groundProbe(e));
+    if(s.t>=KICK_HIT&&!s.hit){s.hit=true;
+      const ky=s.free?s.yaw:yawOf(s.d[0],s.d[1]),kfw=V(Math.sin(ky),0,Math.cos(ky));
+      meleeHit(e,kfw,e.w/2+30,52,null);
+      const ks=s.free?null:kickableSide(e,s.d);
+      const fp=localToWorld(e,25,-28,'body');
+      addPart(fp.x,fp.y,fp.z,0,0,0,.3,e.col,30,'ring');
+      if(ks&&world.rotCD<=0&&!world.rot&&!world.pendingRot){
+        world.pendingRot={key:dirKey(s.d[0],s.d[1]),kicker:e,stop:ks.stop};world.hitstop=.16;s.done=true;
+        sfx('kick',e);world.shake=Math.max(world.shake,10);
+        for(let i=0;i<24;i++)addPart(fp.x,fp.y,fp.z,(rnd()-.5)*400-s.d[0]*200,(rnd()-.5)*400,(rnd()-.5)*400-s.d[1]*200,.5,rnd()<.5?[1,.25,.64]:[1,1,1],3,'spark');
+      }
+    }
+    if(s.t>=1){e.state='normal';e.poseBlend=.6;}
+  }else if(e.state==='down'){
+    const s=e.st;s.t+=dt;
+    e.vy=Math.max(e.vy-G*dt,-MAXFALL);if(e.grounded){e.vx=approach(e.vx,0,700*dt);e.vz=approach(e.vz,0,700*dt);}
+    const l=moveBody(e,dt);e.grounded=l||(e.vy<=0&&groundProbe(e));
+    if(s.t>=s.dur&&(e.grounded||e.wasBox)){
+      if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.h=56;e.state='getup';e.st={t:0,side:s.side};e.poseBlend=.25;}else s.dur+=.3;
+    }
+  }else if(e.state==='getup'){
+    e.st.t+=dt/GETUP_DUR;
+    e.vx=approach(e.vx,0,1500*dt);e.vz=approach(e.vz,0,1500*dt);e.vy=Math.max(e.vy-G*dt,-MAXFALL);
+    const l=moveBody(e,dt);e.grounded=l||(e.vy<=0&&groundProbe(e));
+    if(e.st.t>=1){e.state='normal';e.poseBlend=.35;}
+  }
+  if(e.state!==prevState)e.poseBlend=Math.max(e.poseBlend,.6);
+  if(e.state!=='normal'){e.crouch=false;if(e.state!=='slide'&&e.state!=='down'&&e.h!==56&&!overlapSolid(e.x,e.y,e.z,e.w,56))e.h=56;}
+  // weapons (gun lowered while sprinting or diving)
+  const canFire=(e.state==='normal'&&!(e.sprinting&&e.grounded)&&!e.runJump)||e.state==='kick'||e.state==='slide';
+  if(ctrl&&canFire&&gameState!=='over'){
+    if(c.fire&&e.fireCD<=0&&e.reload<=0){if(e.ammo>0)fireRifle(e);else{e.reload=reloadOf(e);sfx('empty',e);}}
+    else if(c.alt&&e.rfireCD<=0&&e.rreload<=0){if(e.rockets>0)fireRocket(e);else{e.rreload=RRELOAD;sfx('empty',e);}}
+  }
+  // stealth
+  e.airT=(e.grounded||e.wasBox)?0:(e.airT||0)+dt;
+  if(e.hidden){const ok=(e.state==='normal'||e.state==='kick')&&e.airT<.15&&!(e.sprinting&&e.grounded);if(!ok)reveal(e);}
+  else if(STEALTH_ON&&e.state==='normal'&&e.crouch&&e.grounded){e.crouchT+=dt;if(e.crouchT>=STEALTH_T){e.hidden=true;sfx('cloak',e);}}
+  else e.crouchT=0;
+  e.vis=approach(e.vis,e.hidden?0:1,dt*(e.hidden?1.3:8));
+  if(e.y<-300||e.y>L+300||e.x<-300||e.x>L+300||e.z<-300||e.z>L+300){pushOut(e);e.x=clamp(e.x,T*1.5,L-T*1.5);e.y=clamp(e.y,T,L-T*3);e.z=clamp(e.z,T*1.5,L-T*1.5);pushOut(e);}
+}
+function reveal(e){
+  if(e.hidden){e.hidden=false;for(let i=0;i<14;i++)addPart(e.x+(rnd()-.5)*18,e.y+rnd()*e.h,e.z+(rnd()-.5)*18,(rnd()-.5)*90,rnd()*90,(rnd()-.5)*90,.45,e.col,3,'spark');}
+  e.crouchT=0;e.vis=Math.max(e.vis,.85);
+}
+function startSlide(e){
+  const yaw=yawOf(e.vx,e.vz);
+  e.state='slide';e.st={t:0,yaw,hitSet:new Set()};e.bodyYaw=e.legYaw=yaw;e.h=SLIDE_H;e.crouch=false;
+  const sp=Math.max(Math.hypot(e.vx,e.vz),RUN)*1.18;e.vx=Math.sin(yaw)*sp;e.vz=Math.cos(yaw)*sp;e.stam=Math.max(0,e.stam-.15);e.poseBlend=.5;
+  sfx('whoosh',e);
+}
+function endSlide(e){e.state='normal';e.poseBlend=.5;if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.h=56;e.crouch=false;}else{e.h=CROUCH_H;e.crouch=true;}}
+function enterDown(e,sev){
+  e.state='down';
+  const fwd=e.vx*Math.sin(e.bodyYaw)+e.vz*Math.cos(e.bodyYaw);
+  e.st={t:0,dur:.8+sev*1.1,side:fwd>60?1:-1};
+  e.h=22;e.poseBlend=.3;e.bav*=.3;e.knocked=false;e.stun=0;e.legYaw=e.bodyYaw;
+  sfx('thud',e);
+  for(let i=0;i<16;i++)addPart(e.x+(rnd()-.5)*40,e.y+2,e.z+(rnd()-.5)*40,(rnd()-.5)*320,rnd()*140,(rnd()-.5)*320,.6,[.54,.59,.69],8,'dust');
+  addPart(e.x,e.y+4,e.z,0,0,0,.35,[.78,.83,1],46,'ring');
+  if(player&&Math.hypot(player.x-e.x,player.y-e.y,player.z-e.z)<500)world.shake=Math.max(world.shake,6+sev*8);
+}
+// push / damage whatever is in front (slides)
+function meleeHit(e,fw,reach,height,already){
+  let hit=false;
+  const cx=e.x+fw.x*reach*.6,cz=e.z+fw.z*reach*.6,rr=reach*.6+4;
+  for(const o of chars){
+    if(o===e||!o.alive||(already&&already.has(o)))continue;
+    if(Math.abs(o.x-cx)<rr+o.w/2&&Math.abs(o.z-cz)<rr+o.w/2&&o.y<e.y+height&&o.y+o.h>e.y){
+      if(already)already.add(o);damage(o,KICK_DMG,e,fw);hit=true;if(!o.alive)continue;
+      knockBack(o,V(fw.x*KICK_PUSH,380,fw.z*KICK_PUSH),true);
+    }
+  }
+  for(const b of props){
+    if(b.dead||(already&&already.has(b)))continue;
+    if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
+      if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
+    }
+  }
+  for(const sp of spiders){
+    if(!sp.alive||sp.spawnT>0||(already&&already.has(sp)))continue;
+    if(Math.abs(sp.p.x-cx)<rr+10&&Math.abs(sp.p.z-cz)<rr+10&&sp.p.y<e.y+height+6&&sp.p.y>e.y-10){
+      if(already)already.add(sp);hurtSpider(sp,KICK_DMG,e);hit=true;
+      if(sp.alive){sp.state='leap';sp.leapT=0;sp.p=vadd(sp.p,vscale(sp.n,3));sp.v=V(fw.x*620,330,fw.z*620);sp.biteCD=Math.max(sp.biteCD,1);sp.path=null;}
+    }
+  }
+  if(hit){reveal(e);sfx('kick',e);if(e===player)world.shake=Math.max(world.shake,6);}
+  return hit;
+}
+function knockBack(o,v,knock){
+  if(o.state==='down'){o.vx+=v.x*.6;o.vz+=v.z*.6;o.vy=Math.max(o.vy,v.y*.4);o.grounded=false;return;}
+  if(o.state!=='normal')o.state='normal';
+  o.h=56;o.crouch=false;o.runJump=false;
+  o.vx=v.x;o.vy=v.y;o.vz=v.z;o.grounded=false;o.y+=2;
+  if(knock){o.knocked=true;o.stun=.6;o.bav=12;o.tumbleHold=0;o.poseBlend=.6;}
+  if(overlapSolid(o.x,o.y,o.z,o.w,o.h))pushOut(o);
+}
+
+// ---------- procedural pose (sagittal plane, then mapped into 3D) ----------
+function ik2(ax,ay,tx,ty,l1,l2,pick){
+  let dx=tx-ax,dy=ty-ay,d=Math.hypot(dx,dy);
+  const maxd=l1+l2-.01;if(d>maxd){dx*=maxd/d;dy*=maxd/d;d=maxd;}
+  if(d<1e-3)d=1e-3;
+  const base=Math.atan2(dy,dx),cc=clamp((l1*l1+d*d-l2*l2)/(2*l1*d),-1,1),off=Math.acos(cc);
+  const k1={x:ax+Math.cos(base+off)*l1,y:ay+Math.sin(base+off)*l1},k2={x:ax+Math.cos(base-off)*l1,y:ay+Math.sin(base-off)*l1};
+  return {j:pick(k1,k2),e:{x:ax+dx,y:ay+dy}};
+}
+const pickFwd=(a,b)=>a.x>b.x?a:b,pickDown=(a,b)=>a.y>b.y?a:b;
+function sm(P,key,tx,ty,a){const p=P[key];p.x+=(tx-p.x)*a;p.y+=(ty-p.y)*a;}
+function legPhase(phi,s,A,lift){
+  phi=((phi%1)+1)%1;
+  if(phi<s){const t=phi/s;return {x:A*(1-2*t),y:0};}
+  const t=(phi-s)/(1-s),xs=smooth(Math.pow(t,1.6)),drive=Math.sin(clamp((t-.45)/.55,0,1)*Math.PI)*A*.18;
+  return {x:-A+2*A*xs+drive,y:-lift*Math.sin(Math.PI*Math.pow(t,.85))};
+}
+// local (forward x, y-down from feet) -> world, in the body or leg frame, with tumble about the hip-height pivot
+function localToWorld(e,lx,ly,frame,lat){
+  const yaw=frame==='leg'?e.legYaw:e.bodyYaw;
+  const cy=e.h/2,c=Math.cos(e.ba),s=Math.sin(e.ba);
+  let px=lx,py=ly+cy;const rx=px*c-py*s,ry=px*s+py*c;px=rx;py=ry-cy;
+  const fx=Math.sin(yaw),fz=Math.cos(yaw),rxv=-Math.cos(yaw),rzv=Math.sin(yaw);
+  const la=lat||0;
+  return V(e.x+e.visX+fx*px+rxv*la,e.y+e.visY-py,e.z+e.visZ+fz*px+rzv*la);
+}
+function updatePose(e,dt){
+  if(!e.alive)return;
+  e.visX=e.visX||0;e.visY=e.visY||0;e.visZ=e.visZ||0;
+  if(!e.pose){const z=(x,y)=>({x,y});
+    e.pose={hip:z(0,-26),fA:z(4,0),fB:z(-4,0),hN:z(10,-40),hF:z(14,-40),lean:0,headTilt:0,neck:z(0,-43),head:z(0,-52),kA:z(0,-13),kB:z(0,-13),eN:z(4,-35),eF:z(4,-35),gp:z(10,-40),gunA:0,muzzle:z(28,-40),sh:z(0,-41),gunOn:true};}
+  const P=e.pose;
+  e.poseBlend=Math.max(0,e.poseBlend-dt*3);
+  const k=lerp(55,12,e.poseBlend),a=1-Math.exp(-k*dt);
+  let aim=clamp(-e.pitch,-1.5,1.5);
+  if(e.state==='normal'&&e.grounded&&e.sprinting)aim=.85;
+  const fwd=e.vx*Math.sin(e.legYaw)+e.vz*Math.cos(e.legYaw); // speed along the legs
+  const acc=(fwd-e.prevFwd)/Math.max(dt,1e-4);e.prevFwd=fwd;e.accS=lerp(e.accS,acc,1-Math.exp(-10*dt));
+  const lvx=fwd,pvy=-e.vy; // 2D convention: y down
+  const speedN=clamp(Math.hypot(e.vx,e.vz)/RUN,0,1);
+  e.land=Math.max(0,e.land-dt*3.2);e.takeoff=Math.max(0,(e.takeoff||0)-dt*5);
+  let hipX=0,hipY=-26,lean=0,fa,fb,handsGun=true,hN=null,hF=null,headTilt=aim*.35;
+  const st=e.state;
+  if(st==='normal'&&e.grounded){
+    const mv=speedN>.06;
+    e.runW=lerp(e.runW,mv?1:0,1-Math.exp(-12*dt));
+    const s=lerp(.62,.4,speedN),A=lerp(7,17,speedN),cyc=2*A/s,lift=lerp(5,13,speedN);
+    e.phase+=lvx*dt/cyc;
+    const pa=legPhase(e.phase,s,A,lift),pb=legPhase(e.phase+.5,s,A,lift);
+    const bob=lerp(.8,3.2,speedN)*(.5+.5*Math.cos(4*Math.PI*(e.phase-s/2)));
+    const breath=Math.sin(world.time*2.2)*.6,w=e.runW,crouch=e.crouch?11:0;
+    hipX=lerp(-1,2.5*Math.sign(lvx),w);
+    hipY=lerp(-25.5+breath*(crouch?.5:1)+crouch,-25.5+bob+crouch*.9,w)+e.land*11;
+    fa={x:lerp(6+crouch*.4,pa.x+hipX,w),y:lerp(0,pa.y,w)};
+    fb={x:lerp(-5-crouch*.3,pb.x+hipX,w),y:lerp(0,pb.y,w)};
+    lean=w*speedN*.2*Math.sign(lvx)+clamp(e.accS/5000,-.18,.18)+e.land*.25+crouch*.025+(e.sprinting?.12:0);
+  }else if(st==='normal'){
+    const r=clamp(-pvy/JUMPV,-1,1);
+    const flail=pvy>650?Math.sin(world.time*18)*4*clamp((pvy-650)/400,0,1):0;
+    const tumble=Math.min(1,Math.abs(e.ba)*1.5);
+    hipY=-28-e.takeoff*2;
+    fa={x:lerp(5,7,Math.max(r,0))+flail+tumble*Math.sin(world.time*14)*6,y:lerp(-4,-15,Math.max(r,0))+(r<0?-r*2:0)};
+    fb={x:-7-flail+tumble*Math.cos(world.time*13)*6,y:lerp(-8,-5,Math.max(r,0))+(r<0?-r:0)};
+    lean=clamp(lvx/RUN,-1,1)*.12-r*.06+tumble*.3*Math.sin(world.time*9);
+    if(e.runJump){handsGun=false;const u=clamp(-pvy/RUNJUMPV,-1,1);
+      lean=.95-u*.15;hipY=-30;hipX=-2;headTilt=-.55;fa={x:-18,y:-20+u*3};fb={x:-24,y:-13};hN={x:26,y:-44+u*5};hF={x:29,y:-40+u*5};}
+  }else if(st==='slide'){
+    hipY=-8;hipX=-2;lean=-1.05;headTilt=.35;fa={x:22,y:-2};fb={x:7,y:-1};
+  }else if(st==='hang'){
+    handsGun=false;const sw=Math.sin(world.time*3)*1.5;
+    hipY=-27;hipX=-2;lean=.08;headTilt=-.35;fa={x:2+sw,y:-1};fb={x:-2+sw*.6,y:-3};hN={x:11,y:-60};hF={x:9,y:-60};
+  }else if(st==='climbup'){
+    handsGun=false;const s=e.st,t=Math.min(1,s.t);
+    // hands stay on the ledge corner
+    const along=(s.s1.x-e.x)*s.d[0]+(s.s1.z-e.z)*s.d[1];
+    const hx=Math.max(4,along-6),hy=-(s.ly-e.y);
+    hN={x:hx+2,y:Math.min(hy,-6)};hF={x:hx,y:Math.min(hy,-6)};
+    const u=clamp(t/.6,0,1);
+    hipY=lerp(-27,-18,Math.sin(u*Math.PI))+lerp(0,-4,clamp((t-.6)/.4,0,1));
+    lean=lerp(.1,.55,Math.sin(Math.min(1,t*1.4)*Math.PI*.9));headTilt=.2;
+    fa={x:lerp(2,8,u),y:lerp(-1,-14,Math.sin(u*Math.PI*.8))*(t<.8?1:clamp((1-t)/.2,0,1))};
+    fb={x:lerp(-2,-4,u),y:lerp(-3,-4,u)*(t<.85?1:0)};
+    if(t>.75){fa={x:lerp(fa.x,5,(t-.75)*4),y:lerp(fa.y,0,(t-.75)*4)};fb={x:lerp(fb.x,-4,(t-.75)*4),y:0};hipY=lerp(hipY,-26,(t-.75)*4);}
+  }else if(st==='kick'){
+    const t=e.st.t;
+    if(t<KICK_HIT){const u=smooth(t/KICK_HIT);fa={x:lerp(5,11,u),y:lerp(0,-12,u)};lean=-.22*u;hipY=-26+u*2;}
+    else if(t<.56){const u=easeOut((t-KICK_HIT)/(.56-KICK_HIT));fa={x:lerp(11,27,u),y:lerp(-12,-27,u)};lean=lerp(-.22,-.4,u);hipY=-24;}
+    else if(t<.72){fa={x:27,y:-27};lean=-.4;hipY=-24;}
+    else{const u=smooth((t-.72)/.28);fa={x:lerp(27,5,u),y:lerp(-27,0,u)};lean=lerp(-.4,0,u);hipY=-24-u*2;}
+    fb={x:-7,y:0};
+    if(e.st.done&&t>=.45){const u=clamp((t-.45)/.25,0,1);fa={x:lerp(fa.x,6,u),y:lerp(fa.y,0,u)};lean=lerp(lean,.05,u);}
+  }else if(st==='down'){
+    handsGun=false;const s=e.st,sg=s.side,imp=Math.max(0,1-s.t/.3);
+    hipY=-5-Math.sin(Math.min(1,s.t/.3)*Math.PI)*5*imp;lean=sg*Math.PI/2*.97;headTilt=sg*.9;
+    if(sg<0){fa={x:14,y:-2};fb={x:9,y:-8};}else{fa={x:-14,y:-2};fb={x:-12,y:-1};}
+    hN={x:sg*22,y:-3};hF={x:sg*13,y:-11};
+    if(s.t>s.dur-.35){hF={x:hF.x+Math.sin(s.t*20)*1.5,y:hF.y};}
+  }else if(st==='getup'){
+    const s=e.st,sg=s.side,t=Math.min(1,s.t),u1=smooth(clamp(t/.5,0,1)),u2=smooth(clamp((t-.45)/.55,0,1));
+    handsGun=t>.8;
+    lean=lerp(lerp(sg*Math.PI/2*.97,sg<0?.35:.6,u1),.04,u2);
+    hipY=lerp(lerp(-5,sg<0?-9:-13,u1),-26,u2);hipX=lerp(0,sg<0?-2:-3,u1)*(1-u2);
+    const fa0=sg<0?{x:14,y:-2}:{x:-14,y:-2},fb0=sg<0?{x:9,y:-8}:{x:-12,y:-1},fa1=sg<0?{x:9,y:0}:{x:-1,y:0},fb1=sg<0?{x:3,y:0}:{x:-11,y:-1};
+    fa={x:lerp(lerp(fa0.x,fa1.x,u1),5,u2),y:lerp(lerp(fa0.y,fa1.y,u1),0,u2)};
+    fb={x:lerp(lerp(fb0.x,fb1.x,u1),-4,u2),y:lerp(lerp(fb0.y,fb1.y,u1),0,u2)};
+    headTilt=lerp(sg*.9,0,u1);
+    if(!handsGun){hN={x:lerp(sg*22,8,u1),y:lerp(-3,-1,u1)};hF={x:lerp(sg*13,4,u1),y:lerp(-11,-1,u1)};
+      if(u2>0){hN={x:lerp(hN.x,12,u2),y:lerp(hN.y,-36,u2)};hF={x:lerp(hF.x,16,u2),y:lerp(hF.y,-36,u2)};}}
+  }else{fa={x:5,y:0};fb={x:-5,y:0};}
+  lean-=e.flinch*.25;
+  const stance=(st==='normal'&&e.grounded&&e.poseBlend<.05),snappy=st==='kick'||st==='slide'||(st==='down'&&e.st.t<.3);
+  const af=stance?1-Math.exp(-80*dt):snappy?1-Math.exp(-45*dt):a,al=snappy?af:a;
+  sm(P,'hip',hipX,hipY,al);sm(P,'fA',fa.x,fa.y,af);sm(P,'fB',fb.x,fb.y,af);
+  P.lean+=(lean-P.lean)*al;P.headTilt+=(headTilt-P.headTilt)*al;
+  const H=P.hip,ln=P.lean;
+  P.neck={x:H.x+Math.sin(ln)*TORSO,y:H.y-Math.cos(ln)*TORSO};
+  const ht=ln*.4+P.headTilt;P.head={x:P.neck.x+Math.sin(ht)*8.5,y:P.neck.y-Math.cos(ht)*8.5};P.headA=ht;
+  P.sh={x:P.neck.x-Math.sin(ln)*2.5,y:P.neck.y+Math.cos(ln)*2.5};
+  const LA=ik2(H.x,H.y,P.fA.x,P.fA.y,THIGH,SHIN,pickFwd),LB=ik2(H.x,H.y,P.fB.x,P.fB.y,THIGH,SHIN,pickFwd);
+  P.kA=LA.j;P.fA={x:LA.e.x,y:LA.e.y};P.kB=LB.j;P.fB={x:LB.e.x,y:LB.e.y};
+  P.gunOn=handsGun;
+  if(!e.trail)e.trail=[];
+  if(st==='kick'&&e.st.t>.3&&e.st.t<.8){e.trail.push(localToWorld(e,P.fA.x,P.fA.y,'body',5));if(e.trail.length>9)e.trail.shift();}
+  else if(e.trail.length)e.trail.shift();
+  if(handsGun){
+    P.gunA+=(aim-P.gunA)*Math.min(1,dt*30);
+    const ga=P.gunA,cx=Math.cos(ga),sy=Math.sin(ga),rec=e.recoil*e.recoil*5;
+    const gp={x:P.sh.x+2+cx*(9-rec),y:P.sh.y+3+sy*(9-rec)};
+    P.gp=gp;P.muzzle={x:gp.x+cx*19,y:gp.y+sy*19};
+    P.hN={x:gp.x,y:gp.y};P.hF={x:gp.x+cx*9,y:gp.y+sy*9-1};
+  }else{sm(P,'hN',hN.x,hN.y,a);sm(P,'hF',hF.x,hF.y,a);}
+  const AN=ik2(P.sh.x,P.sh.y,P.hN.x,P.hN.y,UPPER,FORE,pickDown),AF=ik2(P.sh.x,P.sh.y,P.hF.x,P.hF.y,UPPER,FORE,pickDown);
+  P.eN=AN.j;P.hN={x:AN.e.x,y:AN.e.y};P.eF=AF.j;P.hF={x:AF.e.x,y:AF.e.y};
+  if(!world.rot)e.kickerSpin=0;
+  const vd=Math.exp(-8*dt);e.visX*=vd;e.visY*=vd;e.visZ*=vd;
+}
+// world-space muzzle for shooting
+function muzzleOf(e){
+  const P=e.pose;
+  if(!P)return V(e.x,e.y+44,e.z);
+  return localToWorld(e,P.muzzle.x,P.muzzle.y,'body',3);
+}
+
+// ---------- drawing ----------
+const SUIT=hexRGB('#1c2236'),SUIT2=hexRGB('#252d47'),DARK=hexRGB('#151a2a');
+function drawChar(e,alphaOverride){
+  if(!e.alive||!e.pose)return;
+  const vis=alphaOverride!==undefined?alphaOverride:e.vis;
+  if(vis<.02)return;
+  const P=e.pose,acc=e.col,al=vis*(e.invuln>0&&Math.floor(world.time*20)%2===0?.45:1);
+  const gl=R.gl;
+  if(al<.99){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);}
+  const B=(p,lat)=>localToWorld(e,p.x,p.y,'body',lat),Lg=(p,lat)=>localToWorld(e,p.x,p.y,'leg',lat);
+  const hipC=B(P.hip,0);
+  // legs (A = right, B = left)
+  for(const [kk,ff,lat,col] of [[P.kA,P.fA,5,SUIT],[P.kB,P.fB,-5,DARK]]){
+    const hp=Lg(P.hip,lat),kn=Lg(kk,lat*1.05),ft=Lg(ff,lat);
+    drawSeg(hp,kn,7,col,null,acc,al);drawSeg(kn,ft,6,col,null,acc,al);
+    const toe=localToWorld(e,ff.x+6,ff.y-.5,'leg',lat);drawSeg(ft,toe,4.5,DARK,null,acc,al);
+  }
+  // torso (oriented box hip->neck)
+  const nk=B(P.neck,0);
+  {const d=vsub(nk,hipC),len=vlen(d)||1,up=vscale(d,1/len),yaw=e.bodyYaw;
+   const rt=V(-Math.cos(yaw),0,Math.sin(yaw)),fw=vnorm(vcross(rt,up)),rt2=vcross(up,fw);
+   drawCubeM(M4.basis(vscale(vadd(hipC,nk),.5),vscale(rt2,-13),vscale(up,len+4),vscale(fw,8)),SUIT2,null,acc,al);
+   const chest=vadd(hipC,vscale(d,.7));drawCubeM(M4.basis(chest,vscale(rt2,-15),vscale(up,8),vscale(fw,10)),SUIT,null,acc,al);
+   drawCubeM(M4.basis(hipC,vscale(rt2,-12),vscale(up,4),vscale(fw,8.5)),acc,[acc[0]*.5,acc[1]*.5,acc[2]*.5],null,al);}
+  // head + visor
+  {const hc=B(P.head,0),yaw=e.bodyYaw,ht=P.headA;
+   const fw=V(Math.sin(yaw)*Math.cos(ht),Math.sin(ht),Math.cos(yaw)*Math.cos(ht)),rt=V(-Math.cos(yaw),0,Math.sin(yaw)),up=vcross(fw,rt);
+   drawCubeM(M4.basis(hc,vscale(rt,12),vscale(up,13),vscale(fw,12)),hexRGB('#232a42'),null,acc,al);
+   const vz=vadd(hc,vadd(vscale(fw,5.5),vscale(up,1.5)));
+   drawCubeM(M4.basis(vz,vscale(rt,10),vscale(up,3.5),vscale(fw,2.5)),acc,[acc[0]*.9,acc[1]*.9,acc[2]*.9],null,al);}
+  // gun
+  if(P.gunOn){
+    const g0=B(P.gp,3),gm=B(P.muzzle,3),gb=vadd(g0,vscale(vnorm(vsub(g0,gm)),6));
+    drawSeg(gb,gm,5,hexRGB('#2b3148'),null,acc,al);
+    const tube=vadd(g0,vscale(vnorm(vsub(gm,g0)),6));drawSeg(vadd(tube,V(0,4,0)),vadd(gm,V(0,4,0)),4,hexRGB('#3a2a2a'),[.25,.08,0],[1,.55,.2],al);
+    if(e.weapon==='shotgun'){const dir=vnorm(vsub(gm,g0));drawSeg(vadd(g0,vscale(dir,4)),vadd(gm,vscale(dir,3)),7,hexRGB('#3b2a22'),null,[1,.55,.2],al);
+      const pump=vadd(g0,vscale(dir,10-e.recoil*3));drawSeg(vadd(pump,V(0,-3,0)),vadd(pump,vadd(vscale(dir,7),V(0,-3,0))),5,hexRGB('#ff8a2a'),[.3,.12,0],null,al);}
+  }else{
+    const back=B({x:P.neck.x-6,y:P.neck.y+8},0);drawSeg(vadd(back,V(0,8,0)),vadd(back,V(0,-12,0)),5,hexRGB('#2b3148'),null,acc,al);
+  }
+  // arms (N = right holds the grip, F = left on the foregrip)
+  for(const [el,hd,lat,hl,col] of [[P.eN,P.hN,7,3,SUIT],[P.eF,P.hF,-7,2,DARK]]){
+    const sh=B(P.sh,lat),eb=B(el,lat*1.2),hn=B(hd,hl);
+    drawSeg(sh,eb,5,col,null,acc,al);drawSeg(eb,hn,4.5,col,null,acc,al);
+  }
+  if(e.trail&&e.trail.length>1){for(let i=1;i<e.trail.length;i++){drawSeg(e.trail[i-1],e.trail[i],2+i/e.trail.length*5,acc,acc,null,.35*i/e.trail.length*al+.05);}}
+  if(al<.99){gl.disable(gl.BLEND);gl.depthMask(true);}
+}
+
+// ---------- ragdolls ----------
+let dolls=[];
+const DOLL_LINKS=[['neck','head'],['neck','hip'],['hip','kA'],['kA','fA'],['hip','kB'],['kB','fB'],['neck','eN'],['eN','hN'],['neck','eF'],['eF','hF'],['head','hip'],['kA','kB'],['eN','eF']];
+function makeDoll(e,dir){
+  const P=e.pose;if(!P)return;
+  const pts={head:localToWorld(e,P.head.x,P.head.y,'body'),neck:localToWorld(e,P.neck.x,P.neck.y,'body'),hip:localToWorld(e,P.hip.x,P.hip.y,'body'),
+    kA:localToWorld(e,P.kA.x,P.kA.y,'leg',5),fA:localToWorld(e,P.fA.x,P.fA.y,'leg',5),kB:localToWorld(e,P.kB.x,P.kB.y,'leg',-5),fB:localToWorld(e,P.fB.x,P.fB.y,'leg',-5),
+    eN:localToWorld(e,P.eN.x,P.eN.y,'body',8),hN:localToWorld(e,P.hN.x,P.hN.y,'body',4),eF:localToWorld(e,P.eF.x,P.eF.y,'body',-8),hF:localToWorld(e,P.hF.x,P.hF.y,'body',-4)};
+  const dt=1/120,list=[],idx={};
+  for(const k in pts){const p=pts[k],up=k==='head'||k==='neck'?1.4:1;
+    const ivx=e.vx+(dir?dir.x*260*up:0)+(rnd()-.5)*40,ivy=e.vy+(dir?dir.y*260:0)+60,ivz=e.vz+(dir?dir.z*260*up:0)+(rnd()-.5)*40;
+    idx[k]=list.length;list.push({x:p.x,y:p.y,z:p.z,ox:p.x-ivx*dt,oy:p.y-ivy*dt,oz:p.z-ivz*dt});}
+  const links=DOLL_LINKS.map(([a,b])=>{const A=list[idx[a]],Bp=list[idx[b]];return {a:idx[a],b:idx[b],len:Math.hypot(A.x-Bp.x,A.y-Bp.y,A.z-Bp.z)};});
+  dolls.push({pts:list,idx,links,life:7,col:e.col});if(dolls.length>8)dolls.shift();
+}
+function updateDolls(dt){
+  for(let n=dolls.length-1;n>=0;n--){
+    const d=dolls[n];d.life-=dt;if(d.life<=0){dolls.splice(n,1);continue;}
+    for(const p of d.pts){const vx=(p.x-p.ox)*.995,vy=(p.y-p.oy)*.995,vz=(p.z-p.oz)*.995;p.ox=p.x;p.oy=p.y;p.oz=p.z;p.x+=vx;p.y+=vy-G*dt*dt;p.z+=vz;}
+    for(let it=0;it<5;it++){
+      for(const l of d.links){const A=d.pts[l.a],B=d.pts[l.b],dx=B.x-A.x,dy=B.y-A.y,dz=B.z-A.z,dd=Math.hypot(dx,dy,dz)||1e-3,f=(dd-l.len)/dd*.5;
+        A.x+=dx*f;A.y+=dy*f;A.z+=dz*f;B.x-=dx*f;B.y-=dy*f;B.z-=dz*f;}
+      for(const p of d.pts){const i=Math.floor(p.x/T),j=Math.floor(p.y/T),k=Math.floor(p.z/T);
+        if(solid(tile(i,j,k))){
+          const c=[[p.x-i*T,0,-1],[(i+1)*T-p.x,0,1],[p.y-j*T,1,-1],[(j+1)*T-p.y,1,1],[p.z-k*T,2,-1],[(k+1)*T-p.z,2,1]];
+          let m=c[0];for(const q of c)if(q[0]<m[0])m=q;
+          if(m[1]===0)p.x=m[2]<0?i*T-.1:(i+1)*T+.1;else if(m[1]===1){p.y=m[2]<0?j*T-.1:(j+1)*T+.1;if(m[2]>0){p.ox=p.x-(p.x-p.ox)*.5;p.oz=p.z-(p.z-p.oz)*.5;}}else p.z=m[2]<0?k*T-.1:(k+1)*T+.1;
+        }}
+    }
+  }
+}
+function drawDoll(d){
+  const p=k=>{const q=d.pts[d.idx[k]];return V(q.x,q.y,q.z);};
+  const al=Math.min(1,d.life/1.5);const gl=R.gl;
+  if(al<.99){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);}
+  for(const [a,b,t] of [['neck','hip',11],['hip','kA',7],['kA','fA',6],['hip','kB',7],['kB','fB',6],['neck','eN',5],['eN','hN',4.5],['neck','eF',5],['eF','hF',4.5]])drawSeg(p(a),p(b),t,SUIT,null,d.col,al);
+  drawSeg(p('neck'),p('head'),11,hexRGB('#232a42'),null,d.col,al);
+  if(al<.99)gl.disable(gl.BLEND);
+}

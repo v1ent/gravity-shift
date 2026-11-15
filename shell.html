@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gravity Shift — Arena 7</title>
+<style>
+html,body{margin:0;height:100%;background:#05060c;overflow:hidden;font-family:'Courier New',ui-monospace,monospace;color:#cfe8ff}
+canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+#hud{pointer-events:none}
+#c{cursor:crosshair}
+#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,10,40,.85),rgba(3,4,10,.96));z-index:2;overflow:auto}
+#ov .box{max-width:660px;padding:28px 34px;border:1px solid #29f0ff55;background:#0a0d1acc;box-shadow:0 0 40px #29f0ff22,inset 0 0 30px #ff3fa411;margin:16px}
+#ov h1{margin:0 0 4px;font-size:40px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff,0 0 30px #ff3fa4}
+#ov h1 span{color:#ff3fa4}
+#ov .sub{color:#8aa;margin-bottom:16px;letter-spacing:2px}
+#ov table{border-collapse:collapse;width:100%;margin:8px 0 14px}
+#ov td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:14px}
+#ov td:first-child{color:#ffcc33;width:140px}
+#ov p{line-height:1.45;color:#b9c8dd;margin:7px 0;font-size:14px}
+#ov button{font:inherit;font-size:20px;letter-spacing:4px;padding:12px 28px;background:#29f0ff;color:#05060c;border:0;cursor:pointer;box-shadow:0 0 20px #29f0ff}
+#ov button:hover{background:#ff3fa4;box-shadow:0 0 20px #ff3fa4}
+#ov button.opt{font-size:14px;letter-spacing:1px;padding:6px 11px;margin:2px;background:#0e1424;color:#9fd8e6;border:1px solid #29f0ff44;box-shadow:none}
+#ov button.opt:hover{background:#18233a;box-shadow:none;color:#fff}
+#ov button.opt.on{background:#29f0ff;color:#05060c;border-color:#29f0ff;box-shadow:0 0 12px #29f0ff88}
+#ov .setup{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;align-items:center;margin:12px 0 4px;padding:10px 12px;border:1px solid #ff3fa433;background:#0b0f1d}
+#ov .setup .lab{color:#ff3fa4;letter-spacing:2px;font-size:13px}
+#ov #skilldesc{grid-column:2;color:#7f8fa8;font-size:12px}
+#ov input,#pause input{font:inherit;font-size:14px;background:#05070e;color:#cfe8ff;border:1px solid #29f0ff55;padding:6px 8px;width:290px;outline:none}
+#ov input:focus{border-color:#29f0ff}
+#nogl{display:none;color:#ff3f5a;margin-top:10px}
+#pause{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:3}
+#pause .box{min-width:300px;text-align:center;padding:26px 30px;border:1px solid #29f0ff55;background:#0a0d1aee;box-shadow:0 0 40px #29f0ff22}
+#pause h2{margin:0 0 18px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff}
+#pause button{display:block;width:100%;font:inherit;font-size:17px;letter-spacing:3px;padding:11px 0;margin:8px 0;background:#0e1424;color:#cfe8ff;border:1px solid #29f0ff55;cursor:pointer}
+#pause button:hover{background:#29f0ff;color:#05060c}
+#pause #restart:hover{background:#ff3fa4;border-color:#ff3fa4}
+#pause .hint{color:#667;font-size:12px;margin-top:10px}
+#pause .seedrow{display:flex;gap:6px;align-items:center;margin-top:14px;color:#ff3fa4;letter-spacing:2px;font-size:13px}
+#pause .seedrow input{width:150px;flex:1}
+#pause .seedrow button{display:inline-block;width:auto;margin:0;padding:6px 10px;font-size:12px;letter-spacing:1px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas><canvas id="hud"></canvas>
+<div id="pause"><div class="box">
+<h2>PAUSED</h2>
+<button id="resume">RESUME</button>
+<button id="restart">RESTART (SAME LEVEL)</button>
+<button id="newlevel">NEW LEVEL</button>
+<button id="tomenu">MAIN MENU</button>
+<div class="seedrow"><span>SEED</span><input id="seedOut" readonly><button id="copyseed">COPY</button></div>
+<div class="hint">ESC to resume · restart keeps your bot settings</div>
+</div></div>
+<div id="ov"><div class="box">
+<h1>GRAVITY<span>SHIFT</span></h1>
+<div class="sub">ARENA 7 // CONSTRUCTION SECTOR // DEATHMATCH</div>
+<table>
+<tr><td>MOUSE</td><td>Look / aim (click the game to capture the mouse)</td></tr>
+<tr><td>W A S D</td><td>Walk</td></tr>
+<tr><td>SHIFT</td><td>Sprint (stamina) · vaults low obstacles · gun lowered</td></tr>
+<tr><td>SPACE</td><td>Jump · from a sprint it's a hands-first dive · hold to reach for ledges</td></tr>
+<tr><td>C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them)</td></tr>
+<tr><td>LMB</td><td>Pistol — or the <b style="color:#ff8a2a">shotgun</b> once you find one (glowing orange pads; lost when you die)</td></tr>
+<tr><td>WHEEL / Q</td><td>Switch pistol ⇄ shotgun (also 1 / 2)</td></tr>
+<tr><td>RMB</td><td>Flare rocket: slow, accelerating, explodes on contact, area push + damage</td></tr>
+<tr><td>E</td><td>Kick — knocks fighters down, sends boxes and spiders flying · at a <b style="color:#ff3fa4">magenta gravity panel</b> the arena turns 90°</td></tr>
+<tr><td>R / ESC</td><td>Reload / pause</td></tr>
+</table>
+<p><b style="color:#ff8a2a">Rocket jump:</b> fire a rocket at your feet and jump right after — it leaves the tube slowly. Blasts throw airborne fighters almost twice as hard and hurt them less; your own rockets do a third of the damage to you.</p>
+<p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red barrels: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins.</p>
+<div class="setup">
+<div class="lab">BOTS</div><div id="bots"></div>
+<div class="lab">SKILL</div><div id="skill"></div>
+<div id="skilldesc"></div>
+<div class="lab">SEED</div><div><input id="seedIn" placeholder="random — or type a number / word" maxlength="40"></div>
+</div>
+<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button></div>
+<div id="nogl">WebGL is not available in this browser, so the 3D arena can't be drawn.</div>
+</div></div>
+<script>
+/*__SCRIPT__*/
+</script>
+</body>
+</html>
