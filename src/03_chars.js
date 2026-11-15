@@ -197,6 +197,7 @@ function updateChar(e,dt){
       if(e.crouch){if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}else e.jumpBuf=0;}
       if(e.jumpBuf>0){
         const run=e.sprinting&&Math.hypot(e.vx,e.vz)>140;
+        e.jumpAt=world.time;
         if(run){e.runJump=true;e.vy=RUNJUMPV;const s=RUN*1.08/Math.max(1,Math.hypot(e.vx,e.vz));e.vx*=s;e.vz*=s;e.cut=false;}
         else{e.vy=JUMPV;e.cut=true;}
         e.grounded=false;e.coyote=0;e.jumpBuf=0;e.takeoff=1;
@@ -204,7 +205,9 @@ function updateChar(e,dt){
     }
     if(!c.jumpHeld&&e.cut&&e.vy>180){e.vy*=.5;e.cut=false;}
     if(e.vy<=0)e.cut=false;
-    e.vy-=G*dt;e.vy=Math.max(e.vy,-MAXFALL);
+    // the calm at the top of a rocket jump: near the apex gravity almost lets go for a moment
+    let gm=1;if(e.rocketJump&&e.rjFloat>0&&Math.abs(e.vy)<150){gm=.22;e.rjFloat-=dt;const dmp=1-dt*1.1;e.vx*=dmp;e.vz*=dmp;}
+    e.vy-=G*gm*dt;e.vy=Math.max(e.vy,-MAXFALL);
     if(!e.grounded&&(e.fallStart===undefined||e.vy>=0))e.fallStart=e.y;
     const landed=moveBody(e,dt);
     e.grounded=landed||(e.vy<=0&&groundProbe(e));

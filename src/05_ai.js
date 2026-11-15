@@ -65,7 +65,7 @@ function botThink(b,dt){
     ap=vadd(eye,vscale(fwdOf(ai.scanYaw!==undefined?ai.scanYaw:ai.yaw,0),200));
   }
   let wantRocket=false;ai.rocketT-=dt;
-  if(t&&see&&ai.acquire<=0&&b.rockets>0&&b.rreload<=0&&dist>170&&dist<850&&ai.rocketT<=0){wantRocket=true;ap=V(t.x,t.y+4,t.z);}
+  if(t&&see&&ai.acquire<=0&&b.rockets>0&&b.rreload<=0&&dist>280&&dist<850&&ai.rocketT<=0){wantRocket=true;ap=V(t.x,t.y+4,t.z);}
   const d=vsub(ap,eye),dl=vlen(d)||1;
   const ty=yawOf(d.x,d.z),tp=Math.asin(clamp(d.y/dl,-1,1));
   {const tyv=clamp(angDiff(ty,ai.yaw)*8,-turn,turn),tpv=clamp((tp-ai.pitch)*8,-turn*.8,turn*.8),k=Math.min(1,dt*14);

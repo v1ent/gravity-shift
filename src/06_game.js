@@ -6,6 +6,7 @@ let gameState='menu',winner=null,paused=false;
 const cam={yaw:0,pitch:-.15,pos:V(0,0,0),fwd:V(0,0,1)};
 
 function doRotate(key,kicker,stop){
+  gibs=[];
   const r=ROT[key];
   rotateGridOnly(key);rotateDeco(key);buildLevelMesh();buildDecoMesh();buildNav();
   const P=(x,y,z)=>{const q=r.pt(x,y,z);return V(q[0],q[1],q[2]);},Vv=(x,y,z)=>{const q=r.vec(x,y,z);return V(q[0],q[1],q[2]);};
@@ -164,7 +165,7 @@ function step(dt,first){
   for(const e of chars)charProps(e);
   if(props.some(b=>b.dead))props=props.filter(b=>!b.dead);
   updateSpiders(dt);
-  updateBullets(dt);updateRockets(dt);updateDolls(dt);updateParts(dt);
+  updateBullets(dt);updateRockets(dt);updateDolls(dt);updateGibs(dt);updateParts(dt);
   if(TUT.on)tutStep(dt);
 }
 
@@ -190,6 +191,7 @@ function render(){
   for(const s of spiders)drawSpider(s);
   drawDrones();
   for(const d of dolls)drawDoll(d);
+  drawGibs();
   // bullets & rockets
   for(const b of bullets){const tail=V(b.x-b.vx*.03,b.y-b.vy*.03,b.z-b.vz*.03);drawSeg(tail,V(b.x,b.y,b.z),1.6,b.col,b.col,null,1);}
   for(const r of rockets){drawSeg(V(r.x-r.d.x*10,r.y-r.d.y*10,r.z-r.d.z*10),V(r.x,r.y,r.z),5,hexRGB('#3a2a2a'),[.2,.06,0],[1,.6,.2],1);drawBox(V(r.x,r.y,r.z),5,5,5,[1,.8,.4],[1,.7,.3],null);}
@@ -307,7 +309,7 @@ function newMatch(seed){
   chars=[makeChar('YOU','#29f0ff',false)];
   for(let i=0;i<cfg.bots;i++)chars.push(makeChar(roster[i][0],roster[i][1],true));
   player=chars[0];
-  props=[];bullets=[];rockets=[];parts=[];dolls=[];feed=[];
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];gibs=[];feed=[];
   spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');spawnDrop('shotgun');spawnDrop('shotgun');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;

@@ -206,23 +206,26 @@ TUT_BUILD.rj=()=>{
   }
   TUT.rjCount=0;TUT.rjLaunch=null;TUT.reached=[false,false,false,false];
   return {
-    name:'ROCKET JUMPING',spawn:{x:20*T,y:fy,z:8*T},yaw:-Math.PI/2,infRockets:true,
-    card:['ROCKET JUMPING',`<p>Your rocket (<b>right mouse</b>) leaves the tube slowly and then speeds up.</p>
-      <p>Look down at your feet, fire, and <b>JUMP just before it explodes</b>. A blast throws you almost <b>twice as hard</b> when you're in the air, and hurts less.</p>
-      <p>The orange markings show where to launch. Each platform can only be reached with a rocket jump. Rockets are unlimited here and you can't get hurt.</p>`],
-    obj:[{text:'Rocket jump: fire at your feet, jump just before the blast',short:'ROCKET JUMP'},
-         {text:'Reach platform 1',short:'PLATFORM 1'},{text:'Reach platform 2',short:'PLATFORM 2'},
+    name:'ROCKET JUMPING',spawn:{x:20*T,y:fy,z:8*T},yaw:-Math.PI/2,infRockets:true,damage:true,noDeath:true,
+    card:['ROCKET JUMPING',`<p>Look down at your feet and fire a rocket (<b>right mouse</b>). The blast <b>always</b> launches you — but standing on the ground it costs about <b>60% of your health</b>.</p>
+      <p>The trick: <b>JUMP just before the rocket hits the floor</b>. Caught in the air, you fly higher and lose only <b>15–20%</b>. You have about half a second.</p>
+      <p>Near the top of the jump you <b>float</b> for a moment — use it to steer onto a ledge. Each platform needs a rocket jump. You can't die in this room, and your health refills when you stand still.</p>`],
+    obj:[{text:'Fire at your feet WITHOUT jumping — see what it costs',short:'NO-JUMP BLAST'},
+         {text:'PERFECT rocket jump: jump just before the blast',short:'PERFECT',n:0,need:3},
+         {text:'Reach platform 1 — steer during the float at the top',short:'PLATFORM 1'},{text:'Reach platform 2',short:'PLATFORM 2'},
          {text:'Reach platform 3',short:'PLATFORM 3'},{text:'Reach the summit (green pad)',short:'SUMMIT'}],
-    onRJ(air,vy){
-      const p=player;
-      if(air&&vy>480){TUT.rjCount++;TUT.rjLaunch=p.y;TUT.rjApex=p.y;tsfx('ding');toast(`ROCKET JUMP!`,'#3dff7a',1.6);objDone(0,'✓ ROCKET JUMP');}
-      else if(!air)toast('Jump just BEFORE the blast — you were still on the ground','#ff8a2a',2.6);
-      else toast('Too far from the blast — fire closer to your feet','#ff8a2a',2.4);
+    onRJ(kind,dmg){
+      const p=player,pct=Math.round(dmg);TUT.rjLaunch=p.y;TUT.rjApex=p.y;TUT.healT=0;
+      if(kind==='perfect'){const o=TUT.cfg.obj[1];tsfx('ding');toast(`PERFECT ROCKET JUMP  −${pct}%`,'#3dff7a',2);
+        if(!o.done){o.n++;if(o.n>=o.need)objDone(1,'✓ PERFECT ×3');}}
+      else if(kind==='air')toast(`ROCKET JUMP  −${pct}% — you jumped a bit early`,'#ffcc33',2.4);
+      else{toast(`NO JUMP  −${pct}% — jump just before the blast!`,'#ff8a2a',2.8);objDone(0,'✓ NOW TRY IT WITH A JUMP');}
     },
     update(dt,p){
+      if(p.grounded&&p.state==='normal'){TUT.healT=(TUT.healT||0)+dt;if(TUT.healT>1.2)p.hp=Math.min(100,p.hp+dt*90);}else TUT.healT=0;
       if(TUT.rjLaunch!==null){TUT.rjApex=Math.max(TUT.rjApex,p.y);
         if(p.grounded||p.state==='hang'){const h=(TUT.rjApex-TUT.rjLaunch)/T;if(h>1)toast(`+${h.toFixed(1)} m`,'#29f0ff',1.8);TUT.rjLaunch=null;}}
-      if(p.grounded)tops.forEach((t,i)=>{if(!TUT.reached[i]&&Math.abs(p.y-t.y)<5&&p.x>t.x0&&p.x<t.x1&&p.z>t.z0&&p.z<t.z1){TUT.reached[i]=true;objDone(i+1);if(i===3)tutComplete();}});
+      if(p.grounded)tops.forEach((t,i)=>{if(!TUT.reached[i]&&Math.abs(p.y-t.y)<5&&p.x>t.x0&&p.x<t.x1&&p.z>t.z0&&p.z<t.z1){TUT.reached[i]=true;objDone(i+2);if(i===3)tutComplete();}});
     },
   };
 };

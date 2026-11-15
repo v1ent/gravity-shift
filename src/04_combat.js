@@ -1,8 +1,11 @@
 // =====================================================================
 //  COMBAT — rifle, rocket launcher, explosions, props, particles, audio
 // =====================================================================
-const ROCKET_V0=60,ROCKET_LOB=.22,ROCKET_ACC=1100,ROCKET_VMAX=650,ROCKET_R=150,ROCKET_DMG=60,ROCKET_PUSH=600;
-const AIR_PUSH=1.9,GROUND_PUSH=.65,AIR_DMG=.6,SELF_DMG=1/3,FRAG_LIMIT=15;
+const ROCKET_V0=60,ROCKET_LOB=.22,ROCKET_ACC=1100,ROCKET_VMAX=650,ROCKET_R=230,ROCKET_DMG=100,ROCKET_PUSH=620;
+// airborne targets: little damage, huge directional push
+const AIR_PUSH=2.6,GROUND_PUSH=.6,AIR_DMG=.3,FRAG_LIMIT=15;
+// rocket jumps: a blast at your feet always launches you; jumping just before it (within RJ_WINDOW) makes it cheap
+const RJ_WINDOW=.6,RJ_DMG_GROUND=60,RJ_DMG_PERFECT=18,RJ_DMG_AIR=28,RJ_VY_GROUND=760,RJ_VY_AIR=880,RJ_FLOAT=.75;
 // shotgun: found on the level, replaces the pistol until you die
 const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.11,SG_DMG=10,SG_RANGE=620;
 const magOf=e=>e.weapon==='shotgun'?SG_MAG:MAG,reloadOf=e=>e.weapon==='shotgun'?SG_RELOAD:RELOAD;
@@ -67,6 +70,7 @@ function sfx(kind,at){
 // ---------- damage ----------
 function damage(e,amt,src,dir){
   if(!e.alive||e.invuln>0||amt<=0)return;
+  if(TUT.on&&TUT.cfg&&TUT.cfg.noDeath&&e===player)amt=Math.min(amt,e.hp-1);
   e.hp-=amt;e.flinch=1;reveal(e);
   if(src&&src!==e){e.lastHit=src;e.lastHitT=world.time;e.hitFrom={p:V(src.x,src.y,src.z),t:world.time};}
   if(e.hp<=0)kill(e,src,dir);
@@ -78,7 +82,7 @@ function kill(e,src,dir){
   if(killer&&killer.isSpider){feed.unshift({t:4,text:`SPIDER ✕ ${e.name}`,color:'#e8ecf2'});}
   else if(killer&&killer!==e){killer.kills++;feed.unshift({t:4,text:`${killer.name} ⌁ ${e.name}`,color:killer.color});}
   else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,text:`${e.name} ✕ self-destructed`,color:'#888'});}
-  makeDoll(e,dir);sfx('die',e);
+  if(e.gibbed){spawnGibs(e,dir);e.gibbed=false;}else makeDoll(e,dir);sfx('die',e);
   for(let i=0;i<30;i++)addPart(e.x,e.y+30,e.z,(rnd()-.5)*500,rnd()*300,(rnd()-.5)*500,.9,e.col,3,'spark');
   if(killer&&!killer.isSpider&&killer.kills>=(world.fragLimit||FRAG_LIMIT)&&gameState==='play'){gameState='over';winner=killer;}
 }
@@ -175,7 +179,7 @@ function updateRockets(dt){
       r.x+=r.d.x*dist/steps;r.y+=r.d.y*dist/steps;r.z+=r.d.z*dist/steps;
       if(solid(tileAt(r.x,r.y,r.z))){r.x-=r.d.x*4;r.y-=r.d.y*4;r.z-=r.d.z*4;boom=true;break;}
       for(const e of chars){if(e===r.owner||!e.alive)continue;
-        if(Math.abs(r.x-e.x)<e.w/2+4&&Math.abs(r.z-e.z)<e.w/2+4&&r.y>e.y-2&&r.y<e.y+e.h+2){boom=true;break;}}
+        if(Math.abs(r.x-e.x)<e.w/2+4&&Math.abs(r.z-e.z)<e.w/2+4&&r.y>e.y-2&&r.y<e.y+e.h+2){boom=true;r.hit=e;break;}}
       if(boom)break;
       if(droneHit(r.x,r.y,r.z,16)){boom=true;break;}
       for(const sp2 of spiders){if(sp2.alive&&Math.hypot(r.x-sp2.p.x,r.y-sp2.p.y,r.z-sp2.p.z)<14){boom=true;break;}}
@@ -185,7 +189,7 @@ function updateRockets(dt){
     // flare + smoke trail
     if(rnd()<dt*60)addPart(r.x,r.y,r.z,(rnd()-.5)*30,(rnd()-.5)*30,(rnd()-.5)*30,.9,[.5,.45,.55],9,'smoke');
     addPart(r.x-r.d.x*4,r.y-r.d.y*4,r.z-r.d.z*4,-r.d.x*60+(rnd()-.5)*40,-r.d.y*60+(rnd()-.5)*40,-r.d.z*60+(rnd()-.5)*40,.25,rnd()<.5?[1,.6,.15]:[1,.85,.4],8,'flame');
-    if(boom){rockets.splice(n,1);explode(V(r.x,r.y,r.z),{radius:ROCKET_R,dmg:ROCKET_DMG,push:ROCKET_PUSH,src:r.owner,rocket:true});}
+    if(boom){rockets.splice(n,1);explode(V(r.x,r.y,r.z),{radius:ROCKET_R,dmg:ROCKET_DMG,push:ROCKET_PUSH,src:r.owner,rocket:true,direct:r.hit||null});}
   }
 }
 // explosion: area push + damage. Airborne targets are thrown much harder but hurt less; your own blast hurts you a third as much.
@@ -193,25 +197,29 @@ function explode(c,o){
   const RAD=o.radius,src=o.src||null;
   for(const e of chars){
     if(!e.alive)continue;
-    const ctr=V(e.x,e.y+e.h*.5,e.z),d=vlen(vsub(ctr,c));if(d>RAD+e.h*.3)continue;
+    const direct=o.direct===e;
+    const ctr=V(e.x,e.y+e.h*.5,e.z),d=direct?0:Math.max(0,vlen(vsub(ctr,c))-10);if(d>RAD+e.h*.3)continue;
     // line of sight to feet, centre or head
-    if(!losClear(c,ctr)&&!losClear(c,V(e.x,e.y+4,e.z))&&!losClear(c,V(e.x,e.y+e.h-4,e.z)))continue;
-    const f=clamp(1-d/RAD,0,1);if(f<=0)continue;
+    if(!direct&&!losClear(c,ctr)&&!losClear(c,V(e.x,e.y+4,e.z))&&!losClear(c,V(e.x,e.y+e.h-4,e.z)))continue;
+    const f=direct?1:clamp(1-d/RAD,0,1);if(f<=0)continue;
     const air=!e.grounded&&e.state!=='down';
     let dir=vnorm(vsub(ctr,c));if(d<6)dir=V(0,1,0);
     dir=vnorm(V(dir.x,dir.y+.35,dir.z)); // explosions lift
+    if(e===src&&o.rocket&&e.state!=='down'){rocketJump(e,c,f,air,dir);continue;}
     const push=o.push*f*(air?AIR_PUSH:GROUND_PUSH);
-    let dmg=o.dmg*f*(air?AIR_DMG:1);if(e===src)dmg*=SELF_DMG;
+    const dmg=direct?999:o.dmg*f*(air?AIR_DMG:1);
+    if(direct)e.gibbed=true;
     damage(e,dmg,e===src?null:src,dir);
     if(!e.alive)continue;
+    e.gibbed=false;
     if(e.state==='hang'||e.state==='climbup'||e.state==='kick'||e.state==='slide'||e.state==='getup'){e.state='normal';e.h=56;}
     if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}
     if(e.state==='down'){e.vx+=dir.x*push*.6;e.vy=Math.max(e.vy,dir.y*push*.5);e.vz+=dir.z*push*.6;e.grounded=false;}
     else{
       e.vx+=dir.x*push;e.vz+=dir.z*push;e.vy=Math.min(Math.max(e.vy,0)*.4+dir.y*push,940);
+      {const hs=Math.hypot(e.vx,e.vz);if(hs>1150){e.vx*=1150/hs;e.vz*=1150/hs;}}
       e.grounded=false;e.coyote=0;e.y+=2;if(overlapSolid(e.x,e.y,e.z,e.w,e.h))e.y-=2;
-      if(e===src&&o.rocket){e.rocketJump=true;e.runJump=false;e.fallStart=e.y;if(TUT.on&&TUT.cfg&&TUT.cfg.onRJ&&e===player)TUT.cfg.onRJ(air,e.vy);}
-      else if(push>380){e.knocked=true;e.stun=.45;e.bav=10*f;e.tumbleHold=0;}
+      if(push>380){e.knocked=true;e.stun=.45;e.bav=10*f;e.tumbleHold=0;}
     }
   }
   for(const dr of drones)if(dr.alive&&dr.delay<=0&&vlen(vsub(dr.p,c))<RAD*.85)hitDrone(dr);
@@ -388,3 +396,45 @@ function drawProp(b){
     drawBox(V(b.x-Math.sin(yaw+Math.PI/2)*12,hy-2,b.z-Math.cos(yaw+Math.PI/2)*12),8,7,4,hexRGB('#2b3148'),null,[1,.55,.2],yaw);
   }else drawBox(c,b.w,b.h,b.d,b.col,null,b.edge);
 }
+
+// your own rocket at your feet: always a launch. Timing decides the price.
+function rocketJump(e,c,f,air,dir){
+  const fs=clamp(f/.55,0,1);if(fs<=0)return;            // full strength anywhere in the inner half of the blast
+  const sinceJump=world.time-(e.jumpAt===undefined?-99:e.jumpAt);
+  const kind=!air?'ground':sinceJump<RJ_WINDOW?'perfect':'air';
+  const dmg=(kind==='ground'?RJ_DMG_GROUND:kind==='perfect'?RJ_DMG_PERFECT:RJ_DMG_AIR)*fs;
+  if(e.state==='hang'||e.state==='climbup'||e.state==='kick'||e.state==='slide'||e.state==='getup'){e.state='normal';e.h=56;}
+  if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}
+  const vy=(air?RJ_VY_AIR:RJ_VY_GROUND)*fs;
+  e.vy=Math.min(980,Math.max(e.vy,0)*.35+vy);
+  e.vx+=dir.x*300*fs;e.vz+=dir.z*300*fs;
+  e.grounded=false;e.coyote=0;e.y+=2;if(overlapSolid(e.x,e.y,e.z,e.w,e.h))e.y-=2;
+  e.rocketJump=true;e.runJump=false;e.fallStart=e.y;e.rjFloat=RJ_FLOAT*fs;
+  damage(e,dmg,null,dir);
+  if(TUT.on&&TUT.cfg&&TUT.cfg.onRJ&&e===player)TUT.cfg.onRJ(kind,dmg);
+}
+// direct rocket hit: the body comes apart
+let gibs=[];
+function spawnGibs(e,dir){
+  const col=e.col,dark=e.col.map(v=>v*.45),c=V(e.x,e.y+e.h*.5,e.z),d=dir||V(0,1,0);
+  const pieces=[[10,10,10,col,e.h-6],[14,18,8,dark,34],[5,16,5,col,36],[5,16,5,col,36],[6,20,6,dark,12],[6,20,6,dark,12],[8,8,8,dark,26],[6,6,6,col,30]];
+  for(const [sx,sy,sz,cl,hy] of pieces){
+    const sp=300+rnd()*300;
+    gibs.push({x:e.x+(rnd()-.5)*8,y:e.y+hy,z:e.z+(rnd()-.5)*8,vx:d.x*sp+(rnd()-.5)*260,vy:d.y*sp*.7+180+rnd()*220,vz:d.z*sp+(rnd()-.5)*260,
+      sx,sy,sz,col:cl,yaw:rnd()*6,rv:(rnd()-.5)*14,life:5+rnd()*2});
+  }
+  for(let i=0;i<40;i++)addPart(c.x,c.y,c.z,(rnd()-.5)*500,(rnd()-.2)*500,(rnd()-.5)*500,.5+rnd()*.5,rnd()<.5?[.9,.15,.2]:[1,.6,.2],4,'spark');
+  if(gibs.length>48)gibs.splice(0,gibs.length-48);
+}
+function updateGibs(dt){
+  for(const g of gibs){
+    g.life-=dt;g.vy-=G*dt;
+    const nx=g.x+g.vx*dt,ny=g.y+g.vy*dt,nz=g.z+g.vz*dt;
+    if(solid(tileAt(nx,g.y,g.z))){g.vx*=-.35;}else g.x=nx;
+    if(solid(tileAt(g.x,g.y,nz))){g.vz*=-.35;}else g.z=nz;
+    if(solid(tileAt(g.x,ny-g.sy*.3,g.z))){if(g.vy<0){g.vy*=-.3;g.vx*=.6;g.vz*=.6;g.rv*=.5;}else g.vy=0;}else g.y=ny;
+    g.yaw+=g.rv*dt;
+  }
+  gibs=gibs.filter(g=>g.life>0);
+}
+function drawGibs(){for(const g of gibs)drawBox(V(g.x,g.y,g.z),g.sx,g.sy,g.sz,g.col,[0,0,0],null,g.yaw,Math.min(1,g.life));}
