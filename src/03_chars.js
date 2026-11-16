@@ -149,7 +149,7 @@ function updateChar(e,dt){
   const c=e.ctl;
   if(!e.alive){if(gameState==='play'){e.respawn-=dt;if(e.respawn<=0)spawn(e);}return;}
   e.wasBox=e.boxSupport;e.boxSupport=false;
-  e.invuln=Math.max(0,e.invuln-dt);e.fireCD-=dt;e.rfireCD-=dt;e.grabCD-=dt;e.kickCD-=dt;e.stun-=dt;
+  e.invuln=Math.max(0,e.invuln-dt);e.fireCD-=dt;e.bloom=Math.max(0,(e.bloom||0)-dt*.06);e.clickBuf=Math.max(0,(e.clickBuf||0)-dt);e.rfireCD-=dt;e.grabCD-=dt;e.kickCD-=dt;e.stun-=dt;
   e.recoil=Math.max(0,e.recoil-dt*5);e.flinch=Math.max(0,e.flinch-dt*5);e.hitMarker=Math.max(0,(e.hitMarker||0)-dt);
   const ctrl=e.stun<=0&&e.state!=='down'&&e.state!=='getup';
   let mx=ctrl?c.mx:0,mz=ctrl?c.mz:0;const mag=Math.hypot(mx,mz);if(mag>1){mx/=mag;mz/=mag;}
@@ -363,7 +363,10 @@ function updateChar(e,dt){
   // weapons (gun lowered while sprinting or diving)
   const canFire=(e.state==='normal'&&!(e.sprinting&&e.grounded)&&!e.runJump)||e.state==='kick'||e.state==='slide';
   if(ctrl&&canFire&&gameState!=='over'){
-    if(c.fire&&e.fireCD<=0&&e.reload<=0){if(e.ammo>0)fireRifle(e);else{e.reload=reloadOf(e);sfx('empty',e);}}
+    if(c.fireClick)e.clickBuf=.12; // a click just before the gun is ready still counts
+    const pistol=e.weapon!=='shotgun',held=c.fire&&world.time-(e.lastShot||-9)>=FIRE_CD;
+    const wants=pistol?(e.clickBuf>0||held):c.fire;
+    if(wants&&e.fireCD<=0&&e.reload<=0){e.clickBuf=0;if(e.ammo>0){fireRifle(e);e.lastShot=world.time;}else{e.reload=reloadOf(e);sfx('empty',e);}}
     else if(c.alt&&e.rfireCD<=0&&e.rreload<=0){if(e.rockets>0)fireRocket(e);else{e.rreload=RRELOAD;sfx('empty',e);}}
   }
   // stealth

@@ -1,6 +1,7 @@
 // =====================================================================
 //  COMBAT — rifle, rocket launcher, explosions, props, particles, audio
 // =====================================================================
+const PISTOL_TAP_CD=.075; // fastest the pistol can fire: as fast as you can click
 const ROCKET_V0=60,ROCKET_LOB=.22,ROCKET_ACC=1100,ROCKET_VMAX=650,ROCKET_R=230,ROCKET_DMG=100,ROCKET_PUSH=620;
 // airborne targets: little damage, huge directional push
 const AIR_PUSH=2.6,GROUND_PUSH=.6,AIR_DMG=.3,FRAG_LIMIT=15;
@@ -94,11 +95,11 @@ function fireRifle(e){
   reveal(e);noise(e,900,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
-  const spread=.01+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0);
+  const spread=.01+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:DMG,head:HEAD_DMG,fall:0,col:e.col});
-  e.fireCD=FIRE_CD;e.ammo--;e.recoil=1;
+  e.fireCD=PISTOL_TAP_CD;e.ammo--;e.recoil=1;e.bloom=Math.min(.05,(e.bloom||0)+.012);
   for(let i=0;i<4;i++)addPart(m.x,m.y,m.z,d.x*200+(rnd()-.5)*150,d.y*200+(rnd()-.5)*150,d.z*200+(rnd()-.5)*150,.08,[1,.9,.6],9,'glow');
   sfx('shot',e);if(e===player)world.shake=Math.max(world.shake,1.5);
   if(e.ammo<=0)e.reload=RELOAD;

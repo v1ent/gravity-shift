@@ -68,7 +68,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k
   if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch();}
   if(['w','a','s','d',' ','c','e','r','shift'].includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
-addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0)mouseDown=true;if(e.button===2)mouseRight=true;
+addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0){mouseDown=true;pressed['lmb']=true;}if(e.button===2)mouseRight=true;
   if(!locked&&cv.requestPointerLock){try{const r=cv.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(err){}}});
 addEventListener('wheel',e=>{if(gameState==='play'&&!paused){pressed['wheel']=true;e.preventDefault();}},{passive:false});
 addEventListener('mouseup',e=>{if(e.button===0)mouseDown=false;if(e.button===2)mouseRight=false;});
@@ -109,7 +109,7 @@ function playerInput(first){
   c.mx=mx;c.mz=mz;
   c.jump=first&&!!pressed[' '];c.jumpHeld=!!keys[' '];c.grab=!!keys[' '];
   c.sprint=!!keys['shift'];c.crouch=!!keys['c'];c.crouchPressed=first&&!!pressed['c'];
-  c.fire=mouseDown;c.alt=mouseRight;c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
+  c.fire=mouseDown;c.fireClick=first&&!!pressed['lmb'];c.alt=mouseRight;c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
   c.swap=first&&!!(pressed['wheel']||pressed['q']);c.select=first?(pressed['1']?'pistol':pressed['2']?'shotgun':null):null;
   c.aimYaw=cam.yaw;c.aimPitch=cam.pitch;
 }
@@ -258,7 +258,7 @@ function drawHUD(){
   c.font='12px "Courier New",monospace';
   feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+sorted.length*18+i*16);});c.globalAlpha=1;}
   // crosshair
-  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*6+(Math.hypot(p.vx,p.vz)>60?3:0);
+  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
   c.strokeStyle=hm?'#fff':'#29f0ff';c.lineWidth=2;c.beginPath();
   c.moveTo(cx-sp-6,cy);c.lineTo(cx-sp,cy);c.moveTo(cx+sp,cy);c.lineTo(cx+sp+6,cy);c.moveTo(cx,cy-sp-6);c.lineTo(cx,cy-sp);c.moveTo(cx,cy+sp);c.lineTo(cx,cy+sp+6);c.stroke();
   c.fillStyle='#29f0ff';c.fillRect(cx-1,cy-1,2,2);

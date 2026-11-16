@@ -929,7 +929,7 @@ function updateChar(e,dt){
   const c=e.ctl;
   if(!e.alive){if(gameState==='play'){e.respawn-=dt;if(e.respawn<=0)spawn(e);}return;}
   e.wasBox=e.boxSupport;e.boxSupport=false;
-  e.invuln=Math.max(0,e.invuln-dt);e.fireCD-=dt;e.rfireCD-=dt;e.grabCD-=dt;e.kickCD-=dt;e.stun-=dt;
+  e.invuln=Math.max(0,e.invuln-dt);e.fireCD-=dt;e.bloom=Math.max(0,(e.bloom||0)-dt*.06);e.clickBuf=Math.max(0,(e.clickBuf||0)-dt);e.rfireCD-=dt;e.grabCD-=dt;e.kickCD-=dt;e.stun-=dt;
   e.recoil=Math.max(0,e.recoil-dt*5);e.flinch=Math.max(0,e.flinch-dt*5);e.hitMarker=Math.max(0,(e.hitMarker||0)-dt);
   const ctrl=e.stun<=0&&e.state!=='down'&&e.state!=='getup';
   let mx=ctrl?c.mx:0,mz=ctrl?c.mz:0;const mag=Math.hypot(mx,mz);if(mag>1){mx/=mag;mz/=mag;}
@@ -1143,7 +1143,10 @@ function updateChar(e,dt){
   // weapons (gun lowered while sprinting or diving)
   const canFire=(e.state==='normal'&&!(e.sprinting&&e.grounded)&&!e.runJump)||e.state==='kick'||e.state==='slide';
   if(ctrl&&canFire&&gameState!=='over'){
-    if(c.fire&&e.fireCD<=0&&e.reload<=0){if(e.ammo>0)fireRifle(e);else{e.reload=reloadOf(e);sfx('empty',e);}}
+    if(c.fireClick)e.clickBuf=.12; // a click just before the gun is ready still counts
+    const pistol=e.weapon!=='shotgun',held=c.fire&&world.time-(e.lastShot||-9)>=FIRE_CD;
+    const wants=pistol?(e.clickBuf>0||held):c.fire;
+    if(wants&&e.fireCD<=0&&e.reload<=0){e.clickBuf=0;if(e.ammo>0){fireRifle(e);e.lastShot=world.time;}else{e.reload=reloadOf(e);sfx('empty',e);}}
     else if(c.alt&&e.rfireCD<=0&&e.rreload<=0){if(e.rockets>0)fireRocket(e);else{e.rreload=RRELOAD;sfx('empty',e);}}
   }
   // stealth
@@ -1511,6 +1514,7 @@ function drawDoll(d){
 // =====================================================================
 //  COMBAT — rifle, rocket launcher, explosions, props, particles, audio
 // =====================================================================
+const PISTOL_TAP_CD=.075; // fastest the pistol can fire: as fast as you can click
 const ROCKET_V0=60,ROCKET_LOB=.22,ROCKET_ACC=1100,ROCKET_VMAX=650,ROCKET_R=230,ROCKET_DMG=100,ROCKET_PUSH=620;
 // airborne targets: little damage, huge directional push
 const AIR_PUSH=2.6,GROUND_PUSH=.6,AIR_DMG=.3,FRAG_LIMIT=15;
@@ -1604,11 +1608,11 @@ function fireRifle(e){
   reveal(e);noise(e,900,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
-  const spread=.01+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0);
+  const spread=.01+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:DMG,head:HEAD_DMG,fall:0,col:e.col});
-  e.fireCD=FIRE_CD;e.ammo--;e.recoil=1;
+  e.fireCD=PISTOL_TAP_CD;e.ammo--;e.recoil=1;e.bloom=Math.min(.05,(e.bloom||0)+.012);
   for(let i=0;i<4;i++)addPart(m.x,m.y,m.z,d.x*200+(rnd()-.5)*150,d.y*200+(rnd()-.5)*150,d.z*200+(rnd()-.5)*150,.08,[1,.9,.6],9,'glow');
   sfx('shot',e);if(e===player)world.shake=Math.max(world.shake,1.5);
   if(e.ammo<=0)e.reload=RELOAD;
@@ -2370,7 +2374,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k
   if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch();}
   if(['w','a','s','d',' ','c','e','r','shift'].includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
-addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0)mouseDown=true;if(e.button===2)mouseRight=true;
+addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0){mouseDown=true;pressed['lmb']=true;}if(e.button===2)mouseRight=true;
   if(!locked&&cv.requestPointerLock){try{const r=cv.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(err){}}});
 addEventListener('wheel',e=>{if(gameState==='play'&&!paused){pressed['wheel']=true;e.preventDefault();}},{passive:false});
 addEventListener('mouseup',e=>{if(e.button===0)mouseDown=false;if(e.button===2)mouseRight=false;});
@@ -2411,7 +2415,7 @@ function playerInput(first){
   c.mx=mx;c.mz=mz;
   c.jump=first&&!!pressed[' '];c.jumpHeld=!!keys[' '];c.grab=!!keys[' '];
   c.sprint=!!keys['shift'];c.crouch=!!keys['c'];c.crouchPressed=first&&!!pressed['c'];
-  c.fire=mouseDown;c.alt=mouseRight;c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
+  c.fire=mouseDown;c.fireClick=first&&!!pressed['lmb'];c.alt=mouseRight;c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
   c.swap=first&&!!(pressed['wheel']||pressed['q']);c.select=first?(pressed['1']?'pistol':pressed['2']?'shotgun':null):null;
   c.aimYaw=cam.yaw;c.aimPitch=cam.pitch;
 }
@@ -2560,7 +2564,7 @@ function drawHUD(){
   c.font='12px "Courier New",monospace';
   feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+sorted.length*18+i*16);});c.globalAlpha=1;}
   // crosshair
-  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*6+(Math.hypot(p.vx,p.vz)>60?3:0);
+  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
   c.strokeStyle=hm?'#fff':'#29f0ff';c.lineWidth=2;c.beginPath();
   c.moveTo(cx-sp-6,cy);c.lineTo(cx-sp,cy);c.moveTo(cx+sp,cy);c.lineTo(cx+sp+6,cy);c.moveTo(cx,cy-sp-6);c.lineTo(cx,cy-sp);c.moveTo(cx,cy+sp);c.lineTo(cx,cy+sp+6);c.stroke();
   c.fillStyle='#29f0ff';c.fillRect(cx-1,cy-1,2,2);
