@@ -89,6 +89,7 @@ function kill(e,src,dir){
 
 // ---------- rifle ----------
 function fireRifle(e){
+  e.aimT=1.6;
   if(e.weapon==='shotgun')return fireShotgun(e);
   reveal(e);noise(e,900,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
@@ -158,7 +159,7 @@ function sparkAt(x,y,z,col){for(let k=0;k<5;k++)addPart(x,y,z,(rnd()-.5)*300,rnd
 // ---------- rocket launcher ----------
 // slow flare-rocket: leaves the tube slowly and accelerates, so you can fire at your feet and jump before it lands
 function fireRocket(e){
-  reveal(e);
+  reveal(e);e.rArm=.55;
   // the launcher tube sits over the shoulder: rockets leave from shoulder height, a little ahead
   const sh=V(e.x,e.y+e.h*.8,e.z),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   const d=vnorm(vsub(tgt,sh));

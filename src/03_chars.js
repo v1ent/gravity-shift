@@ -89,7 +89,7 @@ function findLedge(e,d,reach){
   return null;
 }
 // 1- or 2-block obstacle right in front with room to get over it
-function lowObstacle(e,d){
+function lowObstacle(e,d,over){
   const [ci,ck]=frontCell(e,d,3);
   if(ci===Math.floor(e.x/T)&&ck===Math.floor(e.z/T))return null;
   const r0=Math.floor((e.y+1)/T);
@@ -100,11 +100,16 @@ function lowObstacle(e,d){
   // land beyond if the obstacle is thin, otherwise on top
   const bi=ci+d[0],bk=ck+d[1];
   let sp;
-  if(!solid(tile(bi,r0+h,bk))&&!solid(tile(bi,r0+h+1,bk))&&!solid(tile(bi,r0+h-1,bk))&&h===2)sp=V(bi*T+T/2-d[0]*6,ly,bk*T+T/2-d[1]*6);
+  let beyond=false;
+  if((h===2||over)&&!solid(tile(bi,r0+h,bk))&&!solid(tile(bi,r0+h+1,bk))&&!solid(tile(bi,r0+h-1,bk))){
+    // thin obstacle: go over it. Land on the floor beyond if there is one, else at the top height and drop
+    const floorBeyond=solid(tile(bi,r0-1,bk))&&!solid(tile(bi,r0,bk))&&!solid(tile(bi,r0+1,bk));
+    sp=V(bi*T+T/2-d[0]*4,floorBeyond?r0*T:ly,bk*T+T/2-d[1]*4);beyond=true;
+  }
   else sp=standSpotOn(e,d,ci,ck,ly);
   if(d[0]===0)sp.x=e.x;if(d[1]===0)sp.z=e.z;
   if(overlapSolid(sp.x,sp.y,sp.z,e.w,e.h))return null;
-  return {h,ly,stand:sp};
+  return {h,ly,stand:sp,over:beyond,face:d[0]>0?ci*T:d[0]<0?(ci+1)*T:d[1]>0?ck*T:(ck+1)*T};
 }
 // a live gravity panel within kicking reach in cardinal direction d (also through furniture)
 function kickableSide(e,d){
@@ -220,15 +225,19 @@ function updateChar(e,dt){
       const fell=e.fallStart!==undefined?e.fallStart-e.y:0;
       if(imp>=MAXFALL-5&&fell>(e.rocketJump?16:11)*T){const kk=world.time-world.lastKickT<5?world.lastKicker:null;damage(e,Math.min(50,(fell-11*T)/T*5+15),kk,V(0,-1,0));}
       const limit=e.rocketJump?HARD_FALL*1.6:HARD_FALL;
-      if(e.alive&&((fell>limit&&imp>700)||(e.knocked&&imp>120)))enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
-      e.fallStart=e.y;e.knocked=false;e.rocketJump=false;
+      if(e.alive&&((fell>limit&&imp>700&&e.turnFall)||(e.knocked&&imp>120)))enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
+      else if(e.alive&&fell>3.5*T&&imp>460){ // crouch into the landing, hands to the ground; longer for bigger drops
+        e.state='land';e.st={t:0,dur:clamp(.2+fell/T*.075,.32,1.15),sev:clamp(fell/(10*T),.35,1)};e.vx*=.35;e.vz*=.35;e.poseBlend=0;
+        if(fell>7*T)world.shake=Math.max(world.shake,e===player?5:0);
+      }
+      e.fallStart=e.y;e.knocked=false;e.rocketJump=false;e.turnFall=false;
     }
     // step up single blocks while walking; vault 2-block obstacles while sprinting
     if(e.state==='normal'&&e.grounded&&moving&&(e.hitX||e.hitZ||Math.hypot(e.vx,e.vz)<30)){
-      const d=cardOf(mx,mz),ob=lowObstacle(e,d);
+      const d=cardOf(mx,mz),ob=lowObstacle(e,d,e.sprinting);
       if(ob&&(ob.h===1||e.sprinting)){
-        const speed=ob.h===2;
-        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,dur:ob.h===1?.2:.32,exitV:e.sprinting?RUN:WALK};
+        const speed=ob.h===2||ob.over;
+        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,dur:ob.over?.44:ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};
         e.vx=e.vy=e.vz=0;e.poseBlend=.5;if(speed)sfx('whoosh',e);
       }
     }
@@ -246,10 +255,12 @@ function updateChar(e,dt){
         if(lg.low&&e.vy<420){
           e.jumpBuf=0;e.runJump=false;e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:lg.stand,ly:lg.ly,d,vault:true,dur:.3};e.vx=e.vy=e.vz=0;e.poseBlend=.6;e.bodyYaw=e.legYaw=yawOf(d[0],d[1]);break;
         }else if(!lg.low&&(e.vy<160||(c.grab&&e.vy<320)||e.runJump)){
-          e.runJump=false;e.state='hang';e.st={d,lg};e.x=lg.hang.x;e.y=lg.hang.y;e.z=lg.hang.z;e.vx=e.vy=e.vz=0;e.poseBlend=1;e.bodyYaw=e.legYaw=yawOf(d[0],d[1]);sfx('land',e);break;
+          const into=Math.max(0,e.vx*d[0]+e.vz*d[1]),k=clamp(into/RUN+Math.max(0,-e.vy-200)/900,0,1.2);
+          e.runJump=false;e.state='hang';e.st={d,lg,t:0,ph:-.42*k,w:2.4*k+.3};e.x=lg.hang.x;e.y=lg.hang.y;e.z=lg.hang.z;e.vx=e.vy=e.vz=0;e.poseBlend=1;e.bodyYaw=e.legYaw=yawOf(d[0],d[1]);sfx('land',e);break;
         }
       }
     }
+    e.reach=e.state==='normal'&&!e.grounded&&!e.runJump&&e.vy>-260&&world.time-(e.jumpAt||-9)<1.2&&!!findLedge(e,cardOf(Math.sin(e.bodyYaw),Math.cos(e.bodyYaw)),56);
     // gravity-wall kick
     if(e.state==='normal'){
       const can=(e.grounded||e.wasBox)&&world.rotCD<=0&&!world.rot&&!world.pendingRot;
@@ -282,20 +293,29 @@ function updateChar(e,dt){
       hit=true;
     }
     if(hit)world.hitstop=Math.max(world.hitstop,.06);
-    if(hit||s.t>=SLIDE_DUR||Math.hypot(e.vx,e.vz)<55||!e.grounded)endSlide(e);
+    const lowCeil=!hit&&e.grounded&&overlapSolid(e.x,e.y,e.z,e.w,CROUCH_H);
+    if(lowCeil&&(s.t>=SLIDE_DUR||Math.hypot(e.vx,e.vz)<70)){const fw2=V(Math.sin(s.yaw),0,Math.cos(s.yaw));e.vx=fw2.x*75;e.vz=fw2.z*75;} // keep scooting until there is headroom
+    else if(hit||s.t>=SLIDE_DUR||Math.hypot(e.vx,e.vz)<55||!e.grounded)endSlide(e);
   }else if(e.state==='hang'){
-    e.vx=e.vy=e.vz=0;const d=e.st.d;
+    e.vx=e.vy=e.vz=0;const d=e.st.d,hs=e.st;
+    // the body swings under the hands, bumps the wall, settles
+    hs.t=(hs.t||0)+dt;hs.ph=hs.ph||0;hs.w=hs.w||0;
+    hs.w+=(-(G/40)*Math.sin(hs.ph)-3.2*hs.w)*dt;hs.ph+=hs.w*dt;
+    if(hs.ph>.14){hs.ph=.14;if(hs.w>0){hs.w*=-.35;if(Math.abs(hs.w)>.6)sfx('thud',e);}}
+    const settled=hs.t>.3&&(Math.abs(hs.w)<1.3||hs.t>.9);
     const toward=(mx*d[0]+mz*d[1])>.5,away=(mx*d[0]+mz*d[1])<-.5;
-    if(ctrl&&(c.jump||c.grab&&!e.st.held||toward)){
-      e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:e.st.lg.stand,ly:e.st.lg.ly,d,dur:.6};e.poseBlend=1;
+    if(ctrl&&settled&&(c.jump||c.grab&&!e.st.held||toward)){
+      e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:e.st.lg.stand,ly:e.st.lg.ly,d,dur:.95};e.poseBlend=1;
     }else if(ctrl&&(c.crouchPressed||away)){e.state='normal';e.grabCD=.35;e.poseBlend=1;}
     else if(!solid(tile(e.st.lg.ci,e.st.lg.r,e.st.lg.ck))){e.state='normal';e.grabCD=.3;}
     if(e.st&&e.st.lg)e.st.held=c.grab;
   }else if(e.state==='climbup'){
     const s=e.st;s.t+=dt/s.dur;const t=Math.min(1,s.t);
     const d=s.d,sa=s.s0,sb=s.s1;
-    if(s.speed){e.y=lerp(sa.y,sb.y,easeOut(Math.min(1,t/.45)));const u=smooth(t);e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);}
-    else{e.y=lerp(sa.y,sb.y,easeOut(Math.min(1,t/.6)));const u=easeInOut(clamp((t-.4)/.6,0,1));e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);}
+    if(s.over){const u=t;e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);e.y=lerp(sa.y,sb.y,u)+Math.sin(u*Math.PI)*(s.ly+5-Math.max(sa.y,sb.y));}
+    else if(s.speed){e.y=lerp(sa.y,sb.y,easeOut(Math.min(1,t/.45)));const u=smooth(t);e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);}
+    else if(s.vault){e.y=lerp(sa.y,sb.y,easeOut(Math.min(1,t/.6)));const u=easeInOut(clamp((t-.4)/.6,0,1));e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);}
+    else{e.y=lerp(sa.y,sb.y,smooth(Math.min(1,t/.72)));const u=easeInOut(clamp((t-.5)/.5,0,1));e.x=lerp(sa.x,sb.x,u);e.z=lerp(sa.z,sb.z,u);}
     if(s.t>=1){
       e.state='normal';e.x=sb.x;e.y=sb.y;e.z=sb.z;e.vy=0;
       const ev=s.exitV||0;e.vx=d[0]*ev;e.vz=d[1]*ev;e.poseBlend=.5;
@@ -326,6 +346,12 @@ function updateChar(e,dt){
     if(s.t>=s.dur&&(e.grounded||e.wasBox)){
       if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.h=56;e.state='getup';e.st={t:0,side:s.side};e.poseBlend=.25;}else s.dur+=.3;
     }
+  }else if(e.state==='land'){
+    const s=e.st;s.t+=dt;
+    e.vx=approach(e.vx,0,1800*dt);e.vz=approach(e.vz,0,1800*dt);e.vy=Math.max(e.vy-G*dt,-MAXFALL);
+    const l=moveBody(e,dt);e.grounded=l||(e.vy<=0&&groundProbe(e));
+    const early=s.t>s.dur*.65&&ctrl&&(moving||c.jump);
+    if(s.t>=s.dur||early||!e.grounded){e.state='normal';e.poseBlend=.45;}
   }else if(e.state==='getup'){
     e.st.t+=dt/GETUP_DUR;
     e.vx=approach(e.vx,0,1500*dt);e.vz=approach(e.vz,0,1500*dt);e.vy=Math.max(e.vy-G*dt,-MAXFALL);
@@ -453,7 +479,7 @@ function updatePose(e,dt){
     e.runW=lerp(e.runW,mv?1:0,1-Math.exp(-12*dt));
     const s=lerp(.62,.4,speedN),A=lerp(7,17,speedN),cyc=2*A/s,lift=lerp(5,13,speedN);
     e.phase+=lvx*dt/cyc;
-    const pa=legPhase(e.phase,s,A,lift),pb=legPhase(e.phase+.5,s,A,lift);
+    const pa=legPhase(e.phase,s,A,lift),pb=legPhase(e.phase+.5,s,A,lift);e.armPh={a:pa.x/A,b:pb.x/A};
     const bob=lerp(.8,3.2,speedN)*(.5+.5*Math.cos(4*Math.PI*(e.phase-s/2)));
     const breath=Math.sin(world.time*2.2)*.6,w=e.runW,crouch=e.crouch?11:0;
     hipX=lerp(-1,2.5*Math.sign(lvx),w);
@@ -469,25 +495,59 @@ function updatePose(e,dt){
     fa={x:lerp(5,7,Math.max(r,0))+flail+tumble*Math.sin(world.time*14)*6,y:lerp(-4,-15,Math.max(r,0))+(r<0?-r*2:0)};
     fb={x:-7-flail+tumble*Math.cos(world.time*13)*6,y:lerp(-8,-5,Math.max(r,0))+(r<0?-r:0)};
     lean=clamp(lvx/RUN,-1,1)*.12-r*.06+tumble*.3*Math.sin(world.time*9);
+    if(e.reach&&!e.runJump){handsGun=false;
+      const u=smooth(clamp((world.time-(e.jumpAt||0))/.32,0,1)),th=lerp(-1.1,2.95,u),th2=th-.12;
+      hN={x:P.sh.x+Math.sin(th)*21,y:P.sh.y+Math.cos(th)*21};hF={x:P.sh.x+Math.sin(th2)*21,y:P.sh.y+Math.cos(th2)*21};
+      headTilt=-.45*u;fa={x:3,y:-6};fb={x:-3,y:-3};lean=.05;}
     if(e.runJump){handsGun=false;const u=clamp(-pvy/RUNJUMPV,-1,1);
       lean=.95-u*.15;hipY=-30;hipX=-2;headTilt=-.55;fa={x:-18,y:-20+u*3};fb={x:-24,y:-13};hN={x:26,y:-44+u*5};hF={x:29,y:-40+u*5};}
   }else if(st==='slide'){
     hipY=-8;hipX=-2;lean=-1.05;headTilt=.35;fa={x:22,y:-2};fb={x:7,y:-1};
   }else if(st==='hang'){
-    handsGun=false;const sw=Math.sin(world.time*3)*1.5;
-    hipY=-27;hipX=-2;lean=.08;headTilt=-.35;fa={x:2+sw,y:-1};fb={x:-2+sw*.6,y:-3};hN={x:11,y:-60};hF={x:9,y:-60};
-  }else if(st==='climbup'){
+    // hanging from the hands: the body is a pendulum under them
+    handsGun=false;const s=e.st,ang=-.35+(s.ph||0),pv={x:10,y:-60},lag=-(s.w||0)*2.2;
+    hipX=pv.x+Math.sin(ang)*35;hipY=pv.y+Math.cos(ang)*35;lean=-ang;headTilt=-.35-(s.ph||0)*.4;
+    fa={x:pv.x+Math.sin(ang)*58+lag+1.5,y:pv.y+Math.cos(ang)*58};fb={x:pv.x+Math.sin(ang)*57+lag*1.3-2,y:pv.y+Math.cos(ang)*57-1.5};
+    hN={x:11,y:-60};hF={x:9,y:-60};
+  }else if(st==='climbup'&&!e.st.vault){
+    // pull-up: hang -> chest to the ledge -> belly over -> knee up -> stand (keyframed on the ledge corner)
     handsGun=false;const s=e.st,t=Math.min(1,s.t);
-    // hands stay on the ledge corner
-    const along=(s.s1.x-e.x)*s.d[0]+(s.s1.z-e.z)*s.d[1];
-    const hx=Math.max(4,along-6),hy=-(s.ly-e.y);
-    hN={x:hx+2,y:Math.min(hy,-6)};hF={x:hx,y:Math.min(hy,-6)};
-    const u=clamp(t/.6,0,1);
-    hipY=lerp(-27,-18,Math.sin(u*Math.PI))+lerp(0,-4,clamp((t-.6)/.4,0,1));
-    lean=lerp(.1,.55,Math.sin(Math.min(1,t*1.4)*Math.PI*.9));headTilt=.2;
-    fa={x:lerp(2,8,u),y:lerp(-1,-14,Math.sin(u*Math.PI*.8))*(t<.8?1:clamp((1-t)/.2,0,1))};
-    fb={x:lerp(-2,-4,u),y:lerp(-3,-4,u)*(t<.85?1:0)};
-    if(t>.75){fa={x:lerp(fa.x,5,(t-.75)*4),y:lerp(fa.y,0,(t-.75)*4)};fb={x:lerp(fb.x,-4,(t-.75)*4),y:0};hipY=lerp(hipY,-26,(t-.75)*4);}
+    const along=(s.s1.x-e.x)*s.d[0]+(s.s1.z-e.z)*s.d[1],cx=along-12.5,hy=-(s.ly-e.y);
+    const K=[
+      {t:0,  hip:[cx-12,hy+33],lean:.35,fa:[cx-10,hy+59],fb:[cx-13,hy+57],hn:[cx+3,hy],hf:[cx+1,hy],head:-.35},
+      {t:.38,hip:[cx-9,hy+12], lean:.25,fa:[cx-7,hy+36], fb:[cx-10,hy+34],hn:[cx+3,hy],hf:[cx+1,hy],head:.05},
+      {t:.62,hip:[cx+2,hy-2],  lean:1.2,fa:[cx-5,hy+22], fb:[cx-8,hy+20], hn:[cx+13,hy],hf:[cx+11,hy],head:.45},
+      {t:.82,hip:[cx+7,hy-13], lean:.55,fa:[cx+11,hy],   fb:[cx-1,hy+4],  hn:[cx+16,hy-1],hf:[cx+14,hy-1],head:.2},
+      {t:1,  hip:[0,-26],      lean:.05,fa:[5,0],        fb:[-4,0],       hn:[12,-36],hf:[16,-36],head:0}];
+    let i=0;while(i<K.length-2&&t>K[i+1].t)i++;
+    const k0=K[i],k1=K[i+1],u=smooth(clamp((t-k0.t)/(k1.t-k0.t),0,1)),L2=(a,b)=>({x:lerp(a[0],b[0],u),y:lerp(a[1],b[1],u)});
+    const h=L2(k0.hip,k1.hip);hipX=h.x;hipY=h.y;lean=lerp(k0.lean,k1.lean,u);headTilt=lerp(k0.head,k1.head,u);
+    fa=L2(k0.fa,k1.fa);fb=L2(k0.fb,k1.fb);hN=L2(k0.hn,k1.hn);hF=L2(k0.hf,k1.hf);
+    if(t>.93)handsGun=true;
+  }else if(st==='climbup'){
+    // vault: hands planted on the obstacle top, legs tucked and swung through
+    handsGun=false;const s=e.st,t=Math.min(1,s.t),dd=s.d;
+    const top=-(s.ly-e.y);
+    let fx;if(s.face!==undefined)fx=(s.face-(dd[0]?e.x:e.z))*(dd[0]||dd[1]);
+    else{const along=(s.s1.x-e.x)*dd[0]+(s.s1.z-e.z)*dd[1];fx=along-12.5;}
+    const plant=t<.62,u1=smooth(clamp(t/.42,0,1)),u2=smooth(clamp((t-.42)/.58,0,1));
+    const mid={hip:[fx+6,top-13],lean:.5,fa:[fx+15,top-4],fb:[fx+9,top-6],hn:[fx+6,top],hf:[fx+3,top],head:.2};
+    const st0={hip:[1,-25],lean:.2,fa:[6,0],fb:[-5,0],hn:[fx+6,top],hf:[fx+3,top],head:.1};
+    const st1={hip:[0,-26],lean:.05,fa:[5,0],fb:[-4,0],hn:[12,-36],hf:[16,-36],head:0};
+    const A=t<.42?st0:mid,B=t<.42?mid:st1,u=t<.42?u1:u2,L2=(a,b)=>({x:lerp(a[0],b[0],u),y:lerp(a[1],b[1],u)});
+    const h=L2(A.hip,B.hip);hipX=h.x;hipY=h.y;lean=lerp(A.lean,B.lean,u);headTilt=lerp(A.head,B.head,u);
+    fa=L2(A.fa,B.fa);fb=L2(A.fb,B.fb);
+    if(plant){hN={x:mid.hn[0],y:top};hF={x:mid.hf[0],y:top};}else{hN=L2(A.hn,B.hn);hF=L2(A.hf,B.hf);}
+    if(t>.9)handsGun=true;
+  }else if(st==='land'){
+    // three-point landing: knees deep, both hands to the ground, eyes forward, then rise
+    handsGun=false;const s=e.st,t=s.t/s.dur,sev=s.sev;
+    const dn=smooth(clamp(t/.12,0,1)),up=smooth(clamp((t-.62)/.38,0,1));
+    const low={hip:-6-(1-sev)*7,lean:.62+sev*.18};
+    hipX=lerp(0,-1,dn);hipY=lerp(lerp(-22,low.hip,dn),-26,up);lean=lerp(lerp(.2,low.lean,dn),.06,up);headTilt=lerp(-.1,-.55,dn)*(1-up);
+    fa={x:lerp(6,9,dn),y:0};fb={x:lerp(-5,-10,dn),y:0};
+    hN={x:lerp(lerp(8,15,dn),12,up),y:lerp(lerp(-20,-1,dn),-36,up)};hF={x:lerp(lerp(6,11,dn),16,up),y:lerp(lerp(-20,-2,dn),-36,up)};
+    if(up>.8)handsGun=true;
   }else if(st==='kick'){
     const t=e.st.t;
     if(t<KICK_HIT){const u=smooth(t/KICK_HIT);fa={x:lerp(5,11,u),y:lerp(0,-12,u)};lean=-.22*u;hipY=-26+u*2;}
@@ -515,7 +575,7 @@ function updatePose(e,dt){
       if(u2>0){hN={x:lerp(hN.x,12,u2),y:lerp(hN.y,-36,u2)};hF={x:lerp(hF.x,16,u2),y:lerp(hF.y,-36,u2)};}}
   }else{fa={x:5,y:0};fb={x:-5,y:0};}
   lean-=e.flinch*.25;
-  const stance=(st==='normal'&&e.grounded&&e.poseBlend<.05),snappy=st==='kick'||st==='slide'||(st==='down'&&e.st.t<.3);
+  const stance=(st==='normal'&&e.grounded&&e.poseBlend<.05),snappy=st==='kick'||st==='slide'||st==='land'||st==='climbup'||(st==='hang'&&e.st.t>.12)||(st==='down'&&e.st.t<.3);
   const af=stance?1-Math.exp(-80*dt):snappy?1-Math.exp(-45*dt):a,al=snappy?af:a;
   sm(P,'hip',hipX,hipY,al);sm(P,'fA',fa.x,fa.y,af);sm(P,'fB',fb.x,fb.y,af);
   P.lean+=(lean-P.lean)*al;P.headTilt+=(headTilt-P.headTilt)*al;
@@ -529,13 +589,31 @@ function updatePose(e,dt){
   if(!e.trail)e.trail=[];
   if(st==='kick'&&e.st.t>.3&&e.st.t<.8){e.trail.push(localToWorld(e,P.fA.x,P.fA.y,'body',5));if(e.trail.length>9)e.trail.shift();}
   else if(e.trail.length)e.trail.shift();
+  e.aimT=Math.max(0,(e.aimT||0)-dt);e.rArm=Math.max(0,(e.rArm||0)-dt);
+  const sg=e.weapon==='shotgun',wantAim=sg||e.aimT>0;
+  e.aimW=approach(e.aimW||0,wantAim?1:0,dt*(wantAim?14:2.6));
+  // the aimed position is always computed (bullets leave from it)
+  P.gunA+=(aim-P.gunA)*Math.min(1,dt*30);
+  const ga=P.gunA,cxa=Math.cos(ga),sya=Math.sin(ga),rec=e.recoil*e.recoil*5,glen=sg?19:12;
+  const gpA={x:P.sh.x+2+cxa*(10-rec),y:P.sh.y+3+sya*(10-rec)};
+  P.muzzleAim={x:gpA.x+cxa*glen,y:gpA.y+sya*glen};
   if(handsGun){
-    P.gunA+=(aim-P.gunA)*Math.min(1,dt*30);
-    const ga=P.gunA,cx=Math.cos(ga),sy=Math.sin(ga),rec=e.recoil*e.recoil*5;
-    const gp={x:P.sh.x+2+cx*(9-rec),y:P.sh.y+3+sy*(9-rec)};
-    P.gp=gp;P.muzzle={x:gp.x+cx*19,y:gp.y+sy*19};
-    P.hN={x:gp.x,y:gp.y};P.hF={x:gp.x+cx*9,y:gp.y+sy*9-1};
-  }else{sm(P,'hN',hN.x,hN.y,a);sm(P,'hF',hF.x,hF.y,a);}
+    // arm swing from the stride: each arm opposite its leg
+    const swingAmp=(st==='normal'&&e.grounded)?lerp(.18,e.sprinting?1.05:.7,speedN)*e.runW:0;
+    const ph=e.armPh||{a:0,b:0},idle=Math.sin(world.time*2.2)*.04;
+    const thN=-ph.a*swingAmp+.08+idle,thF=-ph.b*swingAmp+.08-idle,AL=20.5;
+    const hNc={x:P.sh.x+Math.sin(thN)*AL,y:P.sh.y+Math.cos(thN)*AL},hFc={x:P.sh.x+Math.sin(thF)*AL,y:P.sh.y+Math.cos(thF)*AL};
+    const w=sg?1:smooth(e.aimW),gaC=clamp(.85-thN*.6,.35,1.35),gaB=lerp(gaC,ga,w);
+    const gp={x:lerp(hNc.x,gpA.x,w),y:lerp(hNc.y,gpA.y,w)};
+    const cx=Math.cos(gaB),sy=Math.sin(gaB);
+    P.gunA2=gaB;P.gp=gp;P.muzzle={x:gp.x+cx*glen,y:gp.y+sy*glen};
+    P.hN={x:gp.x,y:gp.y};
+    const grip=sg?{x:gp.x+cx*9,y:gp.y+sy*9-1}:{x:gp.x+cx*1.5-1,y:gp.y+sy*1.5+2.5}; // pistol: support hand cups the grip
+    P.hF={x:lerp(hFc.x,grip.x,w),y:lerp(hFc.y,grip.y,w)};
+  }else{sm(P,'hN',hN.x,hN.y,a);sm(P,'hF',hF.x,hF.y,a);P.gunA2=P.gunA;}
+  // wrist launcher: the off arm snaps forward when a rocket goes
+  if(e.rArm>0){const wr=clamp(e.rArm/.12,0,1)*clamp((e.rArm)/.45,0,1)*1.6,wv=Math.min(1,wr);
+    const tgt={x:P.sh.x+cxa*21,y:P.sh.y+sya*21};P.hF={x:lerp(P.hF.x,tgt.x,wv),y:lerp(P.hF.y,tgt.y,wv)};}
   const AN=ik2(P.sh.x,P.sh.y,P.hN.x,P.hN.y,UPPER,FORE,pickDown),AF=ik2(P.sh.x,P.sh.y,P.hF.x,P.hF.y,UPPER,FORE,pickDown);
   P.eN=AN.j;P.hN={x:AN.e.x,y:AN.e.y};P.eF=AF.j;P.hF={x:AF.e.x,y:AF.e.y};
   if(!world.rot)e.kickerSpin=0;
@@ -545,7 +623,7 @@ function updatePose(e,dt){
 function muzzleOf(e){
   const P=e.pose;
   if(!P)return V(e.x,e.y+44,e.z);
-  return localToWorld(e,P.muzzle.x,P.muzzle.y,'body',3);
+  const m=P.muzzleAim||P.muzzle;return localToWorld(e,m.x,m.y,'body',3);
 }
 
 // ---------- drawing ----------
@@ -579,19 +657,32 @@ function drawChar(e,alphaOverride){
    const vz=vadd(hc,vadd(vscale(fw,5.5),vscale(up,1.5)));
    drawCubeM(M4.basis(vz,vscale(rt,10),vscale(up,3.5),vscale(fw,2.5)),acc,[acc[0]*.9,acc[1]*.9,acc[2]*.9],null,al);}
   // gun
-  if(P.gunOn){
+  if(P.gunOn&&e.weapon!=='shotgun'){
+    const g0=B(P.gp,3),gm=B(P.muzzle,3),dir=vnorm(vsub(gm,g0)),gb=vadd(g0,vscale(dir,-2.5));
+    drawSeg(gb,gm,4,hexRGB('#2b3148'),null,acc,al);
+    const ga=P.gunA2||0,down=localToWorld(e,P.gp.x-Math.sin(ga)*0+Math.sin(ga)*0,P.gp.y,'body',3);
+    const gripEnd=B({x:P.gp.x-Math.sin(ga)*6+Math.cos(ga)*0,y:P.gp.y+Math.cos(ga)*6},3);drawSeg(g0,gripEnd,3.2,hexRGB('#1f2436'),null,null,al);
+    drawSeg(vadd(gm,vscale(dir,-1.2)),gm,2.2,acc,acc,null,al);
+  }else if(P.gunOn){
     const g0=B(P.gp,3),gm=B(P.muzzle,3),gb=vadd(g0,vscale(vnorm(vsub(g0,gm)),6));
     drawSeg(gb,gm,5,hexRGB('#2b3148'),null,acc,al);
-    const tube=vadd(g0,vscale(vnorm(vsub(gm,g0)),6));drawSeg(vadd(tube,V(0,4,0)),vadd(gm,V(0,4,0)),4,hexRGB('#3a2a2a'),[.25,.08,0],[1,.55,.2],al);
-    if(e.weapon==='shotgun'){const dir=vnorm(vsub(gm,g0));drawSeg(vadd(g0,vscale(dir,4)),vadd(gm,vscale(dir,3)),7,hexRGB('#3b2a22'),null,[1,.55,.2],al);
+    {const dir=vnorm(vsub(gm,g0));drawSeg(vadd(g0,vscale(dir,4)),vadd(gm,vscale(dir,3)),7,hexRGB('#3b2a22'),null,[1,.55,.2],al);
       const pump=vadd(g0,vscale(dir,10-e.recoil*3));drawSeg(vadd(pump,V(0,-3,0)),vadd(pump,vadd(vscale(dir,7),V(0,-3,0))),5,hexRGB('#ff8a2a'),[.3,.12,0],null,al);}
-  }else{
+  }else if(e.weapon==='shotgun'){
     const back=B({x:P.neck.x-6,y:P.neck.y+8},0);drawSeg(vadd(back,V(0,8,0)),vadd(back,V(0,-12,0)),5,hexRGB('#2b3148'),null,acc,al);
+  }else{ // pistol holstered on the right thigh
+    const h0=Lg({x:P.hip.x+1,y:P.hip.y+3},9),h1=Lg({x:P.hip.x+2,y:P.hip.y+11},9);drawSeg(h0,h1,4,hexRGB('#2b3148'),null,acc,al);
   }
   // arms (N = right holds the grip, F = left on the foregrip)
   for(const [el,hd,lat,hl,col] of [[P.eN,P.hN,7,3,SUIT],[P.eF,P.hF,-7,2,DARK]]){
     const sh=B(P.sh,lat),eb=B(el,lat*1.2),hn=B(hd,hl);
     drawSeg(sh,eb,5,col,null,acc,al);drawSeg(eb,hn,4.5,col,null,acc,al);
+    if(lat<0){ // rocket launcher strapped along the off forearm, glowing muzzle at the wrist
+      const fd=vnorm(vsub(hn,eb)),side=V(-Math.cos(e.bodyYaw)*-2.5,2,Math.sin(e.bodyYaw)*-2.5);
+      const a0=vadd(vadd(eb,vscale(fd,1)),side),a1=vadd(vadd(hn,vscale(fd,2)),side);
+      drawSeg(a0,a1,5.5,hexRGB('#3a2a2a'),null,[1,.55,.2],al);
+      drawSeg(vadd(a1,vscale(fd,-1.5)),vadd(a1,vscale(fd,.6)),4,hexRGB('#ff8a2a'),e.rreload>0?[.2,.08,0]:[.9,.4,.1],null,al);
+    }
   }
   if(e.trail&&e.trail.length>1){for(let i=1;i<e.trail.length;i++){drawSeg(e.trail[i-1],e.trail[i],2+i/e.trail.length*5,acc,acc,null,.35*i/e.trail.length*al+.05);}}
   if(al<.99){gl.disable(gl.BLEND);gl.depthMask(true);}

@@ -10,6 +10,7 @@ function doRotate(key,kicker,stop){
   const r=ROT[key];
   rotateGridOnly(key);rotateDeco(key);buildLevelMesh();buildDecoMesh();buildNav();
   const P=(x,y,z)=>{const q=r.pt(x,y,z);return V(q[0],q[1],q[2]);},Vv=(x,y,z)=>{const q=r.vec(x,y,z);return V(q[0],q[1],q[2]);};
+  for(const e of chars)if(e!==kicker)e.turnFall=true;
   for(const e of chars){
     if(!e.alive)continue;
     const c=P(e.x,e.y+e.h/2,e.z),v=Vv(e.vx,e.vy,e.vz);

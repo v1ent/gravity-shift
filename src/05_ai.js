@@ -107,6 +107,7 @@ function botThink(b,dt){
   let fight=see&&t&&ai.acquire<=0&&Math.abs(dy)<70&&!ai.kickGoal&&!ai.medGoal;
   if(fight)ai.fightHold=.6;else if(t&&t.alive&&ai.fightHold>0&&!ai.kickGoal&&!ai.medGoal){ai.fightHold-=dt;fight=true;} // don't flip modes on a one-frame glimpse
   if(fight){
+    b.aimT=Math.max(b.aimT||0,.5); // weapon up with both hands while fighting
     ai.strafeT-=dt;if(ai.strafeT<=0){ai.strafeT=1.1+rnd()*1.8;const r=rnd();ai.strafe=r<.18?0:r<.59?-1:1;}
     const tx=(t.x-b.x)/(dist||1),tz=(t.z-b.z)/(dist||1);
     const pref=b.weapon==='shotgun'?[110,260]:[200,500];
