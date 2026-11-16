@@ -2,7 +2,7 @@
 //  CHARACTERS — movement, parkour, stealth, knockdowns, procedural pose
 //  units: px (1 block = 32px ≈ 1 m, a fighter is 56px tall)
 // =====================================================================
-const G=1500,WALK=95,RUN=215,JUMPV=640,RUNJUMPV=590,MAXFALL=950;
+const G=1500,WALK=95,RUN=215,JUMPV=410,RUNJUMPV=470,MAXFALL=950; // standing jump ~1.7 blocks, running ~2.3: higher walls need a ledge grab
 const CROUCH_SPD=48,CROUCH_H=36,SLIDE_H=26,SLIDE_DUR=.7,SLIDE_FRIC=280,STAM_DRAIN=1/2.4,STAM_REGEN=1/3.5,STEALTH_T=1.6;
 const STEALTH_ON=false; // cloaking is switched off for now (players and bots)
 const HARD_FALL=10*T,GETUP_DUR=.8,KICK_DUR=.6,KICK_HIT=.42,KICK_DMG=15,KICK_PUSH=560;

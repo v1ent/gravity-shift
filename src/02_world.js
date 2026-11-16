@@ -263,8 +263,8 @@ function buildNav(){
         // gap jump over the hole (2–3 cells)
         for(let g=2;g<=3;g++){const gx=i+dx*g,gz=k+dz*g;if(standable(gx,j,gz)&&!solid(tile(i+dx,j+2,k+dz))&&!solid(tile(gx,j+2,gz))){out.push({i:gx,j,k:gz,type:'gap'});break;}}
       }
-      // jump up to a ledge (grab) 2..6 blocks higher, right beside us
-      for(let dy=2;dy<=6;dy++){
+      // jump up to a ledge (grab) 2..4 blocks higher, right beside us
+      for(let dy=2;dy<=4;dy++){ // jump + grab reaches about 4 blocks
         let clear=true;for(let y=j+2;y<=j+dy+1;y++)if(solid(tile(i,y,k))){clear=false;break;}
         if(!clear)break;
         if(standable(x,j+dy,z)&&solid(tile(x,j+dy-1,z))){out.push({i:x,j:j+dy,k:z,type:'jump',dy});break;}
