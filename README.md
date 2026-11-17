@@ -54,6 +54,8 @@ Then open `index.html` in a browser.
 | `src/05_ai.js` | Bots |
 | `src/06_game.js` | Game loop, input, camera, HUD, menus |
 | `src/07_tutorial.js` | Tutorial rooms, drones, objectives |
+| `src/08_model_data.js` | Character mesh (compressed; Mixamo, not MIT) |
+| `src/08_skin.js` | Skinned-mesh renderer: the procedural skeleton drives the model's bones |
 
 ## How AI was used
 
@@ -61,4 +63,6 @@ Designed and directed by me; the code was written with Claude (Anthropic's AI as
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Code: MIT — see [LICENSE](LICENSE).
+
+The character model (`src/08_model_data.js`, converted from a Mixamo-rigged GLB) comes from Adobe Mixamo and is used under Mixamo's terms. It is **not** covered by the MIT license and may not be redistributed on its own.

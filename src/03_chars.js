@@ -640,6 +640,10 @@ function drawChar(e,alphaOverride){
   if(al<.99){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);}
   const B=(p,lat)=>localToWorld(e,p.x,p.y,'body',lat),Lg=(p,lat)=>localToWorld(e,p.x,p.y,'leg',lat);
   const hipC=B(P.hip,0);
+  // rigged model when it's loaded: the game skeleton drives its bones
+  const SK=SKN.ready&&SKN.on?drawSkinned(jointsFromChar(e),acc,al):null;
+  if(al<.99&&SK){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);}
+  if(!SK){
   // legs (A = right, B = left)
   for(const [kk,ff,lat,col] of [[P.kA,P.fA,5,SUIT],[P.kB,P.fB,-5,DARK]]){
     const hp=Lg(P.hip,lat),kn=Lg(kk,lat*1.05),ft=Lg(ff,lat);
@@ -659,6 +663,7 @@ function drawChar(e,alphaOverride){
    drawCubeM(M4.basis(hc,vscale(rt,12),vscale(up,13),vscale(fw,12)),hexRGB('#232a42'),null,acc,al);
    const vz=vadd(hc,vadd(vscale(fw,5.5),vscale(up,1.5)));
    drawCubeM(M4.basis(vz,vscale(rt,10),vscale(up,3.5),vscale(fw,2.5)),acc,[acc[0]*.9,acc[1]*.9,acc[2]*.9],null,al);}
+  }
   // gun
   if(P.gunOn&&e.weapon!=='shotgun'){
     const g0=B(P.gp,3),gm=B(P.muzzle,3),dir=vnorm(vsub(gm,g0)),gb=vadd(g0,vscale(dir,-2.5));
@@ -678,13 +683,14 @@ function drawChar(e,alphaOverride){
   }
   // arms (N = right holds the grip, F = left on the foregrip)
   for(const [el,hd,lat,hl,col] of [[P.eN,P.hN,7,3,SUIT],[P.eF,P.hF,-7,2,DARK]]){
-    const sh=B(P.sh,lat),eb=B(el,lat*1.2),hn=B(hd,hl);
-    drawSeg(sh,eb,5,col,null,acc,al);drawSeg(eb,hn,4.5,col,null,acc,al);
+    const sh=B(P.sh,lat);let eb=B(el,lat*1.2),hn=B(hd,hl);
+    if(SK){if(lat>0)continue;eb=SK.eL;hn=SK.hL;}
+    else{drawSeg(sh,eb,5,col,null,acc,al);drawSeg(eb,hn,4.5,col,null,acc,al);}
     if(lat<0){ // rocket launcher strapped along the off forearm, glowing muzzle at the wrist
-      const fd=vnorm(vsub(hn,eb)),side=V(-Math.cos(e.bodyYaw)*-2.5,2,Math.sin(e.bodyYaw)*-2.5);
-      const a0=vadd(vadd(eb,vscale(fd,1)),side),a1=vadd(vadd(hn,vscale(fd,2)),side);
-      drawSeg(a0,a1,5.5,hexRGB('#3a2a2a'),null,[1,.55,.2],al);
-      drawSeg(vadd(a1,vscale(fd,-1.5)),vadd(a1,vscale(fd,.6)),4,hexRGB('#ff8a2a'),e.rreload>0?[.2,.08,0]:[.9,.4,.1],null,al);
+      const k=SK?.6:1,fd=vnorm(vsub(hn,eb)),side=V(-Math.cos(e.bodyYaw)*-2.5*k,2*k,Math.sin(e.bodyYaw)*-2.5*k);
+      const a0=vadd(vadd(eb,vscale(fd,SK?3:1)),side),a1=vadd(vadd(hn,vscale(fd,SK?0:2)),side);
+      drawSeg(a0,a1,5.5*k,hexRGB('#3a2a2a'),null,[1,.55,.2],al);
+      drawSeg(vadd(a1,vscale(fd,-1.5)),vadd(a1,vscale(fd,.6)),4*k,hexRGB('#ff8a2a'),e.rreload>0?[.2,.08,0]:[.9,.4,.1],null,al);
     }
   }
   if(e.trail&&e.trail.length>1){for(let i=1;i<e.trail.length;i++){drawSeg(e.trail[i-1],e.trail[i],2+i/e.trail.length*5,acc,acc,null,.35*i/e.trail.length*al+.05);}}
@@ -726,6 +732,7 @@ function drawDoll(d){
   const p=k=>{const q=d.pts[d.idx[k]];return V(q.x,q.y,q.z);};
   const al=Math.min(1,d.life/1.5);const gl=R.gl;
   if(al<.99){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);}
+  if(SKN.ready&&SKN.on){drawSkinned(jointsFromDoll(d),d.col,al);if(al<.99)gl.disable(gl.BLEND);return;}
   for(const [a,b,t] of [['neck','hip',11],['hip','kA',7],['kA','fA',6],['hip','kB',7],['kB','fB',6],['neck','eN',5],['eN','hN',4.5],['neck','eF',5],['eF','hF',4.5]])drawSeg(p(a),p(b),t,SUIT,null,d.col,al);
   drawSeg(p('neck'),p('head'),11,hexRGB('#232a42'),null,d.col,al);
   if(al<.99)gl.disable(gl.BLEND);
