@@ -103,57 +103,181 @@ function jointsFromDoll(d){
     eR:p('eN'),hR:p('hN'),eL:p('eF'),hL:p('hF'),doll:true};
 }
 
-// solve all 20 bones and write the skinning matrices
-function solveSkin(J){
-  const B=SKN.bones,bi=SKN.bi,rest=i=>B[i].head,M=SKN.mats;
-  const Rw=new Array(20),H=new Array(20),K=new Array(20).fill(1),D0=new Array(20);
-  const restVec=(c)=>vsub(rest(c),rest(B[c].parent));
-  const fk=(i)=>vadd(H[B[i].parent],rapply(Rw[B[i].parent],vsub(rest(i),rest(B[i].parent))));
-  // hips: leg frame, lifted to the model's hip height above the game hip
-  const Fh=frame3(J.upL,J.fwdL),F0=frame3(REST_UP[0],REST_UP[1]);
-  const Fc=frame3(J.upB,J.fwdB);
+// ---------- quaternions ([x,y,z,w]) ----------
+function qFromR(R3){const m=(i,j)=>R3[j][['x','y','z'][i]];const t=m(0,0)+m(1,1)+m(2,2);let q;
+  if(t>0){const s=Math.sqrt(t+1)*2;q=[(m(2,1)-m(1,2))/s,(m(0,2)-m(2,0))/s,(m(1,0)-m(0,1))/s,.25*s];}
+  else if(m(0,0)>m(1,1)&&m(0,0)>m(2,2)){const s=Math.sqrt(1+m(0,0)-m(1,1)-m(2,2))*2;q=[.25*s,(m(0,1)+m(1,0))/s,(m(0,2)+m(2,0))/s,(m(2,1)-m(1,2))/s];}
+  else if(m(1,1)>m(2,2)){const s=Math.sqrt(1+m(1,1)-m(0,0)-m(2,2))*2;q=[(m(0,1)+m(1,0))/s,.25*s,(m(1,2)+m(2,1))/s,(m(0,2)-m(2,0))/s];}
+  else{const s=Math.sqrt(1+m(2,2)-m(0,0)-m(1,1))*2;q=[(m(0,2)+m(2,0))/s,(m(1,2)+m(2,1))/s,.25*s,(m(1,0)-m(0,1))/s];}
+  return qn(q);}
+const qn=q=>{const l=Math.hypot(q[0],q[1],q[2],q[3])||1;return [q[0]/l,q[1]/l,q[2]/l,q[3]/l];};
+const qmul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
+function qrot(q,v){const [x,y,z,w]=q,ix=w*v.x+y*v.z-z*v.y,iy=w*v.y+z*v.x-x*v.z,iz=w*v.z+x*v.y-y*v.x,iw=-x*v.x-y*v.y-z*v.z;
+  return V(ix*w+iw*-x+iy*-z-iz*-y,iy*w+iw*-y+iz*-x-ix*-z,iz*w+iw*-z+ix*-y-iy*-x);}
+const qaxis=(ax,an)=>{const s=Math.sin(an/2);return [ax.x*s,ax.y*s,ax.z*s,Math.cos(an/2)];};
+function qlerp(a,b,t){const d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3],sg=d<0?-1:1;return qn([a[0]*(1-t)+b[0]*t*sg,a[1]*(1-t)+b[1]*t*sg,a[2]*(1-t)+b[2]*t*sg,a[3]*(1-t)+b[3]*t*sg]);}
+
+// a pose: world rotation (relative to the rest pose) of each of the 20 bones, hips position, arm stretch
+const mkPose=()=>({q:Array.from({length:20},()=>[0,0,0,1]),K:new Array(20).fill(1),hip:V(0,0,0)});
+function blendPose(a,b,t){const o=mkPose();for(let i=0;i<20;i++){o.q[i]=qlerp(a.q[i],b.q[i],t);o.K[i]=lerp(a.K[i],b.K[i],t);}o.hip=vadd(vscale(a.hip,1-t),vscale(b.hip,t));return o;}
+
+// ---------- procedural: game skeleton -> pose (IK for arms and legs) ----------
+function procPose(J){
+  const B=SKN.bones,bi=SKN.bi,rest=i=>B[i].head;
+  const Rw=new Array(20),H=new Array(20),K=new Array(20).fill(1);
+  const restVec=c=>vsub(rest(c),rest(B[c].parent));
+  const fk=i=>vadd(H[B[i].parent],rapply(Rw[B[i].parent],vsub(rest(i),rest(B[i].parent))));
+  const Fh=frame3(J.upL,J.fwdL),F0=frame3(REST_UP[0],REST_UP[1]),Fc=frame3(J.upB,J.fwdB);
   Rw[0]=rotBetween(Fh,F0);H[0]=vadd(J.hip,vscale(J.upL,J.doll?0:4.6*CHAR_SCALE));
-  const spine=['Spine','Spine1','Spine2','Neck'];
-  spine.forEach((nm,k)=>{const i=bi[nm];H[i]=fk(i);Rw[i]=rotBetween(lerpFrame(Fh,Fc,Math.min(1,(k+1)/3)),F0);});
+  ['Spine','Spine1','Spine2','Neck'].forEach((nm,k)=>{const i=bi[nm];H[i]=fk(i);Rw[i]=rotBetween(lerpFrame(Fh,Fc,Math.min(1,(k+1)/3)),F0);});
   {const i=bi.Head;H[i]=fk(i);Rw[i]=rotBetween(frame3(J.headUp,J.headFwd),F0);}
   for(const s of ['Left','Right']){
     const sh=bi[s+'Shoulder'],ar=bi[s+'Arm'],fo=bi[s+'ForeArm'],ha=bi[s+'Hand'];
     H[sh]=fk(sh);Rw[sh]=Rw[bi.Spine2];H[ar]=fk(ar);
     const a=vlen(restVec(fo))*ARM_STRETCH,b=vlen(restVec(ha))*ARM_STRETCH;
-    const tgt=s==='Right'?J.hR:J.hL,pole=s==='Right'?J.eR:J.eL;
-    const r=ik3(H[ar],tgt,a,b,pole,vscale(J.fwdB,-1));
-    const ref0=V(0,0,-1); // rest: elbows point backwards
-    Rw[ar]=rotBetween(frame3(vsub(r.mid,H[ar]),r.n),frame3(restVec(fo),ref0));K[ar]=ARM_STRETCH;D0[ar]=vnorm(restVec(fo));
-    H[fo]=r.mid;Rw[fo]=rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(restVec(ha),ref0));K[fo]=ARM_STRETCH;D0[fo]=vnorm(restVec(ha));
-    H[ha]=r.end;Rw[ha]=Rw[fo];
+    const r=ik3(H[ar],s==='Right'?J.hR:J.hL,a,b,s==='Right'?J.eR:J.eL,vscale(J.fwdB,-1)),ref0=V(0,0,-1);
+    Rw[ar]=rotBetween(frame3(vsub(r.mid,H[ar]),r.n),frame3(restVec(fo),ref0));K[ar]=ARM_STRETCH;
+    Rw[fo]=rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(restVec(ha),ref0));K[fo]=ARM_STRETCH;Rw[ha]=Rw[fo];
   }
   for(const s of ['Left','Right']){
-    const ul=bi[s+'UpLeg'],lg=bi[s+'Leg'],ft=bi[s+'Foot'];
-    H[ul]=fk(ul);
-    const a=vlen(restVec(lg)),b=vlen(restVec(ft)),foot=s==='Right'?J.fR:J.fL,toe=s==='Right'?J.toeR:J.toeL,knee=s==='Right'?J.kR:J.kL;
-    const ankleH=rest(ft).y,ankle=vadd(foot,vscale(J.upL,J.doll?0:ankleH));
-    const r=ik3(H[ul],ankle,a,b,knee,J.fwdL);
-    const ref0=V(0,0,1); // rest: knees point forwards
+    const ul=bi[s+'UpLeg'],lg=bi[s+'Leg'],ft=bi[s+'Foot'];H[ul]=fk(ul);
+    const a=vlen(restVec(lg)),b=vlen(restVec(ft)),foot=s==='Right'?J.fR:J.fL,toe=s==='Right'?J.toeR:J.toeL;
+    const ankle=vadd(foot,vscale(J.upL,J.doll?0:rest(ft).y));
+    const r=ik3(H[ul],ankle,a,b,s==='Right'?J.kR:J.kL,J.fwdL),ref0=V(0,0,1);
     Rw[ul]=rotBetween(frame3(vsub(r.mid,H[ul]),r.n),frame3(restVec(lg),ref0));
-    H[lg]=r.mid;Rw[lg]=rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(restVec(ft),ref0));
-    H[ft]=r.end;
-    const toeRest=SKN.toe[s==='Right'?'R':'L'],fd0=vsub(toeRest,rest(ft)),fd1=vsub(toe,ankle);
-    Rw[ft]=rotBetween(frame3(fd1,J.upL),frame3(fd0,V(0,1,0)));
+    Rw[lg]=rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(restVec(ft),ref0));
+    Rw[ft]=rotBetween(frame3(vsub(toe,ankle),J.upL),frame3(vsub(SKN.toe[s==='Right'?'R':'L'],rest(ft)),V(0,1,0)));
   }
-  // matrices: v -> H + R*S*(v-rest), S stretching along the rest bone direction
+  const P=mkPose();for(let i=0;i<20;i++)P.q[i]=qFromR(Rw[i]);P.K=K;P.hip=H[0];return P;
+}
+
+// ---------- animation clips ----------
+const MIRROR=[0,1,2,3,4,5,10,11,12,13,6,7,8,9,17,18,19,14,15,16]; // left <-> right
+async function loadAnims(){
+  if(typeof ANIM_B64==='undefined')return;
+  const bin=Uint8Array.from(atob(ANIM_B64),c=>c.charCodeAt(0));
+  const buf=await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();
+  const jl=new DataView(buf).getUint32(0,true),meta=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,jl))),base=4+jl;
+  SKN.clips={};
+  for(const c of meta.clips){
+    const q=new Int16Array(buf.slice(base+c.off,base+c.off+c.n*160)),h=new Int16Array(buf.slice(base+c.off+c.n*160,base+c.off+c.n*166));
+    SKN.clips[c.name]={n:c.n,loop:c.loop,speed:c.speed,dur:(c.n-1)/meta.fps,fps:meta.fps,q,h};
+  }
+}
+// clip pose in character space (facing +Z), t in seconds
+function sampleClip(name,t,mirror){
+  const c=SKN.clips[name],P=mkPose();
+  let f=t*c.fps;f=c.loop?((f%(c.n-1))+(c.n-1))%(c.n-1):clamp(f,0,c.n-1);
+  const i0=Math.floor(f),i1=Math.min(c.n-1,i0+1),u=f-i0;
+  for(let b=0;b<20;b++){
+    const src=mirror?MIRROR[b]:b,o0=(i0*20+src)*4,o1=(i1*20+src)*4;
+    let qa=[c.q[o0],c.q[o0+1],c.q[o0+2],c.q[o0+3]],qb=[c.q[o1],c.q[o1+1],c.q[o1+2],c.q[o1+3]];
+    let q=qlerp(qn(qa),qn(qb),u);if(mirror)q=[q[0],-q[1],-q[2],q[3]];P.q[b]=q;
+  }
+  const h=i=>V(c.h[i*3]/64,c.h[i*3+1]/64,c.h[i*3+2]/64);P.hip=vadd(vscale(h(i0),1-u),vscale(h(i1),u));if(mirror)P.hip.x=-P.hip.x;
+  return P;
+}
+// weighted blend of several poses
+function mixPoses(list){
+  const tot=list.reduce((a,x)=>a+x[1],0)||1,P=mkPose();P.hip=V(0,0,0);
+  for(let b=0;b<20;b++){let acc=[0,0,0,0];const ref=list[0][0].q[b];
+    for(const [p,w] of list){const q=p.q[b],sg=(q[0]*ref[0]+q[1]*ref[1]+q[2]*ref[2]+q[3]*ref[3])<0?-1:1;for(let k=0;k<4;k++)acc[k]+=q[k]*w*sg;}
+    P.q[b]=qn(acc);}
+  for(const [p,w] of list)P.hip=vadd(P.hip,vscale(p.hip,w/tot));
+  return P;
+}
+// locomotion: the legs play the forward (or backward) clips turned toward the direction of travel;
+// the upper body twists back at the waist so the chest keeps facing the aim
+const LOCO={F:['walking_forward','running'],B:['walking_backward','running_backward']};
+function locoPose(e,dt){
+  const sp=Math.hypot(e.vx,e.vz),by=e.bodyYaw;
+  const A=e.anim||(e.anim={ph:0,idle:Math.random()*8,legYaw:by,back:false});
+  A.idle+=dt;
+  const wMove=clamp((sp-8)/40,0,1);
+  if(sp>12){
+    const mv=Math.atan2(e.vx,e.vz),rel=Math.abs(angDiff(mv,by));
+    if(!A.back&&rel>2.05)A.back=true;else if(A.back&&rel<1.75)A.back=false;   // hysteresis: no flicker around 110 degrees
+    const tgt=A.back?mv+Math.PI:mv;
+    A.legYaw+=clamp(angDiff(tgt,A.legYaw),-dt*11,dt*11);
+  }else{ // standing: feet stay put until the aim turns too far, then step round
+    const d=angDiff(by,A.legYaw);if(Math.abs(d)>.9||A.turning){A.turning=Math.abs(d)>.1;A.legYaw+=clamp(d,-dt*6,dt*6);}
+  }
+  const idle=sampleClip('idle',A.idle,false);
+  let P=idle;
+  if(wMove>.01){
+    const [wn,rn]=LOCO[A.back?'B':'F'],cw=SKN.clips[wn],cr=SKN.clips[rn];
+    const k=clamp((sp-cw.speed)/(cr.speed-cw.speed),0,1),nat=lerp(cw.speed,cr.speed,k),dur=lerp(cw.dur,cr.dur,k);
+    A.ph=(A.ph+(Math.max(sp,10)/nat)/dur*dt)%1;
+    const mv=blendPose(sampleClip(wn,A.ph*cw.dur,false),sampleClip(rn,A.ph*cr.dur,false),k);
+    P=wMove>=.99?mv:blendPose(idle,mv,wMove);
+  }else A.ph=0;
+  return {P,yaw:A.legYaw};
+}
+// character space -> world (yaw and position), then twist the upper body round to the aim
+function placePose(L,e){
+  const P=L.P,qy=qaxis(V(0,1,0),L.yaw);
+  for(let b=0;b<20;b++)P.q[b]=qmul(qy,P.q[b]);
+  P.hip=vadd(V(e.x+(e.visX||0),e.y+(e.visY||0),e.z+(e.visZ||0)),qrot(qy,P.hip));
+  const tw=angDiff(e.bodyYaw,L.yaw),bi=SKN.bi;
+  const share={Spine:.3,Spine1:.6,Spine2:1,Neck:1,Head:1,LeftShoulder:1,RightShoulder:1,LeftArm:1,RightArm:1,LeftForeArm:1,RightForeArm:1,LeftHand:1,RightHand:1};
+  for(const nm in share)P.q[bi[nm]]=qmul(qaxis(V(0,1,0),tw*share[nm]),P.q[bi[nm]]);
+  return P;
+}
+// arms from the game's IK on top of a clip (two-hand aim, rocket arm), torso pitched with the aim
+function overlayArms(P,J,wR,wL,pitch){
+  const B=SKN.bones,bi=SKN.bi,rest=i=>B[i].head,restVec=c=>vsub(rest(c),rest(B[c].parent));
+  if(pitch){const rt=vcross(J.fwdB,V(0,1,0));for(const nm of ['Spine1','Spine2','Neck','Head','LeftShoulder','RightShoulder']){const i=bi[nm];P.q[i]=qmul(qaxis(vnorm(rt),pitch*(nm==='Spine1'?.35:.65)),P.q[i]);}}
+  const H=fkHeads(P);
+  for(const [s,w] of [['Right',wR],['Left',wL]]){
+    if(w<.01)continue;
+    const ar=bi[s+'Arm'],fo=bi[s+'ForeArm'],ha=bi[s+'Hand'];
+    const a=vlen(restVec(fo))*ARM_STRETCH,b=vlen(restVec(ha))*ARM_STRETCH;
+    const r=ik3(H[ar],s==='Right'?J.hR:J.hL,a,b,s==='Right'?J.eR:J.eL,vscale(J.fwdB,-1)),ref0=V(0,0,-1);
+    const qa=qFromR(rotBetween(frame3(vsub(r.mid,H[ar]),r.n),frame3(restVec(fo),ref0))),qf=qFromR(rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(restVec(ha),ref0)));
+    P.q[ar]=qlerp(P.q[ar],qa,w);P.q[fo]=qlerp(P.q[fo],qf,w);P.q[ha]=qlerp(P.q[ha],qf,w);
+    P.K[ar]=lerp(1,ARM_STRETCH,w);P.K[fo]=P.K[ar];
+  }
+  return P;
+}
+function fkHeads(P){
+  const B=SKN.bones,H=new Array(20);H[0]=P.hip;
+  for(let i=1;i<20;i++){const pa=B[i].parent;let off=vsub(B[i].head,B[pa].head);
+    if(P.K[pa]!==1){const d=vnorm(off);off=vscale(off,P.K[pa]);}
+    H[i]=vadd(H[pa],qrot(P.q[pa],off));}
+  return H;
+}
+function writeMatrices(P){
+  const B=SKN.bones,M=SKN.mats,H=fkHeads(P);
   for(let i=0;i<20;i++){
-    const R3=Rw[i],k=K[i],d=D0[i],o=i*16;
-    const col=j=>{let v=j===0?V(1,0,0):j===1?V(0,1,0):V(0,0,1);if(k!==1)v=vadd(v,vscale(d,(k-1)*d[['x','y','z'][j]]));return rapply(R3,v);};
-    const c0=col(0),c1=col(1),c2=col(2),r0=rest(i);
+    const q=P.q[i],k=P.K[i],o=i*16;let d0=null;
+    if(k!==1){const ch=B.findIndex(b=>b.parent===i);d0=vnorm(vsub(B[ch].head,B[i].head));}
+    const col=j=>{let v=j===0?V(1,0,0):j===1?V(0,1,0):V(0,0,1);if(d0)v=vadd(v,vscale(d0,(k-1)*d0[['x','y','z'][j]]));return qrot(q,v);};
+    const c0=col(0),c1=col(1),c2=col(2),r0=B[i].head;
     const t=vsub(H[i],vadd(vadd(vscale(c0,r0.x),vscale(c1,r0.y)),vscale(c2,r0.z)));
     M[o]=c0.x;M[o+1]=c0.y;M[o+2]=c0.z;M[o+3]=0;M[o+4]=c1.x;M[o+5]=c1.y;M[o+6]=c1.z;M[o+7]=0;
     M[o+8]=c2.x;M[o+9]=c2.y;M[o+10]=c2.z;M[o+11]=0;M[o+12]=t.x;M[o+13]=t.y;M[o+14]=t.z;M[o+15]=1;
   }
-  return {hR:H[bi.RightHand],hL:H[bi.LeftHand],eR:H[bi.RightForeArm],eL:H[bi.LeftForeArm]};
+  return H;
 }
-
-function drawSkinned(J,col,alpha){
-  const gl=R.gl,L=SKN.loc;const res=solveSkin(J);
+// pick the source for a fighter: clips for ordinary movement on the ground, the procedural skeleton for everything else
+function charPose(e){
+  const J=jointsFromChar(e),now=world.time,dt=clamp(now-(e.skT||now),0,.1);e.skT=now;
+  const clipOK=SKN.clips&&e.alive&&e.state==='normal'&&e.grounded&&!e.crouch&&Math.abs(e.ba||0)<.05&&e.h>=STAND_H-1;
+  let P,src;
+  if(clipOK){
+    P=placePose(locoPose(e,dt),e);src='clip';
+    const wR=e.weapon==='shotgun'?1:smooth(clamp(e.aimW||0,0,1)),wL=Math.max(e.weapon==='shotgun'?1:wR*.9,e.rArm>0?1:0);
+    P=overlayArms(P,J,wR,wL,-(e.pitch||0)*Math.max(wR,.4));
+  }else{P=procPose(J);src='proc';}
+  if(e.skSrc&&e.skSrc!==src)e.skFade=.22;e.skSrc=src;
+  if(e.skFade>0&&e.skLast){e.skFade-=dt;P=blendPose(e.skLast,P,clamp(1-e.skFade/.22,0,1)*.6+.2);}
+  e.skLast=P;
+  return {P,J};
+}
+function drawSkinnedChar(e,col,alpha){const {P}=charPose(e);return drawPose(P,col,alpha);}
+function drawSkinned(J,col,alpha){return drawPose(procPose(J),col,alpha);}
+function drawPose(P,col,alpha){
+  const gl=R.gl,L=SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
   gl.useProgram(SKN.p);
   for(let a=0;a<8;a++)gl.disableVertexAttribArray(a);
   gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);
@@ -169,6 +293,8 @@ function drawSkinned(J,col,alpha){
   gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);
   for(const a of [L.aPos,L.aNor,L.aJ,L.aW])gl.disableVertexAttribArray(a);
   gl.useProgram(R.main.p);cubeBegin();
-  return res;
+  // pistol rides in the right hand: barrel along the hand's forward, grip down
+  const qh=P.q[bi.RightHand];
+  return {hR:H[bi.RightHand],hL:H[bi.LeftHand],eR:H[bi.RightForeArm],eL:H[bi.LeftForeArm],handFwd:qrot(qh,V(0,0,1)),handDown:qrot(qh,V(0,-1,0))};
 }
-if(R.ok)loadModel(); // after everything else is defined
+if(R.ok)loadModel().then(()=>{if(SKN.ready)return loadAnims();}).catch(e=>console.warn('anims not loaded',e));

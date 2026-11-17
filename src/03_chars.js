@@ -642,7 +642,7 @@ function drawChar(e,alphaOverride){
   const B=(p,lat)=>localToWorld(e,p.x,p.y,'body',lat),Lg=(p,lat)=>localToWorld(e,p.x,p.y,'leg',lat);
   const hipC=B(P.hip,0);
   // rigged model when it's loaded: the game skeleton drives its bones
-  const SK=SKN.ready&&SKN.on?drawSkinned(jointsFromChar(e),acc,al):null;
+  const SK=SKN.ready&&SKN.on?drawSkinnedChar(e,acc,al):null;
   if(al<.99&&SK){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);}
   if(!SK){
   // legs (A = right, B = left)
@@ -667,13 +667,19 @@ function drawChar(e,alphaOverride){
   }
   // gun
   if(P.gunOn&&e.weapon!=='shotgun'){
-    const g0=B(P.gp,3),gm=B(P.muzzle,3),dir=vnorm(vsub(gm,g0)),gb=vadd(g0,vscale(dir,-2.5));
+    let g0=B(P.gp,3),gm=B(P.muzzle,3),dir=vnorm(vsub(gm,g0)),gripEnd;
+    if(SK){ // in the model's right hand: hand orientation while carrying, the aim line while shooting
+      const w=clamp((e.aimW||0)*1.6,0,1),pd=dir;dir=vnorm(vadd(vscale(SK.handFwd,1-w),vscale(pd,w)));
+      let dn=vnorm(vadd(vscale(SK.handDown,1-w),vscale(V(0,-1,0),w)));dn=vnorm(vsub(dn,vscale(dir,vdot(dn,dir))));
+      g0=vadd(SK.hR,vscale(dir,2.5));gm=vadd(g0,vscale(dir,12*CHAR_SCALE));gripEnd=vadd(g0,vscale(dn,6));
+    }else{const ga=P.gunA2||0;gripEnd=B({x:P.gp.x-Math.sin(ga)*6,y:P.gp.y+Math.cos(ga)*6},3);}
+    const gb=vadd(g0,vscale(dir,-2.5));
     drawSeg(gb,gm,4,hexRGB('#2b3148'),null,acc,al);
-    const ga=P.gunA2||0,down=localToWorld(e,P.gp.x-Math.sin(ga)*0+Math.sin(ga)*0,P.gp.y,'body',3);
-    const gripEnd=B({x:P.gp.x-Math.sin(ga)*6+Math.cos(ga)*0,y:P.gp.y+Math.cos(ga)*6},3);drawSeg(g0,gripEnd,3.2,hexRGB('#1f2436'),null,null,al);
+    drawSeg(g0,gripEnd,3.2,hexRGB('#1f2436'),null,null,al);
     drawSeg(vadd(gm,vscale(dir,-1.2)),gm,2.2,acc,acc,null,al);
   }else if(P.gunOn){
-    const g0=B(P.gp,3),gm=B(P.muzzle,3),gb=vadd(g0,vscale(vnorm(vsub(g0,gm)),6));
+    let g0=B(P.gp,3),gm=B(P.muzzle,3);if(SK){const d=vsub(SK.hR,g0);g0=vadd(g0,d);gm=vadd(gm,d);}
+    const gb=vadd(g0,vscale(vnorm(vsub(g0,gm)),6));
     drawSeg(gb,gm,5,hexRGB('#2b3148'),null,acc,al);
     {const dir=vnorm(vsub(gm,g0));drawSeg(vadd(g0,vscale(dir,4)),vadd(gm,vscale(dir,3)),7,hexRGB('#3b2a22'),null,[1,.55,.2],al);
       const pump=vadd(g0,vscale(dir,10-e.recoil*3));drawSeg(vadd(pump,V(0,-3,0)),vadd(pump,vadd(vscale(dir,7),V(0,-3,0))),5,hexRGB('#ff8a2a'),[.3,.12,0],null,al);}
