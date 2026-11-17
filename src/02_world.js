@@ -54,6 +54,24 @@ function genLevel(seed){
       if(t!=='E')wall(plane,f,u*M+1,b*M+1,t);
     }
   }
+  // ---- partitions: full walls from side to side (and one full floor) with doorways, windows and holes,
+  //      splitting the arena into smaller rooms so fights happen closer
+  const PX=[R()<.5?12:24],PZ=[R()<.5?12:24],PY=R()<.5?12:24;
+  if(R()<.5)PX.push(PX[0]===12?24:12);else if(R()<.5)PZ.push(PZ[0]===12?24:12);
+  const part=(plane,f)=>{
+    const put=(u,y,t)=>{if(plane==='x')setT(f,y,u,t);else setT(u,y,f,t);};
+    for(let u=1;u<N-1;u++)for(let y=1;y<N-1;y++)put(u,y,1);
+    for(let seg=0;seg<MC;seg++)for(let st=0;st<5;st++){         // st: storeys every 6 blocks
+      const y0=st*6+1,u0=seg*M+1;
+      if(st%2===0||R()<.55){const du=2+(R()*6|0);for(let u=u0+du;u<u0+du+3;u++)for(let y=y0;y<y0+4;y++)put(u,y,0);} // doorway 3 wide, 4 tall
+      if(R()<.45){const du=1+(R()*8|0);for(let u=u0+du;u<u0+du+2;u++)for(let y=y0+2;y<y0+4;y++)if(y<N-1)put(u,y,0);}        // window to shoot through
+    }
+  };
+  for(const f of PX)part('x',f);for(const f of PZ)part('z',f);
+  box(1,PY,1,N-2,PY,N-2,1);
+  let holes=0;
+  for(let a=0;a<MC;a++)for(let c=0;c<MC;c++)if(R()<.35||(a===2&&c===2&&holes<2)){
+    const x0=a*M+2+(R()*5|0),z0=c*M+2+(R()*5|0);clear(x0,PY,z0,x0+3,PY,z0+3);holes++;}
   // ---- a few steel columns at room corners and beams
   for(const x of [12,24])for(const z of [12,24])for(let b=0;b<MC;b++)if(R()<.18)for(let y=b*M;y<=b*M+M;y++)setT(x,y,z,3);
   for(const y of [12,24])for(const z of [12,24])for(let a=0;a<MC;a++)if(R()<.12)for(let x=a*M;x<=a*M+M;x++)setT(x,y,z,3);
@@ -65,6 +83,7 @@ function genLevel(seed){
     for(let s=0;s<6;s++){
       const p=rev?9-s:s+1;
       for(let y=y0+1;y<=y0+1+s;y++)for(let l=0;l<2;l++){if(ax===0)setT(x0+p,y,z0+lane+l,3);else setT(x0+lane+l,y,z0+p,3);}
+      if(y0+6===PY&&s<5)for(let l=-1;l<3;l++){if(ax===0)setT(x0+p,PY,z0+lane+l,0);else setT(x0+lane+l,PY,z0+p,0);}
       for(let y=y0+2+s;y<=y0+5+s&&y<N-1;y++)for(let l=0;l<2;l++){if(ax===0){if(tile(x0+p,y,z0+lane+l)!==6&&y>y0+6)setT(x0+p,y,z0+lane+l,0);}else{if(tile(x0+lane+l,y,z0+p)!==6&&y>y0+6)setT(x0+lane+l,y,z0+p,0);}}
     }
   }

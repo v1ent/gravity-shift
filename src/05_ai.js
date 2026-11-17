@@ -99,7 +99,11 @@ function botThink(b,dt){
     else if(!g&&t&&see)g=cellOf(t);
     else if(!g&&t&&ai.lastSeen)g=[Math.floor(ai.lastSeen.x/T),Math.floor((ai.lastSeen.y+1)/T),Math.floor(ai.lastSeen.z/T)];
     else if(!g&&ai.alert)g=[Math.floor(ai.alert.x/T),Math.floor((ai.alert.y+1)/T),Math.floor(ai.alert.z/T)];
-    if(!g){if(!ai.wander||rnd()<.03||ai.newRoam){ai.newRoam=false;const sp=spawnPoints();ai.wander=sp[rnd()*sp.length|0];}g=[Math.floor(ai.wander.x/T),Math.floor((ai.wander.y+1)/T),Math.floor(ai.wander.z/T)];}
+    if(!g){if(!ai.wander||rnd()<.03||ai.newRoam){ai.newRoam=false;
+      // hunt: half the time head for somewhere near a living rival (you can hear a fight through the walls), else wander
+      const rivals=chars.filter(o=>o!==b&&o.alive);
+      if(rivals.length&&rnd()<.5){const o=rivals[rnd()*rivals.length|0],sp=spawnPoints().filter(q=>Math.hypot(q.x-o.x,q.y-o.y,q.z-o.z)<260);ai.wander=sp.length?sp[rnd()*sp.length|0]:{x:o.x,y:o.y,z:o.z};}
+      else{const sp=spawnPoints();ai.wander=sp[rnd()*sp.length|0];}}g=[Math.floor(ai.wander.x/T),Math.floor((ai.wander.y+1)/T),Math.floor(ai.wander.z/T)];}
     ai.goalPt=null;ai.path=findPath(ci,cj,ck,g[0],g[1],g[2]);ai.navVer=nav.ver;ai.replan=.6+rnd()*.3;
     if(ai.path&&ai.path.length===0){ai.kickGoal=null;ai.medGoal=null;ai.roam=4+rnd()*3;ai.newRoam=true;ai.replan=0;}
   }
