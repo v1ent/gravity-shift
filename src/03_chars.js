@@ -3,7 +3,8 @@
 //  units: px (1 block = 32px ≈ 1 m, a fighter is 56px tall)
 // =====================================================================
 const G=1500,WALK=95,RUN=215,JUMPV=410,RUNJUMPV=470,MAXFALL=950; // standing jump ~1.7 blocks, running ~2.3: higher walls need a ledge grab
-const CROUCH_SPD=48,CROUCH_H=36,SLIDE_H=26,SLIDE_DUR=.7,SLIDE_FRIC=280,STAM_DRAIN=1/7.2,STAM_REGEN=1/3.5,STEALTH_T=1.6;
+const STAND_H=62,BODY_W=23,CHAR_SCALE=64/56; // fighters are ~2 m: 62 px hitbox, model drawn 64 px tall
+const CROUCH_SPD=48,CROUCH_H=41,SLIDE_H=30,SLIDE_DUR=.7,SLIDE_FRIC=280,STAM_DRAIN=1/7.2,STAM_REGEN=1/3.5,STEALTH_T=1.6;
 const STEALTH_ON=false; // cloaking is switched off for now (players and bots)
 const HARD_FALL=10*T,GETUP_DUR=.8,KICK_DUR=.6,KICK_HIT=.42,KICK_DMG=15,KICK_PUSH=560;
 const MAG=10,RELOAD=2,FIRE_CD=.42,BULLET_SPEED=1300,PISTOL_SPEED=3900,DMG=25,HEAD_DMG=45;
@@ -12,14 +13,14 @@ const THIGH=14,SHIN=14,TORSO=17,UPPER=11,FORE=11;
 let chars=[],player=null;
 
 function makeChar(name,color,isBot){
-  return {name,color,col:hexRGB(color),isBot,x:0,y:0,z:0,w:20,h:56,vx:0,vy:0,vz:0,hp:100,alive:false,respawn:.5,
+  return {name,color,col:hexRGB(color),isBot,x:0,y:0,z:0,w:BODY_W,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:false,respawn:.5,
     grounded:false,coyote:0,jumpBuf:0,cut:false,yaw:0,pitch:0,bodyYaw:0,legYaw:0,state:'normal',st:{},grabCD:0,
     weapon:'pistol',hasShotgun:false,stash:{pistol:MAG,shotgun:0},fireCD:0,ammo:MAG,reload:0,rockets:RMAG,rreload:0,rfireCD:0,stam:1,stamDelay:0,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,
     kickCD:0,stun:0,knocked:false,recoil:0,flinch:0,land:0,takeoff:0,phase:0,ba:0,bav:0,baAxis:0,tumbleHold:0,runW:0,accS:0,prevFwd:0,
     kills:0,deaths:0,invuln:0,lastHit:null,lastHitT:-99,poseBlend:1,pose:null,kickPrompt:false,rocketJump:false,airT:0,
     ctl:{mx:0,mz:0,jump:false,jumpHeld:false,sprint:false,crouch:false,crouchPressed:false,fire:false,alt:false,kick:false,reload:false,grab:false,aimYaw:0,aimPitch:0},ai:null};
 }
-const headPos=e=>V(e.x,e.y+e.h-6,e.z);
+const headPos=e=>V(e.x,e.y+e.h-3.5,e.z);
 const chestPos=e=>V(e.x,e.y+e.h*.62,e.z);
 
 function spawn(e){
@@ -27,13 +28,13 @@ function spawn(e){
   let best=null,bs=-1;
   for(let k=0;k<40;k++){
     const p=pts[rnd()*pts.length|0];if(!p)continue;
-    if(overlapSolid(p.x,p.y,p.z,20,56))continue;
+    if(overlapSolid(p.x,p.y,p.z,BODY_W,STAND_H))continue;
     let md=1e9;for(const o of chars)if(o!==e&&o.alive)md=Math.min(md,Math.hypot(o.x-p.x,o.y-p.y,o.z-p.z));
     for(const b of props)if(Math.abs(b.x-p.x)<30&&Math.abs(b.z-p.z)<30&&Math.abs(b.y-p.y)<50)md=0;
     if(md>bs){bs=md;best=p;}
   }
   if(!best)best={x:L/2,y:T,z:L/2};
-  Object.assign(e,{x:best.x,y:best.y,z:best.z,h:56,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,stash:{pistol:MAG,shotgun:0},ammo:MAG,reload:0,rockets:RMAG,rreload:0,
+  Object.assign(e,{x:best.x,y:best.y,z:best.z,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,stash:{pistol:MAG,shotgun:0},ammo:MAG,reload:0,rockets:RMAG,rreload:0,
     stam:1,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,ba:0,bav:0,tumbleHold:0,invuln:1.2,poseBlend:1,land:.6,lastHit:null,rocketJump:false});
   // face the middle of the arena
   e.yaw=e.bodyYaw=e.legYaw=yawOf(L/2-e.x,L/2-e.z);e.pitch=0;e.ctl.aimYaw=e.yaw;e.ctl.aimPitch=0;
@@ -180,7 +181,7 @@ function updateChar(e,dt){
 
   if(e.state==='normal'){
     if(ctrl&&e.grounded&&c.crouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
-    else if(e.crouch&&(!c.crouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}}
+    else if(e.crouch&&(!c.crouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}}
     // body faces aim, except sprinting/diving where it faces travel
     if((e.sprinting&&e.grounded)||e.runJump){if(hsp>20)e.bodyYaw=yawOf(e.vx,e.vz);}
     else e.bodyYaw=e.yaw;
@@ -199,7 +200,7 @@ function updateChar(e,dt){
   }
   if(e.state==='normal'){
     if(e.jumpBuf>0&&e.coyote>0){
-      if(e.crouch){if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}else e.jumpBuf=0;}
+      if(e.crouch){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}else e.jumpBuf=0;}
       if(e.jumpBuf>0){
         const run=e.sprinting&&Math.hypot(e.vx,e.vz)>140;
         e.jumpAt=world.time;
@@ -268,12 +269,12 @@ function updateChar(e,dt){
         const aimC=cardOf(Math.sin(e.yaw),Math.cos(e.yaw));
         const order=[aimC,...CARDS.filter(d=>d[0]!==aimC[0]||d[1]!==aimC[1])];
         for(const d of order){const ks=kickableSide(e,d);if(ks){e.kickPrompt=true;
-          if(ctrl&&c.kick&&e.kickCD<=0){if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}
+          if(ctrl&&c.kick&&e.kickCD<=0){if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}
             if(!e.crouch){e.state='kick';e.st={t:0,d,hit:false,done:false};e.bodyYaw=e.legYaw=yawOf(d[0],d[1]);e.kickCD=.8;e.poseBlend=.7;e.trail=[];sfx('whoosh',e);}}
           break;}}
       }
-      if(ctrl&&c.kick&&e.kickCD<=0&&e.state==='normal'&&!(e.crouch&&overlapSolid(e.x,e.y,e.z,e.w,56))){
-        e.crouch=false;e.h=56;const d=cardOf(Math.sin(e.yaw),Math.cos(e.yaw));
+      if(ctrl&&c.kick&&e.kickCD<=0&&e.state==='normal'&&!(e.crouch&&overlapSolid(e.x,e.y,e.z,e.w,STAND_H))){
+        e.crouch=false;e.h=STAND_H;const d=cardOf(Math.sin(e.yaw),Math.cos(e.yaw));
         e.state='kick';e.st={t:0,d,free:true,yaw:e.yaw,hit:false,done:false};e.bodyYaw=e.legYaw=e.yaw;e.kickCD=.7;e.poseBlend=.7;e.trail=[];sfx('whoosh',e);
       }
     }
@@ -344,7 +345,7 @@ function updateChar(e,dt){
     e.vy=Math.max(e.vy-G*dt,-MAXFALL);if(e.grounded){e.vx=approach(e.vx,0,700*dt);e.vz=approach(e.vz,0,700*dt);}
     const l=moveBody(e,dt);e.grounded=l||(e.vy<=0&&groundProbe(e));
     if(s.t>=s.dur&&(e.grounded||e.wasBox)){
-      if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.h=56;e.state='getup';e.st={t:0,side:s.side};e.poseBlend=.25;}else s.dur+=.3;
+      if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.h=STAND_H;e.state='getup';e.st={t:0,side:s.side};e.poseBlend=.25;}else s.dur+=.3;
     }
   }else if(e.state==='land'){
     const s=e.st;s.t+=dt;
@@ -359,7 +360,7 @@ function updateChar(e,dt){
     if(e.st.t>=1){e.state='normal';e.poseBlend=.35;}
   }
   if(e.state!==prevState)e.poseBlend=Math.max(e.poseBlend,.6);
-  if(e.state!=='normal'){e.crouch=false;if(e.state!=='slide'&&e.state!=='down'&&e.h!==56&&!overlapSolid(e.x,e.y,e.z,e.w,56))e.h=56;}
+  if(e.state!=='normal'){e.crouch=false;if(e.state!=='slide'&&e.state!=='down'&&e.h!==STAND_H&&!overlapSolid(e.x,e.y,e.z,e.w,STAND_H))e.h=STAND_H;}
   // weapons (gun lowered while sprinting or diving)
   const canFire=(e.state==='normal'&&!(e.sprinting&&e.grounded)&&!e.runJump)||e.state==='kick'||e.state==='slide';
   if(ctrl&&canFire&&gameState!=='over'){
@@ -387,7 +388,7 @@ function startSlide(e){
   const sp=Math.max(Math.hypot(e.vx,e.vz),RUN)*1.18;e.vx=Math.sin(yaw)*sp;e.vz=Math.cos(yaw)*sp;e.stam=Math.max(0,e.stam-.15);e.poseBlend=.5;
   sfx('whoosh',e);
 }
-function endSlide(e){e.state='normal';e.poseBlend=.5;if(!overlapSolid(e.x,e.y,e.z,e.w,56)){e.h=56;e.crouch=false;}else{e.h=CROUCH_H;e.crouch=true;}}
+function endSlide(e){e.state='normal';e.poseBlend=.5;if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.h=STAND_H;e.crouch=false;}else{e.h=CROUCH_H;e.crouch=true;}}
 function enterDown(e,sev){
   e.state='down';
   const fwd=e.vx*Math.sin(e.bodyYaw)+e.vz*Math.cos(e.bodyYaw);
@@ -428,7 +429,7 @@ function meleeHit(e,fw,reach,height,already){
 function knockBack(o,v,knock){
   if(o.state==='down'){o.vx+=v.x*.6;o.vz+=v.z*.6;o.vy=Math.max(o.vy,v.y*.4);o.grounded=false;return;}
   if(o.state!=='normal')o.state='normal';
-  o.h=56;o.crouch=false;o.runJump=false;
+  o.h=STAND_H;o.crouch=false;o.runJump=false;
   o.vx=v.x;o.vy=v.y;o.vz=v.z;o.grounded=false;o.y+=2;
   if(knock){o.knocked=true;o.stun=.6;o.bav=12;o.tumbleHold=0;o.poseBlend=.6;}
   if(overlapSolid(o.x,o.y,o.z,o.w,o.h))pushOut(o);
@@ -454,10 +455,10 @@ function legPhase(phi,s,A,lift){
 // local (forward x, y-down from feet) -> world, in the body or leg frame, with tumble about the hip-height pivot
 function localToWorld(e,lx,ly,frame,lat){
   const yaw=frame==='leg'?e.legYaw:e.bodyYaw;
-  const cy=e.h/2,c=Math.cos(e.ba),s=Math.sin(e.ba);
-  let px=lx,py=ly+cy;const rx=px*c-py*s,ry=px*s+py*c;px=rx;py=ry-cy;
+  const K=CHAR_SCALE,cy=e.h/2/K,c=Math.cos(e.ba),s=Math.sin(e.ba);
+  let px=lx,py=ly+cy;const rx=px*c-py*s,ry=px*s+py*c;px=rx*K;py=(ry-cy)*K;
   const fx=Math.sin(yaw),fz=Math.cos(yaw),rxv=-Math.cos(yaw),rzv=Math.sin(yaw);
-  const la=lat||0;
+  const la=(lat||0)*K;
   return V(e.x+e.visX+fx*px+rxv*la,e.y+e.visY-py,e.z+e.visZ+fz*px+rzv*la);
 }
 function updatePose(e,dt){
@@ -508,14 +509,14 @@ function updatePose(e,dt){
     hipY=-8;hipX=-2;lean=-1.05;headTilt=.35;fa={x:22,y:-2};fb={x:7,y:-1};
   }else if(st==='hang'){
     // hanging from the hands: the body is a pendulum under them
-    handsGun=false;const s=e.st,ang=-.35+(s.ph||0),pv={x:10,y:-60},lag=-(s.w||0)*2.2;
+    handsGun=false;const s=e.st,ang=-.35+(s.ph||0),pv={x:(e.w/2+.5)/CHAR_SCALE,y:-(e.h+4)/CHAR_SCALE},lag=-(s.w||0)*2.2;
     hipX=pv.x+Math.sin(ang)*35;hipY=pv.y+Math.cos(ang)*35;lean=-ang;headTilt=-.35-(s.ph||0)*.4;
     fa={x:pv.x+Math.sin(ang)*58+lag+1.5,y:pv.y+Math.cos(ang)*58};fb={x:pv.x+Math.sin(ang)*57+lag*1.3-2,y:pv.y+Math.cos(ang)*57-1.5};
-    hN={x:11,y:-60};hF={x:9,y:-60};
+    hN={x:pv.x+1,y:pv.y};hF={x:pv.x-1,y:pv.y};
   }else if(st==='climbup'&&!e.st.vault){
     // pull-up: hang -> chest to the ledge -> belly over -> knee up -> stand (keyframed on the ledge corner)
     handsGun=false;const s=e.st,t=Math.min(1,s.t);
-    const along=(s.s1.x-e.x)*s.d[0]+(s.s1.z-e.z)*s.d[1],cx=along-12.5,hy=-(s.ly-e.y);
+    const along=(s.s1.x-e.x)*s.d[0]+(s.s1.z-e.z)*s.d[1],cx=(along-(e.w/2+2))/CHAR_SCALE,hy=-(s.ly-e.y)/CHAR_SCALE;
     const K=[
       {t:0,  hip:[cx-12,hy+33],lean:.35,fa:[cx-10,hy+59],fb:[cx-13,hy+57],hn:[cx+3,hy],hf:[cx+1,hy],head:-.35},
       {t:.38,hip:[cx-9,hy+12], lean:.25,fa:[cx-7,hy+36], fb:[cx-10,hy+34],hn:[cx+3,hy],hf:[cx+1,hy],head:.05},
@@ -530,9 +531,9 @@ function updatePose(e,dt){
   }else if(st==='climbup'){
     // vault: hands planted on the obstacle top, legs tucked and swung through
     handsGun=false;const s=e.st,t=Math.min(1,s.t),dd=s.d;
-    const top=-(s.ly-e.y);
-    let fx;if(s.face!==undefined)fx=(s.face-(dd[0]?e.x:e.z))*(dd[0]||dd[1]);
-    else{const along=(s.s1.x-e.x)*dd[0]+(s.s1.z-e.z)*dd[1];fx=along-12.5;}
+    const top=-(s.ly-e.y)/CHAR_SCALE;
+    let fx;if(s.face!==undefined)fx=(s.face-(dd[0]?e.x:e.z))*(dd[0]||dd[1])/CHAR_SCALE;
+    else{const along=(s.s1.x-e.x)*dd[0]+(s.s1.z-e.z)*dd[1];fx=(along-(e.w/2+2))/CHAR_SCALE;}
     const plant=t<.62,u1=smooth(clamp(t/.42,0,1)),u2=smooth(clamp((t-.42)/.58,0,1));
     const mid={hip:[fx+6,top-13],lean:.5,fa:[fx+15,top-4],fb:[fx+9,top-6],hn:[fx+6,top],hf:[fx+3,top],head:.2};
     const st0={hip:[1,-25],lean:.2,fa:[6,0],fb:[-5,0],hn:[fx+6,top],hf:[fx+3,top],head:.1};

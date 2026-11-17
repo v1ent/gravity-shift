@@ -215,8 +215,8 @@ function explode(c,o){
     damage(e,dmg,e===src?null:src,dir);
     if(!e.alive)continue;
     e.gibbed=false;
-    if(e.state==='hang'||e.state==='climbup'||e.state==='kick'||e.state==='slide'||e.state==='getup'){e.state='normal';e.h=56;}
-    if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}
+    if(e.state==='hang'||e.state==='climbup'||e.state==='kick'||e.state==='slide'||e.state==='getup'){e.state='normal';e.h=STAND_H;}
+    if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}
     if(e.state==='down'){e.vx+=dir.x*push*.6;e.vy=Math.max(e.vy,dir.y*push*.5);e.vz+=dir.z*push*.6;e.grounded=false;}
     else{
       e.vx+=dir.x*push;e.vz+=dir.z*push;e.vy=Math.min(Math.max(e.vy,0)*.4+dir.y*push,940);
@@ -451,8 +451,8 @@ function rocketJump(e,c,f,air,dir,born){
   const jumpedAfterFire=born===undefined||e.jumpAt>=born-.03;
   const kind=!air?'ground':(sinceJump<RJ_WINDOW&&jumpedAfterFire)?'perfect':'air';
   const dmg=(kind==='ground'?RJ_DMG_GROUND:kind==='perfect'?RJ_DMG_PERFECT:RJ_DMG_AIR)*fs;
-  if(e.state==='hang'||e.state==='climbup'||e.state==='kick'||e.state==='slide'||e.state==='getup'){e.state='normal';e.h=56;}
-  if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,56)){e.crouch=false;e.h=56;}
+  if(e.state==='hang'||e.state==='climbup'||e.state==='kick'||e.state==='slide'||e.state==='getup'){e.state='normal';e.h=STAND_H;}
+  if(e.crouch&&!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}
   const vy=(air?RJ_VY_AIR:RJ_VY_GROUND)*fs;
   e.vy=Math.min(980,Math.max(e.vy,0)*.35+vy);
   e.vx+=dir.x*300*fs;e.vz+=dir.z*300*fs;

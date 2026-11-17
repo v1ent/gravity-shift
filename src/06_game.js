@@ -16,12 +16,12 @@ function doRotate(key,kicker,stop){
     const c=P(e.x,e.y+e.h/2,e.z),v=Vv(e.vx,e.vy,e.vz);
     if(e===kicker){
       if(e.state!=='kick'){e.state='normal';}
-      e.h=56;e.crouch=false;
+      e.h=STAND_H;e.crouch=false;
       e.x=c.x;e.z=c.z;e.y=key[0]==='+'?L-stop:stop;e.vx=e.vy=e.vz=0;e.grounded=true;e.coyote=.1;
       e.visX=c.x-e.x;e.visY=c.y-(e.y+e.h/2);e.visZ=c.z-e.z;e.visX=e.visZ=0;e.visY=clamp(e.visY,-30,30);
       e.ba=0;e.bav=0;e.kickerSpin=1;e.trail=[];pushOut(e);
     }else{
-      e.state='normal';e.h=56;e.crouch=false;e.runJump=false;e.sprinting=false;
+      e.state='normal';e.h=STAND_H;e.crouch=false;e.runJump=false;e.sprinting=false;
       e.x=c.x;e.y=c.y-e.h/2;e.z=c.z;e.vx=v.x*.4;e.vy=v.y*.4;e.vz=v.z*.4;
       e.knocked=true;e.stun=.35;e.trail=[];e.grounded=false;e.ba=Math.PI/2;e.bav=0;e.tumbleHold=.5;e.poseBlend=1;e.kickerSpin=0;
       pushOut(e);
@@ -117,11 +117,11 @@ function playerInput(first){
 // ---------- camera ----------
 function updateCamera(){
   const p=player;
-  const crouchDrop=p.alive?(56-p.h)*.6:0;
-  const head=V(p.x,p.y+50-crouchDrop,p.z);
+  const crouchDrop=p.alive?(STAND_H-p.h)*.6:0;
+  const head=V(p.x,p.y+57-crouchDrop,p.z);
   const fw=fwdOf(cam.yaw,cam.pitch),rt=V(-Math.cos(cam.yaw),0,Math.sin(cam.yaw));
-  const pivot=vadd(head,vadd(vscale(rt,22),V(0,10,0)));
-  let back=135;
+  const pivot=vadd(head,vadd(vscale(rt,24),V(0,10,0)));
+  let back=150;
   const r=rayVoxel(pivot,vscale(fw,-1),back+8);if(r.t<back+8)back=Math.max(8,r.t-8);
   // keep the shoulder pivot itself out of walls
   let pv=pivot;if(solid(tileAt(pv.x,pv.y,pv.z)))pv=head;

@@ -336,7 +336,7 @@ function tutRespawn(){
     grid=TUT.snap.grid.slice();deco=TUT.snap.deco.map(d=>({c:V(d.c.x,d.c.y,d.c.z),s:d.s.slice(),col:d.col,em:d.em}));
     buildLevelMesh();buildDecoMesh();buildNav();world.turns=TUT.snap.turns;world.rot=null;world.rotCD=0;world.pendingRot=null;world.hitstop=0;
   }
-  Object.assign(p,{x:cp.x,y:cp.y,z:cp.z,vx:0,vy:0,vz:0,state:'normal',h:56,crouch:false,knocked:false,stun:0,grounded:true,runJump:false,rocketJump:false,ba:0,bav:0,fallStart:cp.y,visX:0,visY:0,visZ:0});
+  Object.assign(p,{x:cp.x,y:cp.y,z:cp.z,vx:0,vy:0,vz:0,state:'normal',h:STAND_H,crouch:false,knocked:false,stun:0,grounded:true,runJump:false,rocketJump:false,ba:0,bav:0,fallStart:cp.y,visX:0,visY:0,visZ:0});
   p.yaw=cp.yaw;cam.yaw=cp.yaw;cam.pitch=-.12;
   toast('BACK TO THE CHECKPOINT','#ff8a2a',1.8);
 }

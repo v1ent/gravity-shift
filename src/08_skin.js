@@ -112,7 +112,7 @@ function solveSkin(J){
   // hips: leg frame, lifted to the model's hip height above the game hip
   const Fh=frame3(J.upL,J.fwdL),F0=frame3(REST_UP[0],REST_UP[1]);
   const Fc=frame3(J.upB,J.fwdB);
-  Rw[0]=rotBetween(Fh,F0);H[0]=vadd(J.hip,vscale(J.upL,J.doll?0:4.6));
+  Rw[0]=rotBetween(Fh,F0);H[0]=vadd(J.hip,vscale(J.upL,J.doll?0:4.6*CHAR_SCALE));
   const spine=['Spine','Spine1','Spine2','Neck'];
   spine.forEach((nm,k)=>{const i=bi[nm];H[i]=fk(i);Rw[i]=rotBetween(lerpFrame(Fh,Fc,Math.min(1,(k+1)/3)),F0);});
   {const i=bi.Head;H[i]=fk(i);Rw[i]=rotBetween(frame3(J.headUp,J.headFwd),F0);}
