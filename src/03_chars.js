@@ -163,9 +163,20 @@ function updateChar(e,dt){
     if(e.ammo<=0)e.reload=reloadOf(e);
   }
   // reloads
-  if(e.reload>0){e.reload-=dt;if(e.reload<=0){e.reload=0;e.ammo=magOf(e);sfx('reload',e);}}
+  if(e.reload>0){
+    if(!e.rl||e.rl.w!==e.weapon)e.rl={w:e.weapon,a0:e.ammo,n:Math.max(1,magOf(e)-e.ammo),dur:e.reload};
+    e.reload-=dt;
+    // shells go in one at a time
+    if(e.weapon==='shotgun'){const p=clamp((1-e.reload/e.rl.dur-.12)/.8,0,1),k=Math.floor(p*e.rl.n+.12);const a=Math.min(magOf(e),e.rl.a0+k);if(a>e.ammo){e.ammo=a;sfx('reload',e);}}
+    if(e.reload<=0){e.reload=0;e.ammo=magOf(e);sfx('reload',e);e.rl=null;}}
   else if(c.reload&&e.ammo<magOf(e))e.reload=reloadOf(e);
-  if(e.rreload>0){e.rreload-=dt;if(e.rreload<=0){e.rreload=0;e.rockets=RMAG;sfx('reload',e);}}
+  if(e.reload<=0)e.rl=null;
+  if(e.rreload>0){
+    if(!e.rrl)e.rrl={a0:e.rockets,n:Math.max(1,RMAG-e.rockets),dur:e.rreload};
+    e.rreload-=dt;
+    {const p=clamp((1-e.rreload/e.rrl.dur-.1)/.8,0,1),k=Math.floor(p*e.rrl.n+.12);const a=Math.min(RMAG,e.rrl.a0+k);if(a>e.rockets){e.rockets=a;sfx('reload',e);}}
+    if(e.rreload<=0){e.rreload=0;e.rockets=RMAG;e.rrl=null;}}
+  else e.rrl=null;
   // tumble spring
   if(e.tumbleHold>0)e.tumbleHold-=dt;
   else{const k=e.stun>0?18:55,d=e.stun>0?3:9;e.bav+=(-k*e.ba-d*e.bav)*dt;e.ba+=e.bav*dt;if(Math.abs(e.ba)<.002&&Math.abs(e.bav)<.01){e.ba=0;e.bav=0;}}
@@ -183,7 +194,9 @@ function updateChar(e,dt){
     if(ctrl&&e.grounded&&c.crouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
     else if(e.crouch&&(!c.crouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}}
     // body faces aim, except sprinting/diving where it faces travel
-    if(((e.sprinting&&e.grounded)||e.runJump)&&!(e.aimT>0&&!e.runJump)){if(hsp>20)e.bodyYaw=yawOf(e.vx,e.vz);}
+    // sprinting away from the aim is a backwards run: keep facing the aim instead of turning round to face the camera
+    const backIn=moving&&Math.abs(angDiff(yawOf(mx,mz),e.yaw))>1.95;
+    if(((e.sprinting&&e.grounded)||e.runJump)&&!(e.aimT>0&&!e.runJump)&&!(backIn&&!e.runJump)){if(hsp>20)e.bodyYaw=yawOf(e.vx,e.vz);}
     else e.bodyYaw=e.yaw;
     // legs follow travel; walking backwards keeps the legs facing the aim (backpedal)
     let back=false;
@@ -191,7 +204,7 @@ function updateChar(e,dt){
       if(Math.abs(d)>1.9){back=true;e.legYaw=e.legYaw+angDiff(my+Math.PI,e.legYaw)*Math.min(1,dt*10);}
       else e.legYaw=e.legYaw+angDiff(my,e.legYaw)*Math.min(1,dt*10);}
     else e.legYaw=e.legYaw+angDiff(e.bodyYaw,e.legYaw)*Math.min(1,dt*6);
-    let spd=e.crouch?CROUCH_SPD:e.sprinting?RUN:WALK*(back?.85:1);
+    let spd=e.crouch?CROUCH_SPD:e.sprinting?(backIn?RUN*.6:RUN):WALK*(back?.85:1);
     if(!e.grounded)spd=e.runJump?RUN:Math.max(WALK,Math.min(RUN,hsp));
     const acc=e.grounded?(moving?(e.sprinting?900:1100):1600):(e.stun>0?120:500);
     const tx=mx*spd,tz=mz*spd,dvx=tx-e.vx,dvz=tz-e.vz,dl=Math.hypot(dvx,dvz),st=Math.min(dl,acc*dt);
@@ -568,10 +581,10 @@ function updatePose(e,dt){
     if(up>.8)handsGun=true;
   }else if(st==='kick'){
     const t=e.st.t;
-    if(t<KICK_HIT){const u=smooth(t/KICK_HIT);fa={x:lerp(5,11,u),y:lerp(0,-12,u)};lean=-.22*u;hipY=-26+u*2;}
-    else if(t<.56){const u=easeOut((t-KICK_HIT)/(.56-KICK_HIT));fa={x:lerp(11,27,u),y:lerp(-12,-27,u)};lean=lerp(-.22,-.4,u);hipY=-24;}
-    else if(t<.72){fa={x:27,y:-27};lean=-.4;hipY=-24;}
-    else{const u=smooth((t-.72)/.28);fa={x:lerp(27,5,u),y:lerp(-27,0,u)};lean=lerp(-.4,0,u);hipY=-24-u*2;}
+    if(t<KICK_HIT){const u=smooth(t/KICK_HIT);fa={x:lerp(5,11,u),y:lerp(0,-12,u)};lean=-.12*u;hipY=-26+u*2;}
+    else if(t<.56){const u=easeOut((t-KICK_HIT)/(.56-KICK_HIT));fa={x:lerp(11,27,u),y:lerp(-12,-27,u)};lean=lerp(-.12,-.22,u);hipY=-24;}
+    else if(t<.72){fa={x:27,y:-27};lean=-.22;hipY=-24;}
+    else{const u=smooth((t-.72)/.28);fa={x:lerp(27,5,u),y:lerp(-27,0,u)};lean=lerp(-.22,0,u);hipY=-24-u*2;}
     fb={x:-7,y:0};
     if(e.st.done&&t>=.45){const u=clamp((t-.45)/.25,0,1);fa={x:lerp(fa.x,6,u),y:lerp(fa.y,0,u)};lean=lerp(lean,.05,u);}
   }else if(st==='down'){
@@ -756,7 +769,7 @@ function drawLauncherModel(e,eb,hn,out,acc,al){
   // drum on the outer side with the rockets that are left
   const F={o:vadd(ax(len*.55),vscale(sd,1.7)),u:fd,v:up,w:sd};
   wpart(F,0,0,.4,len*.38,1.9,1.2,hexRGB('#4a2a22'),null,null,al);
-  const n=e.rreload>0?0:(e.rockets===undefined?3:e.rockets);
+  const n=e.rockets===undefined?3:e.rockets;
   for(let i=0;i<3;i++)wpart(F,(i-1)*len*.12,0,1.05,.8,.8,.3,i<n?hexRGB('#ff8a2a'):hexRGB('#2a1a14'),i<n?[.9,.4,.1]:null,null,al);
   wpart({o:ax(len*.8),u:fd,v:up,w:sd},0,1.7,0,1.4,.45,.45,acc,acc,null,al);                  // sight
 }
@@ -788,7 +801,10 @@ function drawShotgunModel(F,acc,al,pump){
 }
 function drawWeaponsSK(e,P,SK,acc,al){
   const by=e.bodyYaw,rt=V(-Math.cos(by),0,Math.sin(by));
-  if(P.gunOn&&e.weapon!=='shotgun'){
+  const busy=e._handsBusy==='rocket';
+  if(e._gunF&&P.gunOn){ // reloading: the gun sits where the reload puts it
+    if(e.weapon==='shotgun')drawShotgunModel(e._gunF,acc,al,0);else drawPistolModel(e._gunF,acc,al,e._gunF.slide||0);
+  }else if(P.gunOn&&e.weapon!=='shotgun'&&!busy){
     // carried in the hand along the hand's own axis; snapped onto the aim line while shooting
     const w=clamp((e.aimW||0)*1.6,0,1),pd=e._aimDir||SK.handFwd;
     const u=vnorm(vadd(vscale(SK.handFwd,1-w),vscale(pd,w)));
@@ -803,7 +819,13 @@ function drawWeaponsSK(e,P,SK,acc,al){
     const fw=V(Math.sin(by),0,Math.cos(by)),b=vadd(SK.sh,vscale(fw,-6.5)),u=vnorm(vadd(vscale(rt,-.55),V(0,-1,0))),v=vscale(fw,-1);
     drawShotgunModel({o:vsub(b,vscale(u,5)),u,v,w:vcross(u,v)},acc,al,0);
   }
-  if(!(P.gunOn&&e.weapon!=='shotgun')&&SK.uR){ // pistol holstered on the right thigh
+  if(e._rItem){const it=e._rItem;
+    if(it.kind==='mag'){const v=it.d,u=it.u,F={o:it.p,u,v,w:vcross(u,v)};wpart(F,0,1.4,0,1.1,3.6,.9,GUNDARK,null,null,al);wpart(F,0,-.5,0,1.3,.4,1.05,acc,acc,null,al);}
+    else if(it.kind==='shell'){drawTube(vsub(it.p,vscale(it.d,1.1)),vadd(it.p,vscale(it.d,1.1)),.45,hexRGB('#c0392b'),[.18,.03,0],al);drawTube(vsub(it.p,vscale(it.d,1.3)),vsub(it.p,vscale(it.d,.7)),.5,hexRGB('#d4a640'),null,al);}
+    else{const d=it.d;drawTube(vsub(it.p,vscale(d,3)),vadd(it.p,vscale(d,2.2)),.85,hexRGB('#ff8a2a'),[.3,.12,0],al);drawTube(vadd(it.p,vscale(d,2.2)),vadd(it.p,vscale(d,3.4)),.55,hexRGB('#2a1a14'),null,al);
+      drawTube(vsub(it.p,vscale(d,3.6)),vsub(it.p,vscale(d,2.9)),1.05,hexRGB('#222633'),null,al);}
+  }
+  if((!(P.gunOn&&e.weapon!=='shotgun')||(busy&&!e._gunF))&&SK.uR){ // pistol holstered on the right thigh
     const d=vnorm(vsub(SK.kR,SK.uR)),F={o:vadd(vadd(SK.uR,vscale(d,6)),vscale(rt,4.2)),u:d,v:vnorm(vsub(V(Math.sin(by),0,Math.cos(by)),vscale(d,vdot(V(Math.sin(by),0,Math.cos(by)),d)))),w:null};
     F.w=vcross(F.u,F.v);drawPistolModel(F,acc,al,0);
   }

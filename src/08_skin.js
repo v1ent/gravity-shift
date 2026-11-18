@@ -83,7 +83,8 @@ function jointsFromChar(e){
   const rightB=V(-Math.cos(by),0,Math.sin(by)),rightL=V(-Math.cos(ly),0,Math.sin(ly));
   const o=localToWorld(e,0,0,'leg',0),upL=vnorm(vsub(localToWorld(e,0,-10,'leg',0),o));
   const hip=B(P.hip,0),neck=B(P.neck,0),upB=vnorm(vsub(neck,hip));
-  const ht=P.headA||0,hf=V(Math.sin(by)*Math.cos(ht),Math.sin(ht),Math.cos(by)*Math.cos(ht));
+  // during a kick the torso leans back: the head keeps looking where you aim instead of tipping back with it
+  const ht=e.state==='kick'?clamp(e.pitch||0,-.8,.8)*.6:(P.headA||0),hf=V(Math.sin(by)*Math.cos(ht),Math.sin(ht),Math.cos(by)*Math.cos(ht));
   const J={hip,neck,upB,fwdB:vcross(upB,rightB),upL,fwdL:vcross(upL,rightL),headUp:vcross(hf,rightB),headFwd:hf,
     kR:Lg(P.kA,5.25),fR:Lg(P.fA,5),toeR:localToWorld(e,P.fA.x+6,P.fA.y-.5,'leg',5),
     kL:Lg(P.kB,-5.25),fL:Lg(P.fB,-5),toeL:localToWorld(e,P.fB.x+6,P.fB.y-.5,'leg',-5),
@@ -397,6 +398,74 @@ function rocketLower(P,e){
   layerBones(P,S,ARM_L,'Spine2',Math.sin(Math.PI*Math.min(1,t/.45))*.85);
 }
 
+
+// ---------- reloads: the free hand does the work, one magazine / shell / rocket at a time ----------
+function armTo(P,H,s,tgt,w,pole){
+  if(w<.01)return;const bi=SKN.bi,B=SKN.bones,ar=bi[s+'Arm'],fo=bi[s+'ForeArm'],ha=bi[s+'Hand'];
+  const rv=c=>vsub(B[c].head,B[B[c].parent].head);
+  const r=ik3(H[ar],tgt,vlen(rv(fo))*ARM_STRETCH,vlen(rv(ha))*ARM_STRETCH,pole,V(0,-1,0)),ref0=V(0,0,-1);
+  const qa=qFromR(rotBetween(frame3(vsub(r.mid,H[ar]),r.n),frame3(rv(fo),ref0))),qf=qFromR(rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(rv(ha),ref0)));
+  P.q[ar]=qlerp(P.q[ar],qa,w);P.q[fo]=qlerp(P.q[fo],qf,w);P.q[ha]=qlerp(P.q[ha],qf,w);
+  P.K[ar]=lerp(P.K[ar],ARM_STRETCH,w);P.K[fo]=P.K[ar];
+}
+// piecewise path through keyed points: keys [[t,point],...]
+function pathAt(keys,t){
+  if(t<=keys[0][0])return keys[0][1];
+  for(let i=1;i<keys.length;i++)if(t<=keys[i][0]){const [a,p]=keys[i-1],[b,q]=keys[i],u=smooth((t-a)/(b-a));return vadd(vscale(p,1-u),vscale(q,u));}
+  return keys[keys.length-1][1];
+}
+const orthTo=(v,u)=>vnorm(vsub(v,vscale(u,vdot(v,u))));
+function reloadOverlay(P,e){
+  e._gunF=null;e._rItem=null;e._handsBusy=null;
+  const gunRl=e.reload>0&&e.rl,rocketRl=e.rreload>0&&e.rrl&&!gunRl;
+  if(!gunRl&&!rocketRl)return;
+  const bi=SKN.bi,by=e.bodyYaw,fw=V(Math.sin(by),0,Math.cos(by)),rt=V(-Math.cos(by),0,Math.sin(by)),up=V(0,1,0);
+  const H=fkHeads(P),ch=H[bi.Spine2],hip=H[bi.Hips],shR=H[bi.RightArm],shL=H[bi.LeftArm];
+  const at=(o,a,b,c)=>vadd(o,vadd(vadd(vscale(fw,a),vscale(up,b)),vscale(rt,c))); // forward, up, right
+  if(gunRl){
+    const R=e.rl,u=clamp(1-e.reload/R.dur,0,1),w=Math.min(smooth(clamp(u/.08,0,1)),smooth(clamp((1-u)/.08,0,1)));
+    if(e.weapon==='shotgun'){
+      // gun at the right hip, muzzle forward-left and up; the left hand feeds shells from the side carrier into the port underneath
+      const u3=vnorm(vadd(vadd(vscale(fw,.82),vscale(rt,-.42)),vscale(up,.3))),v3=orthTo(up,u3),w3=vcross(u3,v3);
+      const hR=at(hip,9,13,3.5),F={o:vadd(hR,vadd(vscale(u3,.5),vscale(v3,1.4))),u:u3,v:v3,w:w3};
+      const g=(a,b,c)=>vadd(F.o,vadd(vadd(vscale(u3,a),vscale(v3,b)),vscale(w3,c)));
+      const n=R.n,p=clamp((u-.12)/.8,0,.9999),k=Math.floor(p*n),s=p*n-k;
+      const grab=g(2.2+(k%4)*.95,1.1,-2.4),port=g(4.6,-2.2,0),inn=g(6.2,-.6,0),rest=g(11.5,-.4,-1.2);
+      const tL=u<.12?pathAt([[0,rest],[.12,grab]],u):u>.92?pathAt([[.92,inn],[1,rest]],u):pathAt([[0,inn],[.3,grab],[.62,port],[.85,inn],[1,inn]],s);
+      armTo(P,H,'Right',vsub(F.o,vadd(vscale(u3,.5),vscale(v3,1.4))),w,at(shR,-2,-12,9));
+      armTo(P,H,'Left',tL,w,at(shL,-2,-12,-9));
+      e._gunF=w>.3?F:null;
+      if(u>=.12&&u<=.92&&s>.3&&s<.85)e._rItem={kind:'shell',p:vadd(tL,vscale(v3,.8)),d:u3};
+    }else{
+      // pistol up in front of the chest, slide locked back; old magazine drops, a fresh one comes from the left hip and is slapped in
+      const u3=vnorm(vadd(vadd(vscale(fw,.72),vscale(up,.5)),vscale(rt,-.35))),v3=orthTo(vadd(up,vscale(rt,.5)),u3),w3=vcross(u3,v3);
+      const hR=at(ch,13,-5,1.5),F={o:vadd(hR,vadd(vscale(u3,1.6),vscale(v3,.6))),u:u3,v:v3,w:w3,slide:u<.86?1.4:1.4*(1-smooth((u-.86)/.06))};
+      const well=vadd(F.o,vadd(vscale(u3,-1.6),vscale(v3,-4.4)));
+      const pouch=at(hip,3,2,-7.5),rack=vadd(F.o,vadd(vscale(u3,-1.4),vscale(v3,2.6))),grip=vadd(well,vscale(v3,1.5));
+      const tL=pathAt([[0,grip],[.12,vadd(well,vscale(v3,-2))],[.32,pouch],[.42,pouch],[.6,vadd(well,vscale(v3,-6))],[.7,vadd(well,vscale(v3,-1.2))],[.76,well],[.84,rack],[.9,vadd(rack,vscale(u3,-2.5))],[1,grip]],u);
+      armTo(P,H,'Right',vsub(F.o,vadd(vscale(u3,1.6),vscale(v3,.6))),w,at(shR,-2,-12,9));
+      armTo(P,H,'Left',tL,w,at(shL,-3,-12,-8));
+      e._gunF=w>.3?F:null;
+      if(u>.32&&u<.76)e._rItem={kind:'mag',p:tL,d:v3,u:u3};
+      if(u>.1&&!R.dropped){R.dropped=true;const p=vadd(well,vscale(v3,-1.5)),g={x:p.x,y:p.y,z:p.z,vx:fw.x*30,vy:-60,vz:fw.z*30,m:.3,col:hexRGB('#161a26'),dark:hexRGB('#161a26'),glow:e.col,kind:'shard',life:4,bleed:0};
+        rbSetup(g,1.1,3.6,.9,qFromR([w3,v3,u3]));g.y=p.y;g.av=V((rnd()-.5)*6,(rnd()-.5)*6,(rnd()-.5)*6);gibs.push(g);}
+    }
+  }else{
+    // rockets: launcher arm across the chest, muzzle to the right; the right hand (pistol holstered) brings rockets from the right hip
+    const R=e.rrl,u=clamp(1-e.rreload/R.dur,0,1),w=Math.min(smooth(clamp(u/.07,0,1)),smooth(clamp((1-u)/.08,0,1)))*(1-clamp(e.aimW||0,0,1));
+    if(w<.01)return;
+    e._handsBusy='rocket';
+    const hL=at(ch,10,-2.5,4),eL=at(shL,6,-11,-4);
+    armTo(P,H,'Left',hL,w,eL);
+    const fd=vnorm(vsub(hL,at(ch,8,-3,-6))),mz=vadd(vadd(hL,vscale(fd,2)),vscale(up,2.6));
+    const n=R.n,p=clamp((u-.1)/.8,0,.9999),k=Math.floor(p*n),s=p*n-k;
+    const pouch=at(hip,-4,3,7.5),near=vadd(mz,vscale(fd,7)),inn=vadd(mz,vscale(fd,1));
+    const tR=u<.1?pathAt([[0,at(hip,3,8,6)],[.1,pouch]],u):u>.9?pathAt([[.9,inn],[1,at(hip,3,8,6)]],u):pathAt([[0,inn],[.32,pouch],[.42,pouch],[.68,near],[.86,inn],[1,inn]],s);
+    armTo(P,H,'Right',tR,w,at(shR,-2,-12,9));
+    if(u>=.1&&u<=.9&&s>.38&&s<.86)e._rItem={kind:'rocket',p:tR,d:vscale(fd,-1)};
+  }
+}
+
 // pick the source for a fighter and blend between sources
 function charPose(e){
   const J=jointsFromChar(e),now=world.time,dt=clamp(now-(e.skT||now),0,.1);e.skT=now;
@@ -414,6 +483,7 @@ function charPose(e){
     if(e.state!=='hang')A.hangT=0;
   }
   if(!P){P=procPose(J);src='proc';}
+  if(SKN.clips&&e.alive&&(e.state==='normal'||e.state==='slide'))reloadOverlay(P,e);else{e._gunF=null;e._rItem=null;e._handsBusy=null;}
   if(e.skSrc&&e.skSrc!==src)e.skFade=src==='act'||e.skSrc==='act'?.12:.2;e.skSrc=src;
   if(e.skFade>0&&e.skLast){e.skFade-=dt;P=blendPose(e.skLast,P,clamp(1-e.skFade/.2,0,1)*.65+.15);}
   e.skLast=P;
