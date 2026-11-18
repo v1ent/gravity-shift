@@ -244,7 +244,10 @@ function updateChar(e,dt){
       const fell=e.fallStart!==undefined?e.fallStart-e.y:0;
       if(imp>=MAXFALL-5&&fell>(e.rocketJump?16:11)*T){const kk=world.time-world.lastKickT<5?world.lastKicker:null;damage(e,Math.min(50,(fell-11*T)/T*5+15),kk,V(0,-1,0));}
       const limit=e.rocketJump?HARD_FALL*1.6:HARD_FALL;
-      if(e.alive&&((fell>limit&&imp>700&&e.turnFall)||(e.knocked&&imp>120)))enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
+      // after an arena turn: land crouched, hands to the floor, still facing the same way (not on your back looking at the camera)
+      if(e.alive&&e.turnFall&&imp>120){e.state='land';e.st={t:0,dur:clamp(.55+fell/T*.06,.7,1.3),sev:1};e.vx*=.3;e.vz*=.3;e.poseBlend=0;e.ba=0;e.bav=0;
+        if(fell>7*T)world.shake=Math.max(world.shake,e===player?5:0);}
+      else if(e.alive&&e.knocked&&imp>120)enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
       else if(e.alive&&fell>3.5*T&&imp>460){ // crouch into the landing, hands to the ground; longer for bigger drops
         e.state='land';e.st={t:0,dur:clamp(.2+fell/T*.075,.32,1.15),sev:clamp(fell/(10*T),.35,1)};e.vx*=.35;e.vz*=.35;e.poseBlend=0;
         if(fell>7*T)world.shake=Math.max(world.shake,e===player?5:0);
@@ -423,7 +426,7 @@ function endSlide(e){e.state='normal';e.poseBlend=.5;if(!overlapSolid(e.x,e.y,e.
 function enterDown(e,sev){
   e.state='down';
   const fwd=e.vx*Math.sin(e.bodyYaw)+e.vz*Math.cos(e.bodyYaw);
-  e.st={t:0,dur:.8+sev*1.1,side:fwd>60?1:-1};
+  e.st={t:0,dur:.8+sev*1.1,side:fwd<-80?-1:1}; // on the back only when thrown backwards
   e.h=22;e.poseBlend=.3;e.bav*=.3;e.knocked=false;e.stun=0;e.legYaw=e.bodyYaw;
   sfx('thud',e);
   for(let i=0;i<16;i++)addPart(e.x+(rnd()-.5)*40,e.y+2,e.z+(rnd()-.5)*40,(rnd()-.5)*320,rnd()*140,(rnd()-.5)*320,.6,[.54,.59,.69],8,'dust');
@@ -816,7 +819,7 @@ function drawWeaponsSK(e,P,SK,acc,al){
     let v=vnorm(vadd(vscale(SK.handDown,-(1-w)),vscale(V(0,1,0),w)));v=vnorm(vsub(v,vscale(u,vdot(v,u))));
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
     drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);
-  }else if(P.gunOn){ // shotgun, both hands
+  }else if(P.gunOn&&!busy){ // shotgun, both hands
     const u=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR));let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?V(1,0,0):vnorm(v);
     const F={o:vadd(SK.hR,vadd(vscale(u,.5),vscale(v,1.4))),u,v,w:vcross(u,v)};
     drawShotgunModel(F,acc,al,e.recoil);
@@ -827,8 +830,12 @@ function drawWeaponsSK(e,P,SK,acc,al){
   if(e._rItem){const it=e._rItem;
     if(it.kind==='mag'){const v=it.d,u=it.u,F={o:it.p,u,v,w:vcross(u,v)};wpart(F,0,1.4,0,1.1,3.6,.9,GUNDARK,null,null,al);wpart(F,0,-.5,0,1.3,.4,1.05,acc,acc,null,al);}
     else if(it.kind==='shell'){drawTube(vsub(it.p,vscale(it.d,1.1)),vadd(it.p,vscale(it.d,1.1)),.45,hexRGB('#c0392b'),[.18,.03,0],al);drawTube(vsub(it.p,vscale(it.d,1.3)),vsub(it.p,vscale(it.d,.7)),.5,hexRGB('#d4a640'),null,al);}
-    else{const d=it.d;drawTube(vsub(it.p,vscale(d,3)),vadd(it.p,vscale(d,2.2)),.85,hexRGB('#ff8a2a'),[.3,.12,0],al);drawTube(vadd(it.p,vscale(d,2.2)),vadd(it.p,vscale(d,3.4)),.55,hexRGB('#2a1a14'),null,al);
-      drawTube(vsub(it.p,vscale(d,3.6)),vsub(it.p,vscale(d,2.9)),1.05,hexRGB('#222633'),null,al);}
+    else{ // a small rocket (fits the tube): body, nose cone, tail fins
+      const d=it.d,q=(a,b)=>vadd(it.p,vscale(d,a));
+      drawTube(q(-1.6),q(1.1),.55,hexRGB('#ff8a2a'),[.3,.12,0],al);
+      drawTube(q(1.1),q(1.6),.4,hexRGB('#3a2a2a'),null,al);drawTube(q(1.6),q(1.95),.22,hexRGB('#3a2a2a'),null,al);
+      const sd=vnorm(vcross(d,Math.abs(d.y)<.9?V(0,1,0):V(1,0,0))),up=vcross(sd,d);
+      drawCubeM(segM(q(-1.7),q(-1),.12,0,1.5),hexRGB('#222633'),null,null,al);drawCubeM(segM(q(-1.7),q(-1),1.5,0,.12),hexRGB('#222633'),null,null,al);}
   }
   if((!(P.gunOn&&e.weapon!=='shotgun')||(busy&&!e._gunF))&&SK.uR){ // pistol holstered on the right thigh
     const d=vnorm(vsub(SK.kR,SK.uR)),F={o:vadd(vadd(SK.uR,vscale(d,6)),vscale(rt,4.2)),u:d,v:vnorm(vsub(V(Math.sin(by),0,Math.cos(by)),vscale(d,vdot(V(Math.sin(by),0,Math.cos(by)),d)))),w:null};

@@ -312,7 +312,7 @@ function drawSky(){
   gl.depthMask(false);gl.drawArrays(gl.TRIANGLES,0,6);gl.depthMask(true);gl.disableVertexAttribArray(L.aP);
 }
 
-const PARTITIONS=false; // side-to-side walls and a mid floor splitting the hall into rooms
+const PARTITIONS=false,STAIRS=false; // side-to-side walls and a mid floor splitting the hall into rooms
 // =====================================================================
 //  WORLD — voxel construction site, collision, 90° gravity turns, nav
 // =====================================================================
@@ -425,8 +425,8 @@ function genLevel(seed){
   for(const x of [12,24])for(const z of [12,24])for(let b=0;b<MC;b++)if(R()<.18)for(let y=b*M;y<=b*M+M;y++)setT(x,y,z,3);
   for(const y of [12,24])for(const z of [12,24])for(let a=0;a<MC;a++)if(R()<.12)for(let x=a*M;x<=a*M+M;x++)setT(x,y,z,3);
   for(const y of [12,24])for(const x of [12,24])for(let c=0;c<MC;c++)if(R()<.12)for(let z=c*M;z<=c*M+M;z++)setT(x,y,z,3);
-  // ---- wide stairs (2 lanes): from y0 up 6 steps to the next floor level
-  for(let n=0;n<8;n++){
+  // ---- wide stairs (2 lanes): from y0 up 6 steps to the next floor level (off for now: without the partition floors they mostly led nowhere)
+  if(STAIRS)for(let n=0;n<8;n++){
     const a=R()*MC|0,c=R()*MC|0,lvl=R()*5|0,y0=lvl*6,ax=R()<.5?0:2,rev=R()<.5,lane=1+(R()*7|0);
     const x0=a*M+1,z0=c*M+1;
     for(let s=0;s<6;s++){
@@ -1110,7 +1110,10 @@ function updateChar(e,dt){
       const fell=e.fallStart!==undefined?e.fallStart-e.y:0;
       if(imp>=MAXFALL-5&&fell>(e.rocketJump?16:11)*T){const kk=world.time-world.lastKickT<5?world.lastKicker:null;damage(e,Math.min(50,(fell-11*T)/T*5+15),kk,V(0,-1,0));}
       const limit=e.rocketJump?HARD_FALL*1.6:HARD_FALL;
-      if(e.alive&&((fell>limit&&imp>700&&e.turnFall)||(e.knocked&&imp>120)))enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
+      // after an arena turn: land crouched, hands to the floor, still facing the same way (not on your back looking at the camera)
+      if(e.alive&&e.turnFall&&imp>120){e.state='land';e.st={t:0,dur:clamp(.55+fell/T*.06,.7,1.3),sev:1};e.vx*=.3;e.vz*=.3;e.poseBlend=0;e.ba=0;e.bav=0;
+        if(fell>7*T)world.shake=Math.max(world.shake,e===player?5:0);}
+      else if(e.alive&&e.knocked&&imp>120)enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
       else if(e.alive&&fell>3.5*T&&imp>460){ // crouch into the landing, hands to the ground; longer for bigger drops
         e.state='land';e.st={t:0,dur:clamp(.2+fell/T*.075,.32,1.15),sev:clamp(fell/(10*T),.35,1)};e.vx*=.35;e.vz*=.35;e.poseBlend=0;
         if(fell>7*T)world.shake=Math.max(world.shake,e===player?5:0);
@@ -1289,7 +1292,7 @@ function endSlide(e){e.state='normal';e.poseBlend=.5;if(!overlapSolid(e.x,e.y,e.
 function enterDown(e,sev){
   e.state='down';
   const fwd=e.vx*Math.sin(e.bodyYaw)+e.vz*Math.cos(e.bodyYaw);
-  e.st={t:0,dur:.8+sev*1.1,side:fwd>60?1:-1};
+  e.st={t:0,dur:.8+sev*1.1,side:fwd<-80?-1:1}; // on the back only when thrown backwards
   e.h=22;e.poseBlend=.3;e.bav*=.3;e.knocked=false;e.stun=0;e.legYaw=e.bodyYaw;
   sfx('thud',e);
   for(let i=0;i<16;i++)addPart(e.x+(rnd()-.5)*40,e.y+2,e.z+(rnd()-.5)*40,(rnd()-.5)*320,rnd()*140,(rnd()-.5)*320,.6,[.54,.59,.69],8,'dust');
@@ -1682,7 +1685,7 @@ function drawWeaponsSK(e,P,SK,acc,al){
     let v=vnorm(vadd(vscale(SK.handDown,-(1-w)),vscale(V(0,1,0),w)));v=vnorm(vsub(v,vscale(u,vdot(v,u))));
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
     drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);
-  }else if(P.gunOn){ // shotgun, both hands
+  }else if(P.gunOn&&!busy){ // shotgun, both hands
     const u=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR));let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?V(1,0,0):vnorm(v);
     const F={o:vadd(SK.hR,vadd(vscale(u,.5),vscale(v,1.4))),u,v,w:vcross(u,v)};
     drawShotgunModel(F,acc,al,e.recoil);
@@ -1693,8 +1696,12 @@ function drawWeaponsSK(e,P,SK,acc,al){
   if(e._rItem){const it=e._rItem;
     if(it.kind==='mag'){const v=it.d,u=it.u,F={o:it.p,u,v,w:vcross(u,v)};wpart(F,0,1.4,0,1.1,3.6,.9,GUNDARK,null,null,al);wpart(F,0,-.5,0,1.3,.4,1.05,acc,acc,null,al);}
     else if(it.kind==='shell'){drawTube(vsub(it.p,vscale(it.d,1.1)),vadd(it.p,vscale(it.d,1.1)),.45,hexRGB('#c0392b'),[.18,.03,0],al);drawTube(vsub(it.p,vscale(it.d,1.3)),vsub(it.p,vscale(it.d,.7)),.5,hexRGB('#d4a640'),null,al);}
-    else{const d=it.d;drawTube(vsub(it.p,vscale(d,3)),vadd(it.p,vscale(d,2.2)),.85,hexRGB('#ff8a2a'),[.3,.12,0],al);drawTube(vadd(it.p,vscale(d,2.2)),vadd(it.p,vscale(d,3.4)),.55,hexRGB('#2a1a14'),null,al);
-      drawTube(vsub(it.p,vscale(d,3.6)),vsub(it.p,vscale(d,2.9)),1.05,hexRGB('#222633'),null,al);}
+    else{ // a small rocket (fits the tube): body, nose cone, tail fins
+      const d=it.d,q=(a,b)=>vadd(it.p,vscale(d,a));
+      drawTube(q(-1.6),q(1.1),.55,hexRGB('#ff8a2a'),[.3,.12,0],al);
+      drawTube(q(1.1),q(1.6),.4,hexRGB('#3a2a2a'),null,al);drawTube(q(1.6),q(1.95),.22,hexRGB('#3a2a2a'),null,al);
+      const sd=vnorm(vcross(d,Math.abs(d.y)<.9?V(0,1,0):V(1,0,0))),up=vcross(sd,d);
+      drawCubeM(segM(q(-1.7),q(-1),.12,0,1.5),hexRGB('#222633'),null,null,al);drawCubeM(segM(q(-1.7),q(-1),1.5,0,.12),hexRGB('#222633'),null,null,al);}
   }
   if((!(P.gunOn&&e.weapon!=='shotgun')||(busy&&!e._gunF))&&SK.uR){ // pistol holstered on the right thigh
     const d=vnorm(vsub(SK.kR,SK.uR)),F={o:vadd(vadd(SK.uR,vscale(d,6)),vscale(rt,4.2)),u:d,v:vnorm(vsub(V(Math.sin(by),0,Math.cos(by)),vscale(d,vdot(V(Math.sin(by),0,Math.cos(by)),d)))),w:null};
@@ -3875,6 +3882,7 @@ function clipFor(e,A,dt){
     else{const jumped=world.time-(e.jumpAt||-9)<e.airT+.08;
       const f=e.vy>0?lerp(jumped?23:32,30,clamp(1-e.vy/JUMPV,0,1)):lerp(30,37,clamp(-e.vy/450,0,1));
       P=clipAt('jump',f,false,'none');P.hip.y-=7;}
+    {const d=angDiff(e.bodyYaw,A.legYaw);if(Math.abs(d)>1.2)A.legYaw+=d-Math.sign(d)*1.2;}
     const yaw=A.legYaw;A.legYaw+=clamp(angDiff(e.bodyYaw,A.legYaw),-dt*6,dt*6);
     P=placeAt(P,yaw,o);twistUpper(P,angDiff(e.bodyYaw,yaw));
     return {P,key:'air',aim:true};
@@ -3891,6 +3899,9 @@ function clipFor(e,A,dt){
   if(sp>150){if(A.runDir!==undefined&&Math.abs(angDiff(mv,A.runDir))>2.5&&world.time-A.runT<.7&&!A.act){startAct(A,'turn180',{yaw:A.runDir,onEnd:null});A.legYaw=mv;}A.runDir=mv;A.runT=world.time;}
   // standing and the aim swung far round: step round with the feet
   if(sp<12&&!A.act){const d=angDiff(e.bodyYaw,A.legYaw);if(Math.abs(d)>1.05){const y0=A.legYaw,s=d<0?-1:1;startAct(A,'turnR',{mirror:s>0,yaw:y0,turn:s});}}
+  // never twist the waist further than a person can: past the limit the feet are dragged round
+  {const lim=sp<12?1.2:2.1,tr=A.act&&A.act.kind==='turnR'&&A.turnYaw!==undefined,cur=tr?A.turnYaw:A.legYaw,d=angDiff(e.bodyYaw,cur);
+   if(Math.abs(d)>lim){const c=d-Math.sign(d)*lim;A.legYaw+=c;if(tr){A.act.yaw+=c;A.turnYaw+=c;}}}
   let P=locoPose(e,A,dt),yaw=A.legYaw,key='loco';
   if(A.act){
     const a=A.act,ap=actPose(e,A,dt);
@@ -3979,14 +3990,17 @@ function reloadOverlay(P,e){
     const R=e.rrl,u=clamp(1-e.rreload/R.dur,0,1),w=Math.min(smooth(clamp(u/.07,0,1)),smooth(clamp((1-u)/.08,0,1)))*(1-clamp(e.aimW||0,0,1));
     if(w<.01)return;
     e._handsBusy='rocket';
-    const hL=at(ch,10,-2.5,4),eL=at(shL,6,-11,-4);
-    armTo(P,H,'Left',hL,w,eL);
-    const fd=vnorm(vsub(hL,at(ch,8,-3,-6))),mz=vadd(vadd(hL,vscale(fd,2)),vscale(up,2.6));
+    // launcher forearm held across the belly, muzzle to the right
+    armTo(P,H,'Left',at(ch,9,-6,3.5),w,at(shL,7,-13,-5));
+    // the muzzle exactly where the launcher is drawn (same frame as drawLauncherModel)
+    const H2=fkHeads(P),eb=H2[bi.LeftForeArm],hn=H2[bi.LeftHand],len=vlen(vsub(hn,eb)),fd=vnorm(vsub(hn,eb));
+    const out0=vadd(vscale(rt,-1),V(0,.7,0)),upv=vnorm(vsub(out0,vscale(fd,vdot(out0,fd)))),mz=vadd(vadd(eb,vscale(fd,len+2.2)),vscale(upv,2.6));
     const n=R.n,p=clamp((u-.1)/.8,0,.9999),k=Math.floor(p*n),s=p*n-k;
-    const pouch=at(hip,-4,3,7.5),near=vadd(mz,vscale(fd,7)),inn=vadd(mz,vscale(fd,1));
-    const tR=u<.1?pathAt([[0,at(hip,3,8,6)],[.1,pouch]],u):u>.9?pathAt([[.9,inn],[1,at(hip,3,8,6)]],u):pathAt([[0,inn],[.32,pouch],[.42,pouch],[.68,near],[.86,inn],[1,inn]],s);
-    armTo(P,H,'Right',tR,w,at(shR,-2,-12,9));
-    if(u>=.1&&u<=.9&&s>.38&&s<.86)e._rItem={kind:'rocket',p:tR,d:vscale(fd,-1)};
+    // the hand holds a rocket by its nose and feeds it tail-first into the muzzle
+    const pouch=at(hip,-3,4,7.5),lineUp=vadd(mz,vscale(fd,5.6)),inn=vadd(mz,vscale(fd,1.6)),idle=at(hip,4,9,6);
+    const tR=u<.1?pathAt([[0,idle],[.1,pouch]],u):u>.9?pathAt([[.9,inn],[1,idle]],u):pathAt([[0,inn],[.28,pouch],[.38,pouch],[.62,lineUp],[.7,lineUp],[.88,inn],[1,inn]],s);
+    armTo(P,H,'Right',tR,w,at(shR,-3,-12,9));
+    if(u>=.1&&u<=.9&&s>.33&&s<.88)e._rItem={kind:'rocket',p:vsub(tR,vscale(fd,1.7)),d:fd};
   }
 }
 

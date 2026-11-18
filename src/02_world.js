@@ -1,4 +1,4 @@
-const PARTITIONS=false; // side-to-side walls and a mid floor splitting the hall into rooms
+const PARTITIONS=false,STAIRS=false; // side-to-side walls and a mid floor splitting the hall into rooms
 // =====================================================================
 //  WORLD — voxel construction site, collision, 90° gravity turns, nav
 // =====================================================================
@@ -111,8 +111,8 @@ function genLevel(seed){
   for(const x of [12,24])for(const z of [12,24])for(let b=0;b<MC;b++)if(R()<.18)for(let y=b*M;y<=b*M+M;y++)setT(x,y,z,3);
   for(const y of [12,24])for(const z of [12,24])for(let a=0;a<MC;a++)if(R()<.12)for(let x=a*M;x<=a*M+M;x++)setT(x,y,z,3);
   for(const y of [12,24])for(const x of [12,24])for(let c=0;c<MC;c++)if(R()<.12)for(let z=c*M;z<=c*M+M;z++)setT(x,y,z,3);
-  // ---- wide stairs (2 lanes): from y0 up 6 steps to the next floor level
-  for(let n=0;n<8;n++){
+  // ---- wide stairs (2 lanes): from y0 up 6 steps to the next floor level (off for now: without the partition floors they mostly led nowhere)
+  if(STAIRS)for(let n=0;n<8;n++){
     const a=R()*MC|0,c=R()*MC|0,lvl=R()*5|0,y0=lvl*6,ax=R()<.5?0:2,rev=R()<.5,lane=1+(R()*7|0);
     const x0=a*M+1,z0=c*M+1;
     for(let s=0;s<6;s++){

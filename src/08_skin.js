@@ -351,6 +351,7 @@ function clipFor(e,A,dt){
     else{const jumped=world.time-(e.jumpAt||-9)<e.airT+.08;
       const f=e.vy>0?lerp(jumped?23:32,30,clamp(1-e.vy/JUMPV,0,1)):lerp(30,37,clamp(-e.vy/450,0,1));
       P=clipAt('jump',f,false,'none');P.hip.y-=7;}
+    {const d=angDiff(e.bodyYaw,A.legYaw);if(Math.abs(d)>1.2)A.legYaw+=d-Math.sign(d)*1.2;}
     const yaw=A.legYaw;A.legYaw+=clamp(angDiff(e.bodyYaw,A.legYaw),-dt*6,dt*6);
     P=placeAt(P,yaw,o);twistUpper(P,angDiff(e.bodyYaw,yaw));
     return {P,key:'air',aim:true};
@@ -367,6 +368,9 @@ function clipFor(e,A,dt){
   if(sp>150){if(A.runDir!==undefined&&Math.abs(angDiff(mv,A.runDir))>2.5&&world.time-A.runT<.7&&!A.act){startAct(A,'turn180',{yaw:A.runDir,onEnd:null});A.legYaw=mv;}A.runDir=mv;A.runT=world.time;}
   // standing and the aim swung far round: step round with the feet
   if(sp<12&&!A.act){const d=angDiff(e.bodyYaw,A.legYaw);if(Math.abs(d)>1.05){const y0=A.legYaw,s=d<0?-1:1;startAct(A,'turnR',{mirror:s>0,yaw:y0,turn:s});}}
+  // never twist the waist further than a person can: past the limit the feet are dragged round
+  {const lim=sp<12?1.2:2.1,tr=A.act&&A.act.kind==='turnR'&&A.turnYaw!==undefined,cur=tr?A.turnYaw:A.legYaw,d=angDiff(e.bodyYaw,cur);
+   if(Math.abs(d)>lim){const c=d-Math.sign(d)*lim;A.legYaw+=c;if(tr){A.act.yaw+=c;A.turnYaw+=c;}}}
   let P=locoPose(e,A,dt),yaw=A.legYaw,key='loco';
   if(A.act){
     const a=A.act,ap=actPose(e,A,dt);
@@ -455,14 +459,17 @@ function reloadOverlay(P,e){
     const R=e.rrl,u=clamp(1-e.rreload/R.dur,0,1),w=Math.min(smooth(clamp(u/.07,0,1)),smooth(clamp((1-u)/.08,0,1)))*(1-clamp(e.aimW||0,0,1));
     if(w<.01)return;
     e._handsBusy='rocket';
-    const hL=at(ch,10,-2.5,4),eL=at(shL,6,-11,-4);
-    armTo(P,H,'Left',hL,w,eL);
-    const fd=vnorm(vsub(hL,at(ch,8,-3,-6))),mz=vadd(vadd(hL,vscale(fd,2)),vscale(up,2.6));
+    // launcher forearm held across the belly, muzzle to the right
+    armTo(P,H,'Left',at(ch,9,-6,3.5),w,at(shL,7,-13,-5));
+    // the muzzle exactly where the launcher is drawn (same frame as drawLauncherModel)
+    const H2=fkHeads(P),eb=H2[bi.LeftForeArm],hn=H2[bi.LeftHand],len=vlen(vsub(hn,eb)),fd=vnorm(vsub(hn,eb));
+    const out0=vadd(vscale(rt,-1),V(0,.7,0)),upv=vnorm(vsub(out0,vscale(fd,vdot(out0,fd)))),mz=vadd(vadd(eb,vscale(fd,len+2.2)),vscale(upv,2.6));
     const n=R.n,p=clamp((u-.1)/.8,0,.9999),k=Math.floor(p*n),s=p*n-k;
-    const pouch=at(hip,-4,3,7.5),near=vadd(mz,vscale(fd,7)),inn=vadd(mz,vscale(fd,1));
-    const tR=u<.1?pathAt([[0,at(hip,3,8,6)],[.1,pouch]],u):u>.9?pathAt([[.9,inn],[1,at(hip,3,8,6)]],u):pathAt([[0,inn],[.32,pouch],[.42,pouch],[.68,near],[.86,inn],[1,inn]],s);
-    armTo(P,H,'Right',tR,w,at(shR,-2,-12,9));
-    if(u>=.1&&u<=.9&&s>.38&&s<.86)e._rItem={kind:'rocket',p:tR,d:vscale(fd,-1)};
+    // the hand holds a rocket by its nose and feeds it tail-first into the muzzle
+    const pouch=at(hip,-3,4,7.5),lineUp=vadd(mz,vscale(fd,5.6)),inn=vadd(mz,vscale(fd,1.6)),idle=at(hip,4,9,6);
+    const tR=u<.1?pathAt([[0,idle],[.1,pouch]],u):u>.9?pathAt([[.9,inn],[1,idle]],u):pathAt([[0,inn],[.28,pouch],[.38,pouch],[.62,lineUp],[.7,lineUp],[.88,inn],[1,inn]],s);
+    armTo(P,H,'Right',tR,w,at(shR,-3,-12,9));
+    if(u>=.1&&u<=.9&&s>.33&&s<.88)e._rItem={kind:'rocket',p:vsub(tR,vscale(fd,1.7)),d:fd};
   }
 }
 
