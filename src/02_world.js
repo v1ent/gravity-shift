@@ -246,7 +246,7 @@ function moveBody(e,dt){
   const box=()=>[e.x-w/2+E,e.y+E,e.z-wd/2+E,e.x+w/2-E,e.y+h-E,e.z+wd/2-E];
   // characters walk up small steps (stairs) instead of stopping at them
   const tryStep=()=>{if(!e.canStep)return false;const bs=boxesIn(...box());if(!bs.length)return false;let top=-1e9;for(const q of bs)top=Math.max(top,q[4]);
-    if(top-e.y>STEP_UP||top-e.y<=0)return false;if(overlapSolid(e.x,top+.02,e.z,w,h,wd))return false;e.y=top+.02;return true;};
+    if(top-e.y>STEP_UP||top-e.y<=0)return false;if(overlapSolid(e.x,top+.02,e.z,w,h,wd))return false;e.stepped=(e.stepped||0)+top+.02-e.y;e.y=top+.02;return true;};
   for(let s=0;s<steps;s++){
     // X
     {const ox=e.x;e.x+=e.vx*sdt;
@@ -267,7 +267,7 @@ function moveBody(e,dt){
   }
   // walking down steps: stay on them instead of hopping off each one
   if(!landed&&e.canStep&&e.vy<=0){const bs=boxesIn(e.x-w/2+E,e.y-STEP_UP,e.z-wd/2+E,e.x+w/2-E,e.y-.001,e.z+wd/2-E);let m=-1e9;for(const q of bs)m=Math.max(m,q[4]);
-    if(m>-1e9&&m<=e.y){e.y=m;e.vy=0;landed=true;}}
+    if(m>-1e9&&m<=e.y){e.stepped=(e.stepped||0)+m-e.y;e.y=m;e.vy=0;landed=true;}}
   return landed;
 }
 function groundProbe(e){

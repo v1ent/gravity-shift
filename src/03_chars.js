@@ -231,6 +231,9 @@ function updateChar(e,dt){
     if(!e.grounded&&(e.fallStart===undefined||e.vy>=0))e.fallStart=e.y;
     e.canStep=e.grounded&&e.vy<=0&&!e.knocked&&!e.runJump;
     const landed=moveBody(e,dt);e.canStep=false;
+    // steps up/down: the camera eases over them instead of jumping 8px each step
+    if(e.stepped){e.stepOff=clamp((e.stepOff||0)-e.stepped,-40,40);e.stepped=0;}
+    if(e.stepOff)e.stepOff*=Math.exp(-dt*9);
     e.grounded=landed||(e.vy<=0&&groundProbe(e));
     if(e.grounded)e.coyote=.1;else e.coyote-=dt;
     if(e.grounded&&!wasGround){

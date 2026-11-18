@@ -122,7 +122,7 @@ function playerInput(first){
 function updateCamera(){
   const p=player;
   const crouchDrop=p.alive?(STAND_H-p.h)*.6:0;
-  const head=V(p.x,p.y+57-crouchDrop,p.z);
+  const head=V(p.x,p.y+57-crouchDrop+(p.stepOff||0),p.z);
   const fw=fwdOf(cam.yaw,cam.pitch),rt=V(-Math.cos(cam.yaw),0,Math.sin(cam.yaw));
   const pivot=vadd(head,vadd(vscale(rt,24),V(0,10,0)));
   let back=150;
