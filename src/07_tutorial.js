@@ -302,7 +302,7 @@ function startTutorial(id){
   TUT.on=true;TUT.id=id;TUT.t=0;TUT.toast=[];TUT.complete=false;TUT.cp=null;TUT.cardDelay=-1;TUT.prevState='normal';TUT.overSeen=false;TUT.shots=0;
   for(const k of ['v1','v2','p1','p2','slid','result'])delete TUT[k];
   drones=[];rnd=Math.random;
-  grid.fill(1);deco=[];
+  grid.fill(1);stairO.fill(0);deco=[];
   const cfg=TUT_BUILD[id]();TUT.cfg=cfg;
   for(const o of cfg.obj){o.done=false;if('n' in o)o.n=0;}
   nav=null;buildNav();buildLevelMesh();buildDecoMesh();

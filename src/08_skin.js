@@ -85,7 +85,7 @@ function jointsFromChar(e){
   const hip=B(P.hip,0),neck=B(P.neck,0),upB=vnorm(vsub(neck,hip));
   // during a kick the torso leans back: the head keeps looking where you aim instead of tipping back with it
   const ht=e.state==='kick'?clamp(e.pitch||0,-.8,.8)*.6:(P.headA||0),hf=V(Math.sin(by)*Math.cos(ht),Math.sin(ht),Math.cos(by)*Math.cos(ht));
-  const J={hip,neck,upB,fwdB:vcross(upB,rightB),upL,fwdL:vcross(upL,rightL),headUp:vcross(hf,rightB),headFwd:hf,
+  const J={hip,neck,upB,fwdB:vcross(upB,rightB),upL,fwdL:vcross(upL,rightL),headUp:vcross(rightB,hf),headFwd:hf,
     kR:Lg(P.kA,5.25),fR:Lg(P.fA,5),toeR:localToWorld(e,P.fA.x+6,P.fA.y-.5,'leg',5),
     kL:Lg(P.kB,-5.25),fL:Lg(P.fB,-5),toeL:localToWorld(e,P.fB.x+6,P.fB.y-.5,'leg',-5),
     eR:B(P.eN,8.4),hR:B(P.hN,3),eL:B(P.eF,-8.4),hL:B(P.hF,-2)};
@@ -99,7 +99,7 @@ function jointsFromDoll(d){
   if(vlen(right)<1e-3)right=V(1,0,0);right=vnorm(right);const fwd=vcross(upB,right);
   const hu=vnorm(vsub(head,neck));
   const fR=p('fA'),fL=p('fB');
-  return {hip,neck,upB,fwdB:fwd,upL:upB,fwdL:fwd,headUp:hu,headFwd:vcross(right,hu),
+  return {hip,neck,upB,fwdB:fwd,upL:upB,fwdL:fwd,headUp:hu,headFwd:vcross(hu,right),
     kR:p('kA'),fR,toeR:vadd(fR,vscale(fwd,6)),kL:p('kB'),fL,toeL:vadd(fL,vscale(fwd,6)),
     eR:p('eN'),hR:p('hN'),eL:p('eF'),hL:p('hF'),doll:true};
 }
@@ -339,7 +339,7 @@ function clipFor(e,A,dt){
     const t=e.st.t,f=t<.13?3+t/.13*8:11+4.5+4.5*Math.sin((t-.13)*5-Math.PI/2);
     return {P:placeAt(clipAt('running_slide',f,false,'center'),e.st.yaw,o),key:'slide',aim:true};
   }
-  if(st==='down'&&e.st.side===1&&e.grounded){
+  if(false&&st==='down'){ // knockdowns stay procedural: the clip starts mid-stumble and pops after a tumble
     const t=e.st.t,f=Math.min(45,20+t*42);
     return {P:placeAt(clipAt('fall_flat',f,false,'center'),e.bodyYaw,o),key:'down'};
   }

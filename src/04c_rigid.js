@@ -67,12 +67,14 @@ function rbStep(b,dt,samples,o){
   for(const s of samples){
     const r=vadd(vadd(vscale(C[0],s[0]*b.W/2),vscale(C[1],s[1]*b.H/2)),vscale(C[2],s[2]*b.D/2)),p=vadd(c,r);
     const i=Math.floor(p.x/T),j=Math.floor(p.y/T),k=Math.floor(p.z/T);
-    if(!solid(tile(i,j,k)))continue;
+    const tc=tile(i,j,k);if(!solid(tc))continue;
+    if(tc===STAIR&&!stairPt(i,j,k,p.x,p.y,p.z))continue;
     // the way out: the shallowest face of this block that opens onto air
     let n=null,dep=1e9;
     for(const [d,nn,ok] of [[p.y-j*T,V(0,-1,0),!solid(tile(i,j-1,k))],[(j+1)*T-p.y,V(0,1,0),!solid(tile(i,j+1,k))],[p.x-i*T,V(-1,0,0),!solid(tile(i-1,j,k))],
       [(i+1)*T-p.x,V(1,0,0),!solid(tile(i+1,j,k))],[p.z-k*T,V(0,0,-1),!solid(tile(i,j,k-1))],[(k+1)*T-p.z,V(0,0,1),!solid(tile(i,j,k+1))]])
       if(ok&&d<dep){dep=d;n=nn;}
+    if(tc===STAIR){const sp=stairPen(i,j,k,p);n=sp.n;dep=sp.dep;}
     if(!n){n=V(0,1,0);dep=(j+1)*T-p.y;}
     if(n.y>.7)ground=true;
     const key=n.x+','+n.y+','+n.z;corr[key]=Math.max(corr[key]||0,dep);

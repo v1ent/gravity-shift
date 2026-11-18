@@ -94,6 +94,7 @@ function lowObstacle(e,d,over){
   const [ci,ck]=frontCell(e,d,3);
   if(ci===Math.floor(e.x/T)&&ck===Math.floor(e.z/T))return null;
   const r0=Math.floor((e.y+1)/T);
+  if(tile(ci,r0,ck)===STAIR||tile(ci,r0+1,ck)===STAIR||tile(Math.floor(e.x/T),Math.floor((e.y-1)/T),Math.floor(e.z/T))===STAIR)return null; // stairs are walked, not vaulted
   let h=0;while(h<3&&solid(tile(ci,r0+h,ck)))h++;
   if(h<1||h>2)return null;
   const ly=(r0+h)*T;
@@ -228,7 +229,8 @@ function updateChar(e,dt){
     let gm=1;if(e.rocketJump&&e.rjFloat>0&&Math.abs(e.vy)<150){gm=.22;e.rjFloat-=dt;const dmp=1-dt*1.1;e.vx*=dmp;e.vz*=dmp;}
     e.vy-=G*gm*dt;e.vy=Math.max(e.vy,-MAXFALL);
     if(!e.grounded&&(e.fallStart===undefined||e.vy>=0))e.fallStart=e.y;
-    const landed=moveBody(e,dt);
+    e.canStep=e.grounded&&e.vy<=0&&!e.knocked&&!e.runJump;
+    const landed=moveBody(e,dt);e.canStep=false;
     e.grounded=landed||(e.vy<=0&&groundProbe(e));
     if(e.grounded)e.coyote=.1;else e.coyote-=dt;
     if(e.grounded&&!wasGround){
@@ -857,7 +859,7 @@ function updateDolls(dt){
       for(const l of d.links){const A=d.pts[l.a],B=d.pts[l.b],dx=B.x-A.x,dy=B.y-A.y,dz=B.z-A.z,dd=Math.hypot(dx,dy,dz)||1e-3,f=(dd-l.len)/dd*.5;
         A.x+=dx*f;A.y+=dy*f;A.z+=dz*f;B.x-=dx*f;B.y-=dy*f;B.z-=dz*f;}
       for(const p of d.pts){dollRadius(p);const i=Math.floor(p.x/T),j=Math.floor(p.y/T),k=Math.floor(p.z/T);
-        if(solid(tile(i,j,k))){
+        if(solid(tileAt(p.x,p.y,p.z))){
           const c=[[p.x-i*T,0,-1],[(i+1)*T-p.x,0,1],[p.y-j*T,1,-1],[(j+1)*T-p.y,1,1],[p.z-k*T,2,-1],[(k+1)*T-p.z,2,1]];
           let m=c[0];for(const q of c)if(q[0]<m[0])m=q;
           if(m[1]===0)p.x=m[2]<0?i*T-.1:(i+1)*T+.1;else if(m[1]===1){p.y=m[2]<0?j*T-.1:(j+1)*T+.1;if(m[2]>0){p.ox=p.x-(p.x-p.ox)*.5;p.oz=p.z-(p.z-p.oz)*.5;}}else p.z=m[2]<0?k*T-.1:(k+1)*T+.1;
