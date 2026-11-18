@@ -87,13 +87,19 @@ function rbStep(b,dt,samples,o){
   }
   for(const key in corr){const [x,y,z]=key.split(',').map(Number);c=vadd(c,vscale(V(x,y,z),corr[key]*.8));}
   // a little air drag on the spin; more while scraping along the floor
-  av=vscale(av,Math.pow(ground?.25:.85,dt));
+  av=vscale(av,Math.pow(ground?.25:.85,dt));{const l=vlen(av);if(l>11)av=vscale(av,11/l);}
   b.vx=v.x;b.vy=v.y;b.vz=v.z;b.av=av;
   b.x=c.x;b.z=c.z;b.y=c.y-b.h/2;rbBounds(b);
   // settle: slow and resting → square it up onto the face it lies on and sleep
   if((ground||b.propSupport)&&Math.hypot(b.vx,b.vy,b.vz)<14&&vlen(b.av)<.7){
     b.sleep+=dt;
-    if(b.sleep>.25){const sq=rbSnapQ(b.q);if(rbAngleTo(b.q,sq)<.2){b.q=qlerp(b.q,sq,Math.min(1,dt*10));if(rbAngleTo(b.q,sq)<.01){b.q=sq;rbBounds(b);b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;}}}
+    const sq=rbSnapQ(b.q),ang=rbAngleTo(b.q,sq);
+    if(ang<.1){ // a face is flat on the ground (within ~6°): square it up and sleep
+      if(b.sleep>.25){b.q=qlerp(b.q,sq,Math.min(1,dt*10));if(rbAngleTo(b.q,sq)<.01){b.q=sq;rbBounds(b);b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;}}
+    }else if(b.sleep<4){ // balanced on an edge or corner: stay awake and tip over onto the nearest face
+      let d=qmul(sq,qconj(b.q));if(d[3]<0)d=d.map(x=>-x);const l=Math.hypot(d[0],d[1],d[2]);
+      if(l>1e-4)b.av=vadd(b.av,vscale(V(d[0]/l,d[1]/l,d[2]/l),dt*(10+ang*14)));
+    }else{b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;} // truly wedged (against a wall or another box): let it rest
   }else b.sleep=0;
   return {imp,ground};
 }

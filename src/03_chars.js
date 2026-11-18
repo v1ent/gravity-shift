@@ -427,7 +427,7 @@ function meleeHit(e,fw,reach,height,already){
     if(b.dead||(already&&already.has(b)))continue;
     if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
       if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
-      if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),1.2);
+      if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),.5);
     }
   }
   for(const sp of spiders){
@@ -760,6 +760,32 @@ function drawLauncherModel(e,eb,hn,out,acc,al){
   for(let i=0;i<3;i++)wpart(F,(i-1)*len*.12,0,1.05,.8,.8,.3,i<n?hexRGB('#ff8a2a'):hexRGB('#2a1a14'),i<n?[.9,.4,.1]:null,null,al);
   wpart({o:ax(len*.8),u:fd,v:up,w:sd},0,1.7,0,1.4,.45,.45,acc,acc,null,al);                  // sight
 }
+// pump shotgun: stock and butt pad, receiver with ejection port and side shell carrier, barrel over the magazine tube,
+// sliding ribbed forend, perforated heat shield with glowing slots, bead sight. Origin = the gun hand on the grip.
+function drawShotgunModel(F,acc,al,pump){
+  const POLY=hexRGB('#20242f'),MET=hexRGB('#2c3346'),DK=hexRGB('#12151d'),OR=hexRGB('#ff8a2a'),p=(pump||0)*3;
+  wpart(F,-10.6,-.4,0,.8,4.2,1.8,DK,null,null,al);                     // butt pad
+  wpart(F,-7,-.05,0,6.2,2.7,1.6,POLY,null,null,al);                     // stock
+  wpart(F,-6.4,1.5,0,4.8,.6,1.3,POLY,null,null,al);                     // comb
+  wpart(F,-4.2,-1.25,0,1.4,.25,1.65,OR,[.25,.1,0],null,al);             // stock stripe
+  const gF={o:vadd(F.o,vadd(vscale(F.u,-.3),vscale(F.v,-1.8))),u:vnorm(vadd(F.u,vscale(F.v,.3))),v:vnorm(vsub(F.v,vscale(F.u,.3))),w:F.w};
+  wpart(gF,0,0,0,1.6,3.6,1.4,POLY,null,null,al);                        // pistol grip
+  wpart(F,3,1.3,0,6.6,2.6,1.9,MET,null,null,al);                        // receiver
+  wpart(F,3.6,1.7,.97,2.4,.8,.06,acc,acc,null,al);                      // ejection port glow
+  for(let i=0;i<4;i++)wpart(F,1.7+i*.95,1.1,-1.1,.6,1.2,.5,hexRGB('#c0392b'),[.18,.03,0],null,al); // side shells
+  wpart(F,1,-.3,0,2.1,.25,.6,DK,null,null,al);wpart(F,2.05,.15,0,.25,.9,.6,DK,null,null,al); // trigger guard
+  wpart(F,.8,0,0,.25,.8,.3,hexRGB('#3a4258'),null,null,al);             // trigger
+  const at=(u,v)=>vadd(F.o,vadd(vscale(F.u,u),vscale(F.v,v)));
+  drawTube(at(6.2,2),at(20.6,2),.62,MET,null,al);                       // barrel
+  drawTube(at(20.4,2),at(21.3,2),.8,DK,null,al);                        // muzzle
+  drawTube(at(6.2,.65),at(18.6,.65),.62,DK,null,al);                    // magazine tube
+  wpart(F,18.2,1.35,0,.9,2.5,1.5,DK,null,null,al);                      // barrel clamp
+  wpart(F,12.2-p,.95,0,5.2,2,2.2,OR,[.22,.09,0],null,al);               // forend
+  for(const du of [-1.6,-.5,.6,1.7])wpart(F,12.2-p+du,.95,0,.32,2.15,2.35,DK,null,null,al); // grip ribs
+  wpart(F,13.2,2.75,0,11,.35,1.3,DK,null,null,al);                      // heat shield
+  for(const du of [9.5,13.2,16.9])wpart(F,du,2.95,0,1.3,.1,.8,acc,acc,null,al);
+  wpart(F,20.9,2.85,0,.45,.45,.45,acc,acc,null,al);                     // bead
+}
 function drawWeaponsSK(e,P,SK,acc,al){
   const by=e.bodyYaw,rt=V(-Math.cos(by),0,Math.sin(by));
   if(P.gunOn&&e.weapon!=='shotgun'){
@@ -770,13 +796,12 @@ function drawWeaponsSK(e,P,SK,acc,al){
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
     drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);
   }else if(P.gunOn){ // shotgun, both hands
-    const dir=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR)),g0=vsub(SK.hR,vscale(dir,3)),gm=vadd(g0,vscale(dir,22*CHAR_SCALE*.8));
-    drawSeg(vsub(g0,vscale(dir,5)),gm,4,hexRGB('#2b3148'),null,acc,al);
-    drawSeg(vadd(g0,vscale(dir,3)),vadd(gm,vscale(dir,2)),5.5,hexRGB('#3b2a22'),null,[1,.55,.2],al);
-    const pump=vadd(g0,vscale(dir,10-e.recoil*3));drawSeg(vadd(pump,V(0,-2.5,0)),vadd(pump,vadd(vscale(dir,6),V(0,-2.5,0))),4,hexRGB('#ff8a2a'),[.3,.12,0],null,al);
+    const u=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR));let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?V(1,0,0):vnorm(v);
+    const F={o:vadd(SK.hR,vadd(vscale(u,.5),vscale(v,1.4))),u,v,w:vcross(u,v)};
+    drawShotgunModel(F,acc,al,e.recoil);
   }else if(e.weapon==='shotgun'){ // slung across the back
-    const b=vadd(SK.sh,vadd(vscale(V(Math.sin(by),0,Math.cos(by)),-6),V(0,0,0)));
-    drawSeg(vadd(b,vadd(vscale(rt,6),V(0,9,0))),vadd(b,vadd(vscale(rt,-6),V(0,-11,0))),4,hexRGB('#2b3148'),null,acc,al);
+    const fw=V(Math.sin(by),0,Math.cos(by)),b=vadd(SK.sh,vscale(fw,-6.5)),u=vnorm(vadd(vscale(rt,-.55),V(0,-1,0))),v=vscale(fw,-1);
+    drawShotgunModel({o:vsub(b,vscale(u,5)),u,v,w:vcross(u,v)},acc,al,0);
   }
   if(!(P.gunOn&&e.weapon!=='shotgun')&&SK.uR){ // pistol holstered on the right thigh
     const d=vnorm(vsub(SK.kR,SK.uR)),F={o:vadd(vadd(SK.uR,vscale(d,6)),vscale(rt,4.2)),u:d,v:vnorm(vsub(V(Math.sin(by),0,Math.cos(by)),vscale(d,vdot(V(Math.sin(by),0,Math.cos(by)),d)))),w:null};

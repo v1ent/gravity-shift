@@ -1229,7 +1229,7 @@ function meleeHit(e,fw,reach,height,already){
     if(b.dead||(already&&already.has(b)))continue;
     if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
       if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
-      if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),1.2);
+      if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),.5);
     }
   }
   for(const sp of spiders){
@@ -1562,6 +1562,32 @@ function drawLauncherModel(e,eb,hn,out,acc,al){
   for(let i=0;i<3;i++)wpart(F,(i-1)*len*.12,0,1.05,.8,.8,.3,i<n?hexRGB('#ff8a2a'):hexRGB('#2a1a14'),i<n?[.9,.4,.1]:null,null,al);
   wpart({o:ax(len*.8),u:fd,v:up,w:sd},0,1.7,0,1.4,.45,.45,acc,acc,null,al);                  // sight
 }
+// pump shotgun: stock and butt pad, receiver with ejection port and side shell carrier, barrel over the magazine tube,
+// sliding ribbed forend, perforated heat shield with glowing slots, bead sight. Origin = the gun hand on the grip.
+function drawShotgunModel(F,acc,al,pump){
+  const POLY=hexRGB('#20242f'),MET=hexRGB('#2c3346'),DK=hexRGB('#12151d'),OR=hexRGB('#ff8a2a'),p=(pump||0)*3;
+  wpart(F,-10.6,-.4,0,.8,4.2,1.8,DK,null,null,al);                     // butt pad
+  wpart(F,-7,-.05,0,6.2,2.7,1.6,POLY,null,null,al);                     // stock
+  wpart(F,-6.4,1.5,0,4.8,.6,1.3,POLY,null,null,al);                     // comb
+  wpart(F,-4.2,-1.25,0,1.4,.25,1.65,OR,[.25,.1,0],null,al);             // stock stripe
+  const gF={o:vadd(F.o,vadd(vscale(F.u,-.3),vscale(F.v,-1.8))),u:vnorm(vadd(F.u,vscale(F.v,.3))),v:vnorm(vsub(F.v,vscale(F.u,.3))),w:F.w};
+  wpart(gF,0,0,0,1.6,3.6,1.4,POLY,null,null,al);                        // pistol grip
+  wpart(F,3,1.3,0,6.6,2.6,1.9,MET,null,null,al);                        // receiver
+  wpart(F,3.6,1.7,.97,2.4,.8,.06,acc,acc,null,al);                      // ejection port glow
+  for(let i=0;i<4;i++)wpart(F,1.7+i*.95,1.1,-1.1,.6,1.2,.5,hexRGB('#c0392b'),[.18,.03,0],null,al); // side shells
+  wpart(F,1,-.3,0,2.1,.25,.6,DK,null,null,al);wpart(F,2.05,.15,0,.25,.9,.6,DK,null,null,al); // trigger guard
+  wpart(F,.8,0,0,.25,.8,.3,hexRGB('#3a4258'),null,null,al);             // trigger
+  const at=(u,v)=>vadd(F.o,vadd(vscale(F.u,u),vscale(F.v,v)));
+  drawTube(at(6.2,2),at(20.6,2),.62,MET,null,al);                       // barrel
+  drawTube(at(20.4,2),at(21.3,2),.8,DK,null,al);                        // muzzle
+  drawTube(at(6.2,.65),at(18.6,.65),.62,DK,null,al);                    // magazine tube
+  wpart(F,18.2,1.35,0,.9,2.5,1.5,DK,null,null,al);                      // barrel clamp
+  wpart(F,12.2-p,.95,0,5.2,2,2.2,OR,[.22,.09,0],null,al);               // forend
+  for(const du of [-1.6,-.5,.6,1.7])wpart(F,12.2-p+du,.95,0,.32,2.15,2.35,DK,null,null,al); // grip ribs
+  wpart(F,13.2,2.75,0,11,.35,1.3,DK,null,null,al);                      // heat shield
+  for(const du of [9.5,13.2,16.9])wpart(F,du,2.95,0,1.3,.1,.8,acc,acc,null,al);
+  wpart(F,20.9,2.85,0,.45,.45,.45,acc,acc,null,al);                     // bead
+}
 function drawWeaponsSK(e,P,SK,acc,al){
   const by=e.bodyYaw,rt=V(-Math.cos(by),0,Math.sin(by));
   if(P.gunOn&&e.weapon!=='shotgun'){
@@ -1572,13 +1598,12 @@ function drawWeaponsSK(e,P,SK,acc,al){
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
     drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);
   }else if(P.gunOn){ // shotgun, both hands
-    const dir=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR)),g0=vsub(SK.hR,vscale(dir,3)),gm=vadd(g0,vscale(dir,22*CHAR_SCALE*.8));
-    drawSeg(vsub(g0,vscale(dir,5)),gm,4,hexRGB('#2b3148'),null,acc,al);
-    drawSeg(vadd(g0,vscale(dir,3)),vadd(gm,vscale(dir,2)),5.5,hexRGB('#3b2a22'),null,[1,.55,.2],al);
-    const pump=vadd(g0,vscale(dir,10-e.recoil*3));drawSeg(vadd(pump,V(0,-2.5,0)),vadd(pump,vadd(vscale(dir,6),V(0,-2.5,0))),4,hexRGB('#ff8a2a'),[.3,.12,0],null,al);
+    const u=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR));let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?V(1,0,0):vnorm(v);
+    const F={o:vadd(SK.hR,vadd(vscale(u,.5),vscale(v,1.4))),u,v,w:vcross(u,v)};
+    drawShotgunModel(F,acc,al,e.recoil);
   }else if(e.weapon==='shotgun'){ // slung across the back
-    const b=vadd(SK.sh,vadd(vscale(V(Math.sin(by),0,Math.cos(by)),-6),V(0,0,0)));
-    drawSeg(vadd(b,vadd(vscale(rt,6),V(0,9,0))),vadd(b,vadd(vscale(rt,-6),V(0,-11,0))),4,hexRGB('#2b3148'),null,acc,al);
+    const fw=V(Math.sin(by),0,Math.cos(by)),b=vadd(SK.sh,vscale(fw,-6.5)),u=vnorm(vadd(vscale(rt,-.55),V(0,-1,0))),v=vscale(fw,-1);
+    drawShotgunModel({o:vsub(b,vscale(u,5)),u,v,w:vcross(u,v)},acc,al,0);
   }
   if(!(P.gunOn&&e.weapon!=='shotgun')&&SK.uR){ // pistol holstered on the right thigh
     const d=vnorm(vsub(SK.kR,SK.uR)),F={o:vadd(vadd(SK.uR,vscale(d,6)),vscale(rt,4.2)),u:d,v:vnorm(vsub(V(Math.sin(by),0,Math.cos(by)),vscale(d,vdot(V(Math.sin(by),0,Math.cos(by)),d)))),w:null};
@@ -1887,8 +1912,8 @@ function explode(c,o){
     const f=1-d/(RAD*1.1);
     if(p.kind==='barrel'){p.lastHitBy=src;p.hits=3;p.fuse=Math.min(p.fuse===undefined?99:p.fuse,.12+rnd()*.12);continue;}
     const dir=vnorm(V(pc.x-c.x,pc.y-c.y+20,pc.z-c.z));
-    p.vx+=dir.x*o.push*f/Math.pow(p.m,.6);p.vy+=dir.y*o.push*f/Math.pow(p.m,.6);p.vz+=dir.z*o.push*f/Math.pow(p.m,.6);p.grounded=false;p.kickedBy=src;p.kickT=world.time;
-    if(p.rb){const hp=V(clamp(c.x,p.x-p.w/2,p.x+p.w/2),clamp(c.y,p.y,p.y+p.h),clamp(c.z,p.z-p.d/2,p.z+p.d/2));rbSpin(p,hp,vscale(dir,o.push*f*Math.pow(p.m,.4)),1.3);p.av=vadd(p.av,V((rnd()-.5)*f*3,(rnd()-.5)*f*3,(rnd()-.5)*f*3));}
+    const pk=o.push*f*.6/Math.pow(Math.max(p.m,1),.6);p.vx+=dir.x*pk;p.vy+=dir.y*pk;p.vz+=dir.z*pk;{const s=Math.hypot(p.vx,p.vy,p.vz);if(s>560){p.vx*=560/s;p.vy*=560/s;p.vz*=560/s;}}p.grounded=false;p.kickedBy=src;p.kickT=world.time;
+    if(p.rb){const hp=V(clamp(c.x,p.x-p.w/2,p.x+p.w/2),clamp(c.y,p.y,p.y+p.h),clamp(c.z,p.z-p.d/2,p.z+p.d/2));rbSpin(p,hp,vscale(dir,pk*p.m),.45);p.av=vadd(p.av,V((rnd()-.5)*f,(rnd()-.5)*f,(rnd()-.5)*f));}
   }
   // visuals: centred a little off the surface it hit, so walls and floors don't swallow half of the fire and smoke
   const vc=offSurface(c,26);
@@ -1920,7 +1945,7 @@ const KINDS={
 function makeProp(x,y,z,kind,rot){
   const k=KINDS[kind];let w=k.w,d=k.d;if(rot){const t=w;w=d;d=t;}
   const b={kind,x,y,z,w,h:k.h,d,m:k.m,vx:0,vy:0,vz:0,grounded:false,dead:false,col:hexRGB(k.col),edge:hexRGB(k.edge),kickedBy:null,kickT:-99};
-  if(kind!=='medkit'&&kind!=='shotgun')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
+  if(kind!=='shotgun')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
   return b;
 }
 function hurtBarrel(b,src,n){
@@ -2054,17 +2079,11 @@ function spawnDrop(kind){
 function drawProp(b){
   if(!b.rb){ // pickups stay upright
     const c=V(b.x,b.y+b.h/2,b.z);
-    if(b.kind==='medkit'){
-      const pl=.6+.4*Math.sin(world.time*6);
-      drawBox(c,b.w,b.h,b.d,b.col,[.1*pl,.25*pl,.12*pl],b.edge);
-      drawBox(V(b.x,b.y+b.h+.5,b.z),14,1.5,4,hexRGB('#1fd16b'),[.1,.6,.3],null);drawBox(V(b.x,b.y+b.h+.5,b.z),4,1.5,14,hexRGB('#1fd16b'),[.1,.6,.3],null);
-    }else if(b.kind==='shotgun'){
+    if(b.kind==='shotgun'){
       const pl=.6+.4*Math.sin(world.time*4);
       drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.25*pl,.1*pl,0],b.edge);
-      const yaw=world.time*1.6,hy=b.y+16+Math.sin(world.time*2.5)*2.5;
-      drawBox(V(b.x,hy,b.z),30,4.5,4.5,hexRGB('#3b2a22'),null,[1,.55,.2],yaw);
-      drawBox(V(b.x+Math.sin(yaw)*4,hy-3.5,b.z+Math.cos(yaw)*4),12,3.5,5,hexRGB('#ff8a2a'),[.35,.15,0],null,yaw);
-      drawBox(V(b.x-Math.sin(yaw+Math.PI/2)*12,hy-2,b.z-Math.cos(yaw+Math.PI/2)*12),8,7,4,hexRGB('#2b3148'),null,[1,.55,.2],yaw);
+      const yaw=world.time*1.6,hy=b.y+16+Math.sin(world.time*2.5)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
+      drawShotgunModel({o:vsub(V(b.x,hy,b.z),vscale(u,5)),u,v,w:vcross(u,v)},[1,.55,.2],1,0);
     }else drawBox(c,b.w,b.h,b.d,b.col,null,b.edge);
     return;
   }
@@ -2074,6 +2093,7 @@ function drawProp(b){
   let em=null;
   if(b.kind==='barrel'){if(b.hits>=2)em=[.4*(.6+.4*Math.sin(world.time*25)),.12,0];if(b.fuse!==undefined&&b.fuse<1.5&&Math.sin(world.time*(b.fuse<.6?22:10))>0)em=[.8,.75,.5];}
   if(b.kind==='pallet')em=[.02,.03,.05];
+  if(b.kind==='medkit'){const pl=.6+.4*Math.sin(world.time*6);em=[.1*pl,.25*pl,.12*pl];}
   rbDraw(b,V(0,0,0),V(W,H,D),b.kind==='spool'?hexRGB('#2a1c0e'):b.col,em,b.kind==='spool'?null:b.edge);
   gl.disable(gl.POLYGON_OFFSET_FILL);
   drawPropDetail(b,W,H,D);
@@ -2091,6 +2111,7 @@ function drawPropDetail(b,W,H,D){
   else if(k==='stack'||k==='tallcrate'){const n=k==='stack'?3:2;for(let i=1;i<n;i++)band(i/n,2.5,hexRGB('#2a1c0b'),null,1.8);for(let i=0;i<n;i++)band((i+.5)/n,1.5,hexRGB('#ffb020'),[.18,.11,0],1.2);}
   else if(k==='pallet'){band(.06,L*.12,hexRGB('#6b4a1c'),null,1.8);for(const t of [.4,.7])band(t,1.2,hexRGB('#8fb4d9'),[.06,.09,.14],1.2);}
   else if(k==='barrier'){for(let i=0;i<4;i++)band(.125+i*.25,L*.12,i%2?hexRGB('#ffcc33'):hexRGB('#1a1a1a'),i%2?[.25,.18,0]:null,1.2);}
+  else if(k==='medkit'){const g=hexRGB('#1fd16b');rbDraw(b,V(0,H/2+.5,0),V(W*.6,1.4,D*.17),g,[.1,.6,.3],null);rbDraw(b,V(0,H/2+.5,0),V(W*.17,1.4,D*.6),g,[.1,.6,.3],null);}
   else if(k==='spool'){band(.06,L*.12,hexRGB('#9a6a32'),null,2);band(.94,L*.12,hexRGB('#9a6a32'),null,2);band(.5,L*.6,hexRGB('#ff8a2a'),[.2,.08,0],.8);}
 }
 // your own rocket at your feet: always a launch. Timing decides the price.
@@ -2431,13 +2452,19 @@ function rbStep(b,dt,samples,o){
   }
   for(const key in corr){const [x,y,z]=key.split(',').map(Number);c=vadd(c,vscale(V(x,y,z),corr[key]*.8));}
   // a little air drag on the spin; more while scraping along the floor
-  av=vscale(av,Math.pow(ground?.25:.85,dt));
+  av=vscale(av,Math.pow(ground?.25:.85,dt));{const l=vlen(av);if(l>11)av=vscale(av,11/l);}
   b.vx=v.x;b.vy=v.y;b.vz=v.z;b.av=av;
   b.x=c.x;b.z=c.z;b.y=c.y-b.h/2;rbBounds(b);
   // settle: slow and resting → square it up onto the face it lies on and sleep
   if((ground||b.propSupport)&&Math.hypot(b.vx,b.vy,b.vz)<14&&vlen(b.av)<.7){
     b.sleep+=dt;
-    if(b.sleep>.25){const sq=rbSnapQ(b.q);if(rbAngleTo(b.q,sq)<.2){b.q=qlerp(b.q,sq,Math.min(1,dt*10));if(rbAngleTo(b.q,sq)<.01){b.q=sq;rbBounds(b);b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;}}}
+    const sq=rbSnapQ(b.q),ang=rbAngleTo(b.q,sq);
+    if(ang<.1){ // a face is flat on the ground (within ~6°): square it up and sleep
+      if(b.sleep>.25){b.q=qlerp(b.q,sq,Math.min(1,dt*10));if(rbAngleTo(b.q,sq)<.01){b.q=sq;rbBounds(b);b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;}}
+    }else if(b.sleep<4){ // balanced on an edge or corner: stay awake and tip over onto the nearest face
+      let d=qmul(sq,qconj(b.q));if(d[3]<0)d=d.map(x=>-x);const l=Math.hypot(d[0],d[1],d[2]);
+      if(l>1e-4)b.av=vadd(b.av,vscale(V(d[0]/l,d[1]/l,d[2]/l),dt*(10+ang*14)));
+    }else{b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;} // truly wedged (against a wall or another box): let it rest
   }else b.sleep=0;
   return {imp,ground};
 }

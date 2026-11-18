@@ -249,8 +249,8 @@ function explode(c,o){
     const f=1-d/(RAD*1.1);
     if(p.kind==='barrel'){p.lastHitBy=src;p.hits=3;p.fuse=Math.min(p.fuse===undefined?99:p.fuse,.12+rnd()*.12);continue;}
     const dir=vnorm(V(pc.x-c.x,pc.y-c.y+20,pc.z-c.z));
-    p.vx+=dir.x*o.push*f/Math.pow(p.m,.6);p.vy+=dir.y*o.push*f/Math.pow(p.m,.6);p.vz+=dir.z*o.push*f/Math.pow(p.m,.6);p.grounded=false;p.kickedBy=src;p.kickT=world.time;
-    if(p.rb){const hp=V(clamp(c.x,p.x-p.w/2,p.x+p.w/2),clamp(c.y,p.y,p.y+p.h),clamp(c.z,p.z-p.d/2,p.z+p.d/2));rbSpin(p,hp,vscale(dir,o.push*f*Math.pow(p.m,.4)),1.3);p.av=vadd(p.av,V((rnd()-.5)*f*3,(rnd()-.5)*f*3,(rnd()-.5)*f*3));}
+    const pk=o.push*f*.6/Math.pow(Math.max(p.m,1),.6);p.vx+=dir.x*pk;p.vy+=dir.y*pk;p.vz+=dir.z*pk;{const s=Math.hypot(p.vx,p.vy,p.vz);if(s>560){p.vx*=560/s;p.vy*=560/s;p.vz*=560/s;}}p.grounded=false;p.kickedBy=src;p.kickT=world.time;
+    if(p.rb){const hp=V(clamp(c.x,p.x-p.w/2,p.x+p.w/2),clamp(c.y,p.y,p.y+p.h),clamp(c.z,p.z-p.d/2,p.z+p.d/2));rbSpin(p,hp,vscale(dir,pk*p.m),.45);p.av=vadd(p.av,V((rnd()-.5)*f,(rnd()-.5)*f,(rnd()-.5)*f));}
   }
   // visuals: centred a little off the surface it hit, so walls and floors don't swallow half of the fire and smoke
   const vc=offSurface(c,26);
@@ -282,7 +282,7 @@ const KINDS={
 function makeProp(x,y,z,kind,rot){
   const k=KINDS[kind];let w=k.w,d=k.d;if(rot){const t=w;w=d;d=t;}
   const b={kind,x,y,z,w,h:k.h,d,m:k.m,vx:0,vy:0,vz:0,grounded:false,dead:false,col:hexRGB(k.col),edge:hexRGB(k.edge),kickedBy:null,kickT:-99};
-  if(kind!=='medkit'&&kind!=='shotgun')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
+  if(kind!=='shotgun')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
   return b;
 }
 function hurtBarrel(b,src,n){
@@ -416,17 +416,11 @@ function spawnDrop(kind){
 function drawProp(b){
   if(!b.rb){ // pickups stay upright
     const c=V(b.x,b.y+b.h/2,b.z);
-    if(b.kind==='medkit'){
-      const pl=.6+.4*Math.sin(world.time*6);
-      drawBox(c,b.w,b.h,b.d,b.col,[.1*pl,.25*pl,.12*pl],b.edge);
-      drawBox(V(b.x,b.y+b.h+.5,b.z),14,1.5,4,hexRGB('#1fd16b'),[.1,.6,.3],null);drawBox(V(b.x,b.y+b.h+.5,b.z),4,1.5,14,hexRGB('#1fd16b'),[.1,.6,.3],null);
-    }else if(b.kind==='shotgun'){
+    if(b.kind==='shotgun'){
       const pl=.6+.4*Math.sin(world.time*4);
       drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.25*pl,.1*pl,0],b.edge);
-      const yaw=world.time*1.6,hy=b.y+16+Math.sin(world.time*2.5)*2.5;
-      drawBox(V(b.x,hy,b.z),30,4.5,4.5,hexRGB('#3b2a22'),null,[1,.55,.2],yaw);
-      drawBox(V(b.x+Math.sin(yaw)*4,hy-3.5,b.z+Math.cos(yaw)*4),12,3.5,5,hexRGB('#ff8a2a'),[.35,.15,0],null,yaw);
-      drawBox(V(b.x-Math.sin(yaw+Math.PI/2)*12,hy-2,b.z-Math.cos(yaw+Math.PI/2)*12),8,7,4,hexRGB('#2b3148'),null,[1,.55,.2],yaw);
+      const yaw=world.time*1.6,hy=b.y+16+Math.sin(world.time*2.5)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
+      drawShotgunModel({o:vsub(V(b.x,hy,b.z),vscale(u,5)),u,v,w:vcross(u,v)},[1,.55,.2],1,0);
     }else drawBox(c,b.w,b.h,b.d,b.col,null,b.edge);
     return;
   }
@@ -436,6 +430,7 @@ function drawProp(b){
   let em=null;
   if(b.kind==='barrel'){if(b.hits>=2)em=[.4*(.6+.4*Math.sin(world.time*25)),.12,0];if(b.fuse!==undefined&&b.fuse<1.5&&Math.sin(world.time*(b.fuse<.6?22:10))>0)em=[.8,.75,.5];}
   if(b.kind==='pallet')em=[.02,.03,.05];
+  if(b.kind==='medkit'){const pl=.6+.4*Math.sin(world.time*6);em=[.1*pl,.25*pl,.12*pl];}
   rbDraw(b,V(0,0,0),V(W,H,D),b.kind==='spool'?hexRGB('#2a1c0e'):b.col,em,b.kind==='spool'?null:b.edge);
   gl.disable(gl.POLYGON_OFFSET_FILL);
   drawPropDetail(b,W,H,D);
@@ -453,6 +448,7 @@ function drawPropDetail(b,W,H,D){
   else if(k==='stack'||k==='tallcrate'){const n=k==='stack'?3:2;for(let i=1;i<n;i++)band(i/n,2.5,hexRGB('#2a1c0b'),null,1.8);for(let i=0;i<n;i++)band((i+.5)/n,1.5,hexRGB('#ffb020'),[.18,.11,0],1.2);}
   else if(k==='pallet'){band(.06,L*.12,hexRGB('#6b4a1c'),null,1.8);for(const t of [.4,.7])band(t,1.2,hexRGB('#8fb4d9'),[.06,.09,.14],1.2);}
   else if(k==='barrier'){for(let i=0;i<4;i++)band(.125+i*.25,L*.12,i%2?hexRGB('#ffcc33'):hexRGB('#1a1a1a'),i%2?[.25,.18,0]:null,1.2);}
+  else if(k==='medkit'){const g=hexRGB('#1fd16b');rbDraw(b,V(0,H/2+.5,0),V(W*.6,1.4,D*.17),g,[.1,.6,.3],null);rbDraw(b,V(0,H/2+.5,0),V(W*.17,1.4,D*.6),g,[.1,.6,.3],null);}
   else if(k==='spool'){band(.06,L*.12,hexRGB('#9a6a32'),null,2);band(.94,L*.12,hexRGB('#9a6a32'),null,2);band(.5,L*.6,hexRGB('#ff8a2a'),[.2,.08,0],.8);}
 }
 // your own rocket at your feet: always a launch. Timing decides the price.
