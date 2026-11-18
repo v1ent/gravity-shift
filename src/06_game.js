@@ -1,7 +1,7 @@
 // =====================================================================
 //  GAME — world state, gravity turns, camera, input, render, HUD, loop
 // =====================================================================
-const world={rotCD:0,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],noises:[],spiderT:14,seedLabel:''};
+const world={rotCD:0,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],arQ:[],noises:[],spiderT:14,seedLabel:''};
 let gameState='menu',winner=null,paused=false;
 const cam={yaw:0,pitch:-.15,pos:V(0,0,0),fwd:V(0,0,1)};
 
@@ -114,9 +114,14 @@ function playerInput(first){
   c.jump=first&&!!pressed[' '];c.jumpHeld=!!keys[' '];c.grab=!!keys[' '];
   c.sprint=!!keys['shift'];c.crouch=!!keys['c'];c.crouchPressed=first&&!!pressed['c'];
   c.fire=mouseDown;c.fireClick=first&&!!pressed['lmb'];c.alt=mouseRight;c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
-  c.swap=first&&!!(pressed['wheel']||pressed['q']);c.select=first?(pressed['1']?'pistol':pressed['2']?'shotgun':null):null;
+  c.swap=first&&!!(pressed['wheel']||pressed['q']);c.select=first?(pressed['1']?'pistol':pressed['2']?'shotgun':pressed['3']?'rifle':null):null;
+  // double-tap S / A / D: dodge
+  const tap=k=>{if(!(first&&pressed[k]))return false;const t=performance.now()/1000,l=dblTap[k]||-9;dblTap[k]=t;if(t-l<.3){dblTap[k]=-9;return true;}return false;};
+  c.dodge=tap('s')?'back':tap('a')?'left':tap('d')?'right':null;
+  c.wave=first&&!!pressed['t'];
   c.aimYaw=cam.yaw;c.aimPitch=cam.pitch;
 }
+const dblTap={};
 
 // ---------- camera ----------
 function updateCamera(){
@@ -161,6 +166,7 @@ function step(dt,first){
   world.medT-=dt;
   if(world.medT<=0){world.medT=13+rnd()*9;if(props.filter(b=>b.kind==='medkit'&&!b.dead).length<3)spawnDrop('medkit');}
   if(world.barrelQ.length&&world.time>=world.barrelQ[0]){world.barrelQ.shift();spawnDrop('barrel');}
+  world.arQ.sort((a,b)=>a-b);if(world.arQ.length&&world.time>=world.arQ[0]){world.arQ.shift();if(props.filter(q=>q.kind==='rifle'&&!q.dead).length<2)spawnDrop('rifle');}
   world.sgQ.sort((a,b)=>a-b);if(world.sgQ.length&&world.time>=world.sgQ[0]){world.sgQ.shift();if(props.filter(q=>q.kind==='shotgun'&&!q.dead).length<2)spawnDrop('shotgun');}
   world.noises=world.noises.filter(n=>world.time-n.t<.15);
   if(player&&!player.isBot)playerInput(first);
@@ -238,8 +244,8 @@ function drawHUD(){
   c.fillStyle='rgba(41,240,255,.15)';c.fillRect(24,H-52,170,10);
   c.fillStyle=p.hp>35?'#29f0ff':'#ff3f5a';c.fillRect(24,H-52,170*clamp(p.hp/100,0,1),10);
   c.fillStyle='rgba(157,255,58,.12)';c.fillRect(24,H-37,170,4);c.fillStyle=p.stam>.25?'#9dff3a':'#ff9a3a';c.fillRect(24,H-37,170*p.stam,4);
-  c.textAlign='right';c.fillStyle=p.weapon==='shotgun'?'#ff8a2a':'#ffcc33';c.fillText(p.reload>0?'RELOAD':`${p.weapon==='shotgun'?'SHOTGUN':'PISTOL'} ${p.ammo}/${magOf(p)}`,308,H-44);
-  if(p.hasShotgun){c.font='11px "Courier New",monospace';c.fillStyle='#778';const other=p.weapon==='shotgun'?`PISTOL ${p.stash.pistol}`:`SHOTGUN ${p.stash.shotgun}`;c.fillText(`wheel ⇅ ${other}`,308,H-84+0);c.font='bold 14px "Courier New",monospace';}
+  c.textAlign='right';c.fillStyle=WEAPON_COL[p.weapon];c.fillText(p.reload>0?'RELOAD':`${WEAPON_NAME[p.weapon]} ${p.ammo}/${magOf(p)}`,308,H-44);
+  {const own=ownedWeapons(p).filter(w=>w!==p.weapon);if(own.length){c.font='11px "Courier New",monospace';c.fillStyle='#778';c.fillText(`wheel ⇅ `+own.map(w=>`${WEAPON_NAME[w]} ${p.stash[w]}`).join('  '),308,H-84);c.font='bold 14px "Courier New",monospace';}}
   c.fillStyle='#ff8a2a';c.fillText(p.rreload>0?'LOADING':`ROCKETS ${'◆'.repeat(p.rockets)}${'◇'.repeat(RMAG-p.rockets)}`,308,H-22);
   c.textAlign='left';
   if(p.alive&&(p.hidden||p.crouchT>0)){
@@ -255,13 +261,21 @@ function drawHUD(){
   if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText('[E] KICK THE PANEL — TURN THE ARENA',W/2,H/2+70);c.globalAlpha=1;}}
   // scoreboard + feed
   c.textAlign='right';c.font='bold 13px "Courier New",monospace';
-  const sorted=!TH||TH.score?[...chars].sort((a,b)=>b.kills-a.kills):[];
-  if(sorted.length){
-  c.fillStyle='rgba(5,6,14,.7)';c.fillRect(W-196,12,184,22+sorted.length*18);
+  // one block per side: a team shows its averaged score, then its members
+  const rows=[];
+  if(!TH||TH.score){const seen=new Set(),sides=[];for(const q of chars){const k=q.team||q;if(seen.has(k))continue;seen.add(k);sides.push(q);}
+    sides.sort((a,b)=>sideScore(b)-sideScore(a));
+    for(const s of sides){const m=sideMembers(s).sort((a,b)=>b.kills-a.kills);
+      if(m.length>1){rows.push({team:true,col:s.color,name:'⚑ TEAM',score:sideScore(s)});for(const q of m)rows.push({q,sub:true});}
+      else rows.push({q:m[0]});}}
+  if(rows.length){
+  c.fillStyle='rgba(5,6,14,.7)';c.fillRect(W-196,12,184,22+rows.length*18);
   c.fillStyle='#889';c.fillText(`FRAGS / ${world.fragLimit||FRAG_LIMIT}`,W-20,28);
-  sorted.forEach((q,i)=>{c.fillStyle=q.color;c.textAlign='left';c.fillText((q===p?'▶ ':'  ')+q.name,W-188,48+i*18);c.textAlign='right';c.fillText(`${q.kills}  ${q.deaths}`,W-20,48+i*18);});
+  rows.forEach((r,i)=>{const y=48+i*18;
+    if(r.team){c.fillStyle=r.col;c.textAlign='left';c.fillText(r.name,W-188,y);c.textAlign='right';c.fillText(r.score.toFixed(1),W-20,y);return;}
+    const q=r.q;c.fillStyle=q.color;c.textAlign='left';c.fillText((q===p?'▶ ':'  ')+(r.sub?' ':'')+q.name,W-188,y);c.textAlign='right';c.fillText(`${q.kills}  ${q.deaths}`,W-20,y);});
   c.font='12px "Courier New",monospace';
-  feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+sorted.length*18+i*16);});c.globalAlpha=1;}
+  feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+rows.length*18+i*16);});c.globalAlpha=1;}
   // crosshair
   const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
   c.strokeStyle=hm?'#fff':'#29f0ff';c.lineWidth=2;c.beginPath();
@@ -272,9 +286,17 @@ function drawHUD(){
   c.textAlign='center';
   if(!locked&&gameState==='play'&&!paused){c.font='12px "Courier New",monospace';c.fillStyle='#889';c.fillText('click to capture the mouse',W/2,H-16);}
   if(!p.alive&&gameState==='play'){c.font='bold 26px "Courier New",monospace';c.fillStyle='#ff3f5a';c.fillText('SIGNAL LOST',W/2,H/2-40);c.font='14px "Courier New",monospace';c.fillStyle='#aab';c.fillText(`re-deploying in ${Math.max(0,p.respawn).toFixed(1)}s`,W/2,H/2-18);}
+  // alliance prompts
+  if(p.alive&&gameState==='play'&&!TUT.on){
+    c.font='bold 14px "Courier New",monospace';c.textAlign='center';
+    if(p.emote&&p.emote.kind==='wave'){c.fillStyle='#ccd';c.fillText('WAVING — an enemy who stands in front of you and presses T joins you',W/2,H/2+96);}
+    else if(p.emote&&p.emote.kind==='bow'){c.fillStyle=p.emote.partner.color;c.fillText(`⚑ FORMING AN ALLIANCE WITH ${p.emote.partner.name}…`,W/2,H/2+96);}
+    else{let w=null;for(const o of chars)if(o!==p&&o.alive&&o.emote&&o.emote.kind==='wave'&&canAlly(o,p)&&Math.hypot(o.x-p.x,o.z-p.z)<500){w=o;break;}
+      if(w){c.fillStyle=w.color;c.globalAlpha=.65+.35*Math.sin(world.time*6);c.fillText(inFrontOf(w,p)?`[T] ACCEPT ${w.name}'S ALLIANCE`:`⚑ ${w.name} OFFERS AN ALLIANCE — stand in front of them and press T`,W/2,H/2+96);c.globalAlpha=1;}}
+  }
   if(TUT.on)tutHUD(c);
   if(paused){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);}
-  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(winner===p?(TUT.on?'YOU WIN':'YOU WIN THE ARENA'):`${winner.name} WINS`,W/2,H/2-10);c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
+  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(winner===p||allied(winner,p)?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
   if(world.flash>0){c.fillStyle=`rgba(255,63,164,${world.flash*.3})`;c.fillRect(0,0,W,H);}
 }
 
@@ -316,10 +338,10 @@ function newMatch(seed){
   for(let i=0;i<cfg.bots;i++)chars.push(makeChar(roster[i][0],roster[i][1],true));
   player=chars[0];
   props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];
-  spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');spawnDrop('shotgun');spawnDrop('shotgun');
+  spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');spawnDrop('rifle');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;
-  Object.assign(world,{rotCD:2,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],noises:[]});
+  Object.assign(world,{rotCD:2,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],arQ:[],noises:[]});
   cam.yaw=player.yaw;cam.pitch=-.12;
   gameState='play';winner=null;paused=false;{const pm=document.getElementById('pause');if(pm)pm.style.display='none';}
   const so=document.getElementById('seedOut');if(so)so.value=world.seedLabel;

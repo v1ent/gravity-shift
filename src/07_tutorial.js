@@ -315,7 +315,7 @@ function startTutorial(id){
   if(cfg.spawn)setCp(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z,cfg.yaw);
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   Object.assign(world,{rotCD:0,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,
-    medT:cfg.medkits?12:1e9,barrelQ:[],sgQ:[],noises:[],spiderT:1e9,fragLimit:cfg.frags||FRAG_LIMIT});
+    medT:cfg.medkits?12:1e9,barrelQ:[],sgQ:[],arQ:[],noises:[],spiderT:1e9,fragLimit:cfg.frags||FRAG_LIMIT});
   TUT.turns0=0;TUT.cpSec=0;
   if(cfg.spawn)player.yaw=cfg.yaw;
   if(cfg.snap)tutSnap(V(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z),cfg.yaw);

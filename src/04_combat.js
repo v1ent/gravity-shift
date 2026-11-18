@@ -9,7 +9,12 @@ const AIR_PUSH=2.6,GROUND_PUSH=.6,AIR_DMG=.3,FRAG_LIMIT=15;
 const RJ_WINDOW=.6,RJ_DMG_GROUND=60,RJ_DMG_PERFECT=18,RJ_DMG_AIR=21,RJ_VY_GROUND=760,RJ_VY_AIR=880,RJ_FLOAT=.75;
 // shotgun: found on the level, replaces the pistol until you die
 const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.11,SG_DMG=10,SG_RANGE=620;
-const magOf=e=>e.weapon==='shotgun'?SG_MAG:MAG,reloadOf=e=>e.weapon==='shotgun'?SG_RELOAD:RELOAD;
+// assault rifle: found on the level like the shotgun; full auto, 30 rounds
+const AR_MAG=30,AR_RELOAD=2.3,AR_CD=.095,AR_DMG=13,AR_HEAD=24;
+const magOf=e=>e.weapon==='shotgun'?SG_MAG:e.weapon==='rifle'?AR_MAG:MAG,reloadOf=e=>e.weapon==='shotgun'?SG_RELOAD:e.weapon==='rifle'?AR_RELOAD:RELOAD;
+const twoHanded=e=>e.weapon==='shotgun'||e.weapon==='rifle';
+const WEAPON_NAME={pistol:'PISTOL',shotgun:'SHOTGUN',rifle:'RIFLE'},WEAPON_COL={pistol:'#ffcc33',shotgun:'#ff8a2a',rifle:'#7cf0ff'};
+function ownedWeapons(e){const w=['pistol'];if(e.hasShotgun)w.push('shotgun');if(e.hasRifle)w.push('rifle');return w;}
 function noise(at,r,src){(world.noises||(world.noises=[])).push({x:at.x,y:at.y,z:at.z,r,src,t:world.time});}
 let bullets=[],rockets=[],props=[],parts=[],feed=[];
 
@@ -72,6 +77,7 @@ function sfx(kind,at){
   else if(kind==='reload'){env(.2,.08);osc('square',1400,900,.06);}
   else if(kind==='empty'){env(.12,.04);osc('square',2000,1800,.03);}
   else if(kind==='boom'){env(1,1.2);osc('sine',110,22,1.1);noise(1.1,500,.6,'lowpass');noise(.3,1800,.5);}
+  else if(kind==='rifle'){env(.18,.3);noise(.12,3200,.45);osc('square',260,90,.07);}
   else if(kind==='shotgun'){env(.6,.35);noise(.35,900,.6,'lowpass');osc('square',140,40,.18);noise(.12,2500,.5);}
   else if(kind==='pickup'){env(.3,.25);osc('square',600,1200,.12);osc('sine',900,1800,.2);}
   else if(kind==='spider'){env(.25,.35);noise(.35,3200,2,'bandpass');osc('sawtooth',1300,500,.2);}
@@ -97,17 +103,19 @@ function kill(e,src,dir){
   let killer=src;
   if((!killer||killer===e)&&e.lastHit&&world.time-e.lastHitT<5)killer=e.lastHit;
   if(killer&&killer.isSpider){feed.unshift({t:4,text:`SPIDER ✕ ${e.name}`,color:'#e8ecf2'});}
+  else if(killer&&killer!==e&&allied(killer,e)){killer.kills=Math.max(0,killer.kills-1);feed.unshift({t:4,text:`${killer.name} ✕ ${e.name}  TEAMKILL`,color:'#ff3f5a'});}
   else if(killer&&killer!==e){killer.kills++;feed.unshift({t:4,text:`${killer.name} ⌁ ${e.name}`,color:killer.color});}
   else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,text:`${e.name} ✕ self-destructed`,color:'#888'});}
   if(e.gibbed){spawnGibs(e,dir);e.gibbed=false;}else if(!spawnCorpse(e,dir))makeDoll(e,dir);sfx('die',e);
   for(let i=0;i<30;i++)addPart(e.x,e.y+30,e.z,(rnd()-.5)*500,rnd()*300,(rnd()-.5)*500,.9,e.col,3,'spark');
-  if(killer&&!killer.isSpider&&killer.kills>=(world.fragLimit||FRAG_LIMIT)&&gameState==='play'){gameState='over';winner=killer;}
+  if(killer&&!killer.isSpider&&sideScore(killer)>=(world.fragLimit||FRAG_LIMIT)&&gameState==='play'){gameState='over';winner=killer;}
 }
 
 // ---------- rifle ----------
 function fireRifle(e){
   e.aimT=1.6;
   if(e.weapon==='shotgun')return fireShotgun(e);
+  if(e.weapon==='rifle')return fireAR(e);
   reveal(e);noise(e,900,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
@@ -119,6 +127,20 @@ function fireRifle(e){
   for(let i=0;i<4;i++)addPart(m.x,m.y,m.z,d.x*200+(rnd()-.5)*150,d.y*200+(rnd()-.5)*150,d.z*200+(rnd()-.5)*150,.08,[1,.9,.6],9,'glow');
   sfx('shot',e);if(e===player)world.shake=Math.max(world.shake,1.5);
   if(e.ammo<=0)e.reload=RELOAD;
+}
+function fireAR(e){
+  reveal(e);noise(e,950,e);
+  const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
+  let d=vnorm(vsub(tgt,m));
+  // tight first shots, the spray opens up the longer you hold the trigger
+  const spread=.008+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.018:0)+(e.grounded?0:.03)+(e.isBot?.016:0)+(e.crouch?-.005:0);
+  d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
+  let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
+  bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:AR_DMG,head:AR_HEAD,fall:0,col:[.5,.95,1]});
+  e.fireCD=AR_CD;e.ammo--;e.recoil=.7;e.bloom=Math.min(.055,(e.bloom||0)+.0065);
+  for(let i=0;i<3;i++)addPart(m.x,m.y,m.z,d.x*220+(rnd()-.5)*150,d.y*220+(rnd()-.5)*150,d.z*220+(rnd()-.5)*150,.06,[.8,.95,1],8,'glow');
+  sfx('rifle',e);if(e===player)world.shake=Math.max(world.shake,1.1);
+  if(e.ammo<=0)e.reload=AR_RELOAD;
 }
 function fireShotgun(e){
   reveal(e);noise(e,1000,e);
@@ -270,6 +292,7 @@ const KINDS={
   big:{w:42,h:38,d:42,m:2.6,col:'#202842',edge:'#5a6a99'},barrel:{w:22,h:30,d:22,m:1.4,col:'#b4381f',edge:'#ffcc33'},
   container:{w:72,h:34,d:34,m:5,col:'#16424d',edge:'#29f0ff'},medkit:{w:24,h:18,d:24,m:.5,col:'#e9f1ff',edge:'#1fd16b'},
   shotgun:{w:26,h:14,d:26,m:.5,col:'#1b2030',edge:'#ff8a2a'},
+  rifle:{w:26,h:14,d:26,m:.5,col:'#1b2030',edge:'#7cf0ff'},
   // taller pieces that break up long sight lines
   locker:{w:22,h:62,d:18,m:1.8,col:'#2c3550',edge:'#29f0ff'},
   stack:{w:40,h:66,d:40,m:3.5,col:'#4a3418',edge:'#ffb020'},
@@ -282,7 +305,7 @@ const KINDS={
 function makeProp(x,y,z,kind,rot){
   const k=KINDS[kind];let w=k.w,d=k.d;if(rot){const t=w;w=d;d=t;}
   const b={kind,x,y,z,w,h:k.h,d,m:k.m,vx:0,vy:0,vz:0,grounded:false,dead:false,col:hexRGB(k.col),edge:hexRGB(k.edge),kickedBy:null,kickT:-99};
-  if(kind!=='shotgun')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
+  if(kind!=='shotgun'&&kind!=='rifle')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
   return b;
 }
 function hurtBarrel(b,src,n){
@@ -340,10 +363,20 @@ function charProps(e){
     const oz=Math.min(e.z+e.w/2,b.z+b.d/2)-Math.max(e.z-e.w/2,b.z-b.d/2);
     const oy=Math.min(e.y+e.h,b.y+b.h)-Math.max(e.y,b.y);
     if(ox<=0||oy<=0||oz<=0)continue;
-    if(b.kind==='shotgun'){
+    if(b.kind==='rifle'){
+      if(e.state!=='down'){
+        const had=e.hasRifle;
+        if(!had){e.hasRifle=true;e.stash[e.weapon]=e.ammo;e.weapon='rifle';e.ammo=AR_MAG;e.reload=0;}
+        else if(e.weapon==='rifle'){e.ammo=AR_MAG;e.reload=0;}else e.stash.rifle=AR_MAG;
+        b.dead=true;sfx('pickup',b);
+        world.arQ.push(world.time+28);
+        if(e===player)feed.unshift({t:3,text:had?'RIFLE AMMO REFILLED':'YOU PICKED UP A RIFLE',color:'#7cf0ff'});
+        for(let i=0;i<14;i++)addPart(b.x,b.y+8,b.z,(rnd()-.5)*160,rnd()*200,(rnd()-.5)*160,.5,[.5,.95,1],3,'spark');
+      }
+    }else if(b.kind==='shotgun'){
       if(e.state!=='down'){
         const had=e.hasShotgun;
-        if(!had){e.hasShotgun=true;e.stash.pistol=e.ammo;e.weapon='shotgun';e.ammo=SG_MAG;e.reload=0;}
+        if(!had){e.hasShotgun=true;e.stash[e.weapon]=e.ammo;e.weapon='shotgun';e.ammo=SG_MAG;e.reload=0;}
         else if(e.weapon==='shotgun'){e.ammo=SG_MAG;e.reload=0;}else e.stash.shotgun=SG_MAG;
         b.dead=true;sfx('pickup',b);
         world.sgQ.push(world.time+25);
@@ -421,6 +454,11 @@ function drawProp(b){
       drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.25*pl,.1*pl,0],b.edge);
       const yaw=world.time*1.6,hy=b.y+16+Math.sin(world.time*2.5)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
       drawShotgunModel({o:vsub(V(b.x,hy,b.z),vscale(u,5)),u,v,w:vcross(u,v)},[1,.55,.2],1,0);
+    }else if(b.kind==='rifle'){
+      const pl=.6+.4*Math.sin(world.time*4);
+      drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.05*pl,.2*pl,.25*pl],b.edge);
+      const yaw=world.time*1.6+1,hy=b.y+16+Math.sin(world.time*2.5+1)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
+      drawRifleModel({o:vsub(V(b.x,hy,b.z),vscale(u,4)),u,v,w:vcross(u,v)},[.5,.95,1],1,0);
     }else drawBox(c,b.w,b.h,b.d,b.col,null,b.edge);
     return;
   }

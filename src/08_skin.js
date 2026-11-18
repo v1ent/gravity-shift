@@ -277,10 +277,10 @@ function overlayAim(P,e,wGun,wRocket){
   const H=fkHeads(P),shR=H[bi.RightArm],shL=H[bi.LeftArm],mid=vscale(vadd(shR,shL),.5),up=V(0,1,0);
   const len=i=>vlen(vsub(B[i+1].head,B[i].head))*ARM_STRETCH;
   const lr=len(bi.RightArm)+len(bi.RightForeArm),ll=len(bi.LeftArm)+len(bi.LeftForeArm);
-  const sg=e.weapon==='shotgun';
+  const sg=twoHanded(e),rf=e.weapon==='rifle';
   // gun hand
   const g=sg?vadd(vadd(shR,vscale(aim,lr*.5)),vadd(vscale(rt,-2.5),V(0,-1.5,0))):vadd(vadd(mid,vscale(aim,lr*.8)),vadd(vscale(rt,1.5),V(0,-3,0)));
-  let tL=sg?vadd(g,vadd(vscale(aim,11*CHAR_SCALE),vadd(vscale(rt,-1.5),V(0,-1.5,0)))):vadd(g,vadd(vscale(aim,.8),vadd(vscale(rt,-2.6),V(0,-1.6,0))));
+  let tL=sg?vadd(g,vadd(vscale(aim,rf?9.3:11*CHAR_SCALE),vadd(vscale(rt,-1.5),V(0,-1.5,0)))):vadd(g,vadd(vscale(aim,.8),vadd(vscale(rt,-2.6),V(0,-1.6,0))));
   if(wRocket>0)tL=vadd(vscale(tL,1-wRocket),vscale(vadd(shL,vscale(aim,ll*.97)),wRocket));
   const solveArm=(s,tgt,w,pole)=>{
     if(w<.01)return;const ar=bi[s+'Arm'],fo=bi[s+'ForeArm'],ha=bi[s+'Hand'];
@@ -329,6 +329,21 @@ function clipFor(e,A,dt){
     const k=smooth(clamp((u-.55)/.45,0,1));P.hip=vadd(P.hip,V((s.s1.x-s.endHip.x)*k,0,(s.s1.z-s.endHip.z)*k));
     return {P,key:'climb'};
   }
+  if(st==='dodge'){
+    const s=e.st,D=DODGES[s.kind],f=D.f0+Math.min(s.t,D.dur)*30*D.rate;
+    const P=clipAt(D.clip,f,D.mirror,'none');
+    // dodge_right ends turned 93° to the side: turn it back so it finishes facing forward
+    if(D.fix)rotatePose(P,qaxis(V(0,1,0),D.fix*smooth(clamp((f-D.fix0)/(D.fix1-D.fix0),0,1))),V(P.hip.x,0,P.hip.z));
+    return {P:placeAt(P,s.yaw,o),key:'dodge'};
+  }
+  if(st==='climbup'&&e.st.vault&&e.st.over&&SKN.clips.vault){
+    // dive vault: hands on the obstacle, body over flat, landing; the clip's travel stretched to the real distance
+    const s=e.st,u=clamp(s.t,0,1),f=lerp(4,54,u),yaw=Math.atan2(s.d[0],s.d[1]);
+    if(!s.vz){const h=fr=>sampleClip('vault',fr/30,false).hip;s.vz=[h(4).z,h(54).z];}
+    const P=clipAt('vault',f,false,'clip'),dist=Math.hypot(s.s1.x-s.s0.x,s.s1.z-s.s0.z),k=dist/Math.max(1,s.vz[1]-s.vz[0]);
+    P.hip.z=(P.hip.z-s.vz[0])*k;P.hip.x*=.5;
+    return {P:placeAt(P,yaw,V(s.s0.x,Math.min(s.s0.y,s.s1.y),s.s0.z)),key:'vault'};
+  }
   if(st==='land'){
     const s=e.st,u=clamp(s.t/s.dur,0,1);let P;
     if(s.dur>=.6)P=clipAt('landing',lerp(18,70,u<.5?u*1.2:.6+(u-.5)*.8),false,'feet');
@@ -357,6 +372,10 @@ function clipFor(e,A,dt){
     return {P,key:'air',aim:true};
   }
   if(e.h<STAND_H-1)return null; // crouched: procedural
+  if(e.emote){ // waving hands / bowing to a new ally
+    const m=e.emote,P=m.kind==='wave'?clipAt('waving_hands',(m.t*30)%95,false,'feet'):clipAt('bow',Math.min(82,m.t/BOW_T*82),false,'feet');
+    A.legYaw=e.bodyYaw;A.act=null;A.air=0;return {P:placeAt(P,e.bodyYaw,o),key:'emote'};
+  }
   // landed after being in the air: a short knee bend
   if(A.air>.25&&!A.act)startAct(A,'hop',{mirror:false});
   A.air=0;
@@ -392,6 +411,10 @@ function clipFor(e,A,dt){
 // shotgun kick in the chest after a shot, rocket arm lowering after the launch
 function addRecoil(P,e){
   const bi=SKN.bi;
+  if(e.weapon==='rifle'){const t=world.time-(e.lastShot||-9);if(t<.18){ // full-auto shoulder shake from rifle_shooting
+    const S=sampleClip('rifle_shooting',(world.time*1.4)%1.2,false),S0=sampleClip('rifle_shooting',0,false),w=.9*(1-t/.18);
+    for(const nm of ['Spine','Spine1','Spine2','Neck']){const i=bi[nm];P.q[i]=qlerp(P.q[i],qmul(qmul(S.q[i],qconj(S0.q[i])),P.q[i]),w);}
+    const k=qaxis(V(-Math.cos(e.bodyYaw),0,Math.sin(e.bodyYaw)),.05*e.recoil);for(const nm of ['Spine2','Neck','Head'])P.q[bi[nm]]=qmul(k,P.q[bi[nm]]);}}
   if(e.weapon==='shotgun'){const t=world.time-(e.lastShot||-9);if(t<.55){const f0=SKN.clips.shotgun_shot,f=50+t*40;
     const S=sampleClip('shotgun_shot',f/FPS_C,false),S0=sampleClip('shotgun_shot',48/FPS_C,false),w=Math.sin(Math.PI*t/.55)*.8;
     for(const nm of ['Spine','Spine1','Spine2']){const i=bi[nm];P.q[i]=qlerp(P.q[i],qmul(qmul(S.q[i],qconj(S0.q[i])),P.q[i]),w);}}}
@@ -440,6 +463,19 @@ function reloadOverlay(P,e){
       armTo(P,H,'Left',tL,w,at(shL,-2,-12,-9));
       e._gunF=w>.3?F:null;
       if(u>=.12&&u<=.92&&s>.3&&s<.85)e._rItem={kind:'shell',p:vadd(tL,vscale(v3,.8)),d:u3};
+    }else if(e.weapon==='rifle'){
+      // rifle across the chest: thumb the magazine out, fresh one from the left hip, slap it in, pull the charging handle
+      const u3=vnorm(vadd(vadd(vscale(fw,.85),vscale(up,.35)),vscale(rt,-.25))),v3=orthTo(vadd(up,vscale(rt,.4)),u3),w3=vcross(u3,v3);
+      const hR=at(ch,8,-6,3.5),F={o:vadd(hR,vadd(vscale(u3,.5),vscale(v3,1.4))),u:u3,v:v3,w:w3,mag:u>.14&&u<.7};
+      const g=(a,b,c)=>vadd(F.o,vadd(vadd(vscale(u3,a),vscale(v3,b)),vscale(w3,c)));
+      const fore=g(9.2,.2,-.6),well=g(3.6,-1.4,0),pouch=at(hip,3,2,-7.5),handle=g(1,2.4,-1.4);
+      const tL=pathAt([[0,fore],[.1,vadd(well,vscale(v3,-1))],[.18,vadd(well,vscale(v3,-5))],[.36,pouch],[.44,pouch],[.6,vadd(well,vscale(v3,-6))],[.7,vadd(well,vscale(v3,-1))],[.8,handle],[.86,vadd(handle,vscale(u3,-2.5))],[1,fore]],u);
+      armTo(P,H,'Right',vsub(F.o,vadd(vscale(u3,.5),vscale(v3,1.4))),w,at(shR,-2,-12,9));
+      armTo(P,H,'Left',tL,w,at(shL,-3,-12,-8));
+      e._gunF=w>.3?F:null;
+      if(u>.38&&u<.7)e._rItem={kind:'rmag',p:tL,d:v3,u:u3};
+      if(u>.18&&!R.dropped){R.dropped=true;const p=vadd(well,vscale(v3,-5)),g2={x:p.x,y:p.y,z:p.z,vx:fw.x*20,vy:-50,vz:fw.z*20,m:.3,col:hexRGB('#12151d'),dark:hexRGB('#12151d'),glow:e.col,kind:'shard',life:4,bleed:0};
+        rbSetup(g2,1.6,4,1.2,qFromR([w3,v3,u3]));g2.y=p.y;g2.av=V((rnd()-.5)*6,(rnd()-.5)*6,(rnd()-.5)*6);gibs.push(g2);}
     }else{
       // pistol up in front of the chest, slide locked back; old magazine drops, a fresh one comes from the left hip and is slapped in
       const u3=vnorm(vadd(vadd(vscale(fw,.72),vscale(up,.5)),vscale(rt,-.35))),v3=orthTo(vadd(up,vscale(rt,.5)),u3),w3=vcross(u3,v3);
@@ -483,7 +519,7 @@ function charPose(e){
   if(SKN.clips&&e.alive){
     const r=clipFor(e,A,dt);
     if(r){P=r.P;src=r.key;
-      if(r.aim){const sg=e.weapon==='shotgun';const wG=sg?1:smooth(clamp(e.aimW||0,0,1));
+      if(r.aim){const sg=twoHanded(e);const wG=sg?1:smooth(clamp(e.aimW||0,0,1));
         const wR=e.rArm>0?clamp(e.rArm/.08,0,1)*clamp(e.rArm/.2,0,1):0;
         overlayAim(P,e,wG,wR);addRecoil(P,e);rocketLower(P,e);}}
     else{A.legYaw=e.legYaw;A.act=null;}
@@ -491,6 +527,7 @@ function charPose(e){
   }
   if(!P){P=procPose(J);src='proc';}
   if(SKN.clips&&e.alive&&(e.state==='normal'||e.state==='slide'))reloadOverlay(P,e);else{e._gunF=null;e._rItem=null;e._handsBusy=null;}
+  if(e.emote)e._handsBusy='emote'; // waving / bowing: guns away
   if(e.skSrc&&e.skSrc!==src)e.skFade=src==='act'||e.skSrc==='act'?.12:.2;e.skSrc=src;
   if(e.skFade>0&&e.skLast){e.skFade-=dt;P=blendPose(e.skLast,P,clamp(1-e.skFade/.2,0,1)*.65+.15);}
   e.skLast=P;

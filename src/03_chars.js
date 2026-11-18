@@ -12,10 +12,29 @@ const RMAG=3,RRELOAD=3.2,RFIRE_CD=.8;
 const THIGH=14,SHIN=14,TORSO=17,UPPER=11,FORE=11;
 let chars=[],player=null;
 
+// dodges: which clip, which frames, how fast; 'fb' is the travel used when the clips aren't loaded (headless)
+const DODGE_STAM=.3;
+const DODGES={
+  back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
+  right:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:false,fb:V(-83,0,-39),fix:93*Math.PI/180,fix0:56,fix1:96},
+  left:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:true,fb:V(83,0,-39),fix:-93*Math.PI/180,fix0:56,fix1:96},
+};
+for(const k in DODGES){const D=DODGES[k];D.dur=(D.f1-D.f0)/30/D.rate;}
+// travel so far (character space: +z forward, -x right)
+function dodgeDisp(D,t){
+  const u=clamp(t/D.dur,0,1);
+  if(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips[D.clip]){
+    const h=f=>sampleClip(D.clip,f/30,D.mirror).hip,a=h(D.f0),b=h(D.f0+u*(D.f1-D.f0));return V(b.x-a.x,0,b.z-a.z);}
+  return vscale(D.fb,smooth(u));
+}
+function startDodge(e,kind){
+  const D=DODGES[kind];e.state='dodge';e.st={kind,t:0,yaw:e.bodyYaw,prev:V(0,0,0)};
+  e.stam=Math.max(0,e.stam-DODGE_STAM);e.stamDelay=1;e.crouch=false;e.h=STAND_H;e.sprinting=false;e.poseBlend=.4;reveal(e);sfx('whoosh',e);
+}
 function makeChar(name,color,isBot){
   return {name,color,col:hexRGB(color),isBot,x:0,y:0,z:0,w:BODY_W,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:false,respawn:.5,
     grounded:false,coyote:0,jumpBuf:0,cut:false,yaw:0,pitch:0,bodyYaw:0,legYaw:0,state:'normal',st:{},grabCD:0,
-    weapon:'pistol',hasShotgun:false,stash:{pistol:MAG,shotgun:0},fireCD:0,ammo:MAG,reload:0,rockets:RMAG,rreload:0,rfireCD:0,stam:1,stamDelay:0,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,
+    weapon:'pistol',hasShotgun:false,hasRifle:false,stash:{pistol:MAG,shotgun:0,rifle:0},fireCD:0,ammo:MAG,reload:0,rockets:RMAG,rreload:0,rfireCD:0,stam:1,stamDelay:0,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,
     kickCD:0,stun:0,knocked:false,recoil:0,flinch:0,land:0,takeoff:0,phase:0,ba:0,bav:0,baAxis:0,tumbleHold:0,runW:0,accS:0,prevFwd:0,
     kills:0,deaths:0,invuln:0,lastHit:null,lastHitT:-99,poseBlend:1,pose:null,kickPrompt:false,rocketJump:false,airT:0,
     ctl:{mx:0,mz:0,jump:false,jumpHeld:false,sprint:false,crouch:false,crouchPressed:false,fire:false,alt:false,kick:false,reload:false,grab:false,aimYaw:0,aimPitch:0},ai:null};
@@ -34,7 +53,7 @@ function spawn(e){
     if(md>bs){bs=md;best=p;}
   }
   if(!best)best={x:L/2,y:T,z:L/2};
-  Object.assign(e,{x:best.x,y:best.y,z:best.z,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,stash:{pistol:MAG,shotgun:0},ammo:MAG,reload:0,rockets:RMAG,rreload:0,
+  Object.assign(e,{x:best.x,y:best.y,z:best.z,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,hasRifle:false,stash:{pistol:MAG,shotgun:0,rifle:0},ammo:MAG,reload:0,rockets:RMAG,rreload:0,
     stam:1,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,ba:0,bav:0,tumbleHold:0,invuln:1.2,poseBlend:1,land:.6,lastHit:null,rocketJump:false});
   // face the middle of the arena
   e.yaw=e.bodyYaw=e.legYaw=yawOf(L/2-e.x,L/2-e.z);e.pitch=0;e.ctl.aimYaw=e.yaw;e.ctl.aimPitch=0;
@@ -154,12 +173,14 @@ function updateChar(e,dt){
   e.invuln=Math.max(0,e.invuln-dt);e.fireCD-=dt;e.bloom=Math.max(0,(e.bloom||0)-dt*.06);e.clickBuf=Math.max(0,(e.clickBuf||0)-dt);e.rfireCD-=dt;e.grabCD-=dt;e.kickCD-=dt;e.stun-=dt;
   e.recoil=Math.max(0,e.recoil-dt*5);e.flinch=Math.max(0,e.flinch-dt*5);e.hitMarker=Math.max(0,(e.hitMarker||0)-dt);
   const ctrl=e.stun<=0&&e.state!=='down'&&e.state!=='getup';
+  updateEmote(e,c,ctrl,dt);
   let mx=ctrl?c.mx:0,mz=ctrl?c.mz:0;const mag=Math.hypot(mx,mz);if(mag>1){mx/=mag;mz/=mag;}
   if(ctrl&&c.jump)e.jumpBuf=.13;else e.jumpBuf-=dt;
   e.yaw=c.aimYaw;e.pitch=clamp(c.aimPitch,-1.35,1.35);
   // weapon switch (mouse wheel / Q / 1 / 2) once you own a shotgun
-  if(ctrl&&e.hasShotgun&&(c.swap||(c.select&&c.select!==e.weapon))){
-    const to=c.select&&c.select!==e.weapon?c.select:(e.weapon==='shotgun'?'pistol':'shotgun');
+  const own=ownedWeapons(e);
+  if(ctrl&&own.length>1&&(c.swap||(c.select&&c.select!==e.weapon&&own.includes(c.select)))){
+    const to=c.select&&c.select!==e.weapon&&own.includes(c.select)?c.select:own[(own.indexOf(e.weapon)+1)%own.length];
     e.stash[e.weapon]=e.ammo;e.weapon=to;e.ammo=e.stash[to];e.reload=0;e.fireCD=Math.max(e.fireCD,.35);e.recoil=.6;sfx('swap',e);
     if(e.ammo<=0)e.reload=reloadOf(e);
   }
@@ -259,7 +280,7 @@ function updateChar(e,dt){
       const d=cardOf(mx,mz),ob=lowObstacle(e,d,e.sprinting);
       if(ob&&(ob.h===1||e.sprinting)){
         const speed=ob.h===2||ob.over;
-        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,dur:ob.over?.44:ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};
+        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,dur:ob.over?(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips.vault?.66:.44):ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};
         e.vx=e.vy=e.vz=0;e.poseBlend=.5;if(speed)sfx('whoosh',e);
       }
     }
@@ -296,6 +317,8 @@ function updateChar(e,dt){
       }
     }
     e.reach=e.state==='normal'&&!e.grounded&&!e.runJump&&e.vy>-260&&world.time-(e.jumpAt||-9)<1.2&&!!findLedge(e,cardOf(Math.sin(e.bodyYaw),Math.cos(e.bodyYaw)),56);
+    // dodge: double-tap back / left / right (costs stamina)
+    if(ctrl&&c.dodge&&e.state==='normal'&&e.grounded&&!e.runJump&&e.stam>=DODGE_STAM&&(e.dodgeCD||0)<=0&&!(e.crouch&&overlapSolid(e.x,e.y,e.z,e.w,STAND_H)))startDodge(e,c.dodge);
     // gravity-wall kick
     if(e.state==='normal'){
       const can=(e.grounded||e.wasBox)&&world.rotCD<=0&&!world.rot&&!world.pendingRot;
@@ -344,6 +367,14 @@ function updateChar(e,dt){
     }else if(ctrl&&(c.crouchPressed||away)){e.state='normal';e.grabCD=.35;e.poseBlend=1;}
     else if(!solid(tile(e.st.lg.ci,e.st.lg.r,e.st.lg.ck))){e.state='normal';e.grabCD=.3;}
     if(e.st&&e.st.lg)e.st.held=c.grab;
+  }else if(e.state==='dodge'){
+    // the body follows the clip's own travel (so the feet don't slide); walls and edges still stop it
+    const s=e.st,D=DODGES[s.kind];s.t+=dt;
+    const now=dodgeDisp(D,Math.min(s.t,D.dur)),qy=qaxis(V(0,1,0),s.yaw),w=qrot(qy,vsub(now,s.prev));s.prev=now;
+    e.vx=w.x/dt;e.vz=w.z/dt;e.vy=Math.max(e.vy-G*dt,-MAXFALL);
+    const landed=moveBody(e,dt);e.grounded=landed||(e.vy<=0&&groundProbe(e));
+    e.bodyYaw=e.legYaw=s.yaw;
+    if(s.t>=D.dur){e.state='normal';e.vx*=.2;e.vz*=.2;e.poseBlend=.6;e.dodgeCD=.25;if(!e.grounded)e.fallStart=e.y;}
   }else if(e.state==='climbup'){
     const s=e.st;s.t+=dt/s.dur;const t=Math.min(1,s.t);
     const d=s.d,sa=s.s0,sb=s.s1;
@@ -396,10 +427,11 @@ function updateChar(e,dt){
   if(e.state!==prevState)e.poseBlend=Math.max(e.poseBlend,.6);
   if(e.state!=='normal'){e.crouch=false;if(e.state!=='slide'&&e.state!=='down'&&e.h!==STAND_H&&!overlapSolid(e.x,e.y,e.z,e.w,STAND_H))e.h=STAND_H;}
   // weapons (gun lowered while sprinting or diving)
+  if(e.dodgeCD>0)e.dodgeCD-=dt;
   const canFire=(e.state==='normal'&&!e.runJump)||e.state==='kick'||e.state==='slide';
   if(ctrl&&canFire&&gameState!=='over'){
     if(c.fireClick)e.clickBuf=.12; // a click just before the gun is ready still counts
-    const pistol=e.weapon!=='shotgun',held=c.fire&&world.time-(e.lastShot||-9)>=FIRE_CD;
+    const pistol=e.weapon==='pistol',held=c.fire&&world.time-(e.lastShot||-9)>=FIRE_CD;
     const wants=pistol?(e.clickBuf>0||held):c.fire;
     if(wants&&e.fireCD<=0&&e.reload<=0){e.clickBuf=0;if(e.ammo>0){fireRifle(e);e.lastShot=world.time;}else{e.reload=reloadOf(e);sfx('empty',e);}}
     else if(c.alt&&e.rfireCD<=0&&e.rreload<=0){if(e.rockets>0)fireRocket(e);else{e.rreload=RRELOAD;sfx('empty',e);}}
@@ -629,7 +661,7 @@ function updatePose(e,dt){
   if(st==='kick'&&e.st.t>.3&&e.st.t<.8){e.trail.push(localToWorld(e,P.fA.x,P.fA.y,'body',5));if(e.trail.length>9)e.trail.shift();}
   else if(e.trail.length)e.trail.shift();
   e.aimT=Math.max(0,(e.aimT||0)-dt);e.rArm=Math.max(0,(e.rArm||0)-dt);
-  const sg=e.weapon==='shotgun',wantAim=sg||e.aimT>0;
+  const sg=twoHanded(e),wantAim=sg||e.aimT>0;
   e.aimW=approach(e.aimW||0,wantAim?1:0,dt*(wantAim?14:2.6));
   // the aimed position is always computed (bullets leave from it)
   P.gunA+=(aim-P.gunA)*Math.min(1,dt*30);
@@ -703,7 +735,7 @@ function drawChar(e,alphaOverride){
   if(SK){drawWeaponsSK(e,P,SK,acc,al);}
   else{
   // gun
-  if(P.gunOn&&e.weapon!=='shotgun'){
+  if(P.gunOn&&e.weapon==='pistol'){
     const g0=B(P.gp,3),gm=B(P.muzzle,3),dir=vnorm(vsub(gm,g0));
     const ga=P.gunA2||0,gripEnd=B({x:P.gp.x-Math.sin(ga)*6,y:P.gp.y+Math.cos(ga)*6},3);
     drawSeg(vadd(g0,vscale(dir,-2.5)),gm,4,hexRGB('#2b3148'),null,acc,al);
@@ -714,7 +746,7 @@ function drawChar(e,alphaOverride){
     drawSeg(gb,gm,5,hexRGB('#2b3148'),null,acc,al);
     {const dir=vnorm(vsub(gm,g0));drawSeg(vadd(g0,vscale(dir,4)),vadd(gm,vscale(dir,3)),7,hexRGB('#3b2a22'),null,[1,.55,.2],al);
       const pump=vadd(g0,vscale(dir,10-e.recoil*3));drawSeg(vadd(pump,V(0,-3,0)),vadd(pump,vadd(vscale(dir,7),V(0,-3,0))),5,hexRGB('#ff8a2a'),[.3,.12,0],null,al);}
-  }else if(e.weapon==='shotgun'){
+  }else if(twoHanded(e)){
     const back=B({x:P.neck.x-6,y:P.neck.y+8},0);drawSeg(vadd(back,V(0,8,0)),vadd(back,V(0,-12,0)),5,hexRGB('#2b3148'),null,acc,al);
   }else{
     const h0=Lg({x:P.hip.x+1,y:P.hip.y+3},9),h1=Lg({x:P.hip.x+2,y:P.hip.y+11},9);drawSeg(h0,h1,4,hexRGB('#2b3148'),null,acc,al);
@@ -807,28 +839,53 @@ function drawShotgunModel(F,acc,al,pump){
   for(const du of [9.5,13.2,16.9])wpart(F,du,2.95,0,1.3,.1,.8,acc,acc,null,al);
   wpart(F,20.9,2.85,0,.45,.45,.45,acc,acc,null,al);                     // bead
 }
+// assault rifle: stock, pistol grip, receiver with a glowing optic, curved magazine, railed handguard, barrel with muzzle brake
+function drawRifleModel(F,acc,al,recoil,magOut){
+  const POLY=hexRGB('#1f2330'),MET=hexRGB('#2c3346'),DK=hexRGB('#12151d'),CY=hexRGB('#7cf0ff'),k=(recoil||0)*.6;
+  const P=(cu,cv,cw,su,sv,sw,col,em)=>wpart(F,cu-k,cv,cw,su,sv,sw,col,em||null,null,al);
+  P(-9.6,-.6,0,.8,3.6,1.6,DK);                     // butt pad
+  P(-7.2,-.1,0,4.4,2.2,1.4,POLY);P(-6.6,1.1,0,3.4,.5,1.2,POLY);P(-4.6,.4,0,1.4,1.4,1.1,DK); // stock, comb, tube
+  const gF={o:vadd(F.o,vadd(vscale(F.u,-.2-k),vscale(F.v,-1.7))),u:vnorm(vadd(F.u,vscale(F.v,.3))),v:vnorm(vsub(F.v,vscale(F.u,.3))),w:F.w};
+  wpart(gF,0,0,0,1.5,3.4,1.3,POLY,null,null,al);     // pistol grip
+  P(2.2,1.2,0,7,2.4,1.8,MET);                        // receiver
+  P(2.6,1.6,.92,2.6,.7,.05,CY,[.2,.6,.7]);           // ejection port
+  P(.8,-.25,0,2,.25,.6,DK);P(1.8,.15,0,.25,.9,.6,DK);P(.6,0,0,.25,.8,.3,hexRGB('#3a4258')); // guard + trigger
+  if(!magOut){const mF={o:vadd(F.o,vadd(vscale(F.u,3.4-k),vscale(F.v,-.4))),u:vnorm(vadd(F.u,vscale(F.v,-.35))),v:vnorm(vadd(F.v,vscale(F.u,.35))),w:F.w};
+    wpart(mF,0,-1.9,0,1.6,4,1.2,DK,null,null,al);wpart(mF,.5,-3.8,0,1.7,.35,1.3,acc,acc,null,al);} // curved magazine, lit base
+  P(2.4,3.05,0,3.2,1.2,1.4,DK);P(.85,3.05,0,.25,1.05,1.1,acc,acc);P(3.9,3.05,0,.2,.9,.9,hexRGB('#0a0c12')); // optic: body, lit rear lens, front
+  P(9.2,1.35,0,6.6,2,1.9,POLY);for(const du of [6.6,8.2,9.8,11.4])P(du,2.45,0,.6,.3,1.2,DK); // handguard + rail teeth
+  P(9.2,1.35,.98,5.4,.3,.05,acc,acc);                // handguard stripe
+  drawTube(vadd(F.o,vadd(vscale(F.u,12.5-k),vscale(F.v,1.5))),vadd(F.o,vadd(vscale(F.u,17-k),vscale(F.v,1.5))),.42,MET,null,al); // barrel
+  P(17.6,1.5,0,1.4,1,1,DK);P(18.35,1.5,0,.15,.6,.6,CY,[.3,.8,1]); // muzzle brake
+}
 function drawWeaponsSK(e,P,SK,acc,al){
   const by=e.bodyYaw,rt=V(-Math.cos(by),0,Math.sin(by));
-  const busy=e._handsBusy==='rocket';
+  const busy=e._handsBusy==='rocket'||e._handsBusy==='emote';
   if(e._gunF&&P.gunOn){ // reloading: the gun sits where the reload puts it
-    if(e.weapon==='shotgun')drawShotgunModel(e._gunF,acc,al,0);else drawPistolModel(e._gunF,acc,al,e._gunF.slide||0);
-  }else if(P.gunOn&&e.weapon!=='shotgun'&&!busy){
+    if(e.weapon==='shotgun')drawShotgunModel(e._gunF,acc,al,0);else if(e.weapon==='rifle')drawRifleModel(e._gunF,acc,al,0,e._gunF.mag);else drawPistolModel(e._gunF,acc,al,e._gunF.slide||0);
+  }else if(P.gunOn&&e.weapon==='pistol'&&!busy){
     // carried in the hand along the hand's own axis; snapped onto the aim line while shooting
     const w=clamp((e.aimW||0)*1.6,0,1),pd=e._aimDir||SK.handFwd;
     const u=vnorm(vadd(vscale(SK.handFwd,1-w),vscale(pd,w)));
     let v=vnorm(vadd(vscale(SK.handDown,-(1-w)),vscale(V(0,1,0),w)));v=vnorm(vsub(v,vscale(u,vdot(v,u))));
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
     drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);
-  }else if(P.gunOn&&!busy){ // shotgun, both hands
+  }else if(P.gunOn&&!busy){ // long gun, both hands
     const u=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR));let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?V(1,0,0):vnorm(v);
     const F={o:vadd(SK.hR,vadd(vscale(u,.5),vscale(v,1.4))),u,v,w:vcross(u,v)};
-    drawShotgunModel(F,acc,al,e.recoil);
-  }else if(e.weapon==='shotgun'){ // slung across the back
-    const fw=V(Math.sin(by),0,Math.cos(by)),b=vadd(SK.sh,vscale(fw,-6.5)),u=vnorm(vadd(vscale(rt,-.55),V(0,-1,0))),v=vscale(fw,-1);
-    drawShotgunModel({o:vsub(b,vscale(u,5)),u,v,w:vcross(u,v)},acc,al,0);
+    if(e.weapon==='rifle')drawRifleModel(F,acc,al,e.recoil);else drawShotgunModel(F,acc,al,e.recoil);
+  }
+  // long guns not in the hands are slung across the back (one each way)
+  {const fw=V(Math.sin(by),0,Math.cos(by)),b=vadd(SK.sh,vscale(fw,-6.5)),v=vscale(fw,-1);let side=0;
+   for(const wpn of ['shotgun','rifle']){
+     const owned=wpn==='shotgun'?e.hasShotgun:e.hasRifle,inHand=e.weapon===wpn&&P.gunOn&&!busy;if(!owned||inHand)continue;
+     const s=side++?1:-1,u=vnorm(vadd(vscale(rt,.55*s),V(0,-1,0)));
+     if(wpn==='shotgun')drawShotgunModel({o:vsub(vadd(b,vscale(fw,-1.2*side)),vscale(u,5)),u,v,w:vcross(u,v)},acc,al,0);
+     else drawRifleModel({o:vsub(vadd(b,vscale(fw,-1.2*side)),vscale(u,4)),u,v,w:vcross(u,v)},acc,al,0);}
   }
   if(e._rItem){const it=e._rItem;
-    if(it.kind==='mag'){const v=it.d,u=it.u,F={o:it.p,u,v,w:vcross(u,v)};wpart(F,0,1.4,0,1.1,3.6,.9,GUNDARK,null,null,al);wpart(F,0,-.5,0,1.3,.4,1.05,acc,acc,null,al);}
+    if(it.kind==='rmag'){const v=it.d,u=it.u,F={o:it.p,u,v,w:vcross(u,v)};wpart(F,0,1.6,0,1.6,4,1.2,GUNDARK,null,null,al);wpart(F,0,-.5,0,1.7,.35,1.3,acc,acc,null,al);}
+    else if(it.kind==='mag'){const v=it.d,u=it.u,F={o:it.p,u,v,w:vcross(u,v)};wpart(F,0,1.4,0,1.1,3.6,.9,GUNDARK,null,null,al);wpart(F,0,-.5,0,1.3,.4,1.05,acc,acc,null,al);}
     else if(it.kind==='shell'){drawTube(vsub(it.p,vscale(it.d,1.1)),vadd(it.p,vscale(it.d,1.1)),.45,hexRGB('#c0392b'),[.18,.03,0],al);drawTube(vsub(it.p,vscale(it.d,1.3)),vsub(it.p,vscale(it.d,.7)),.5,hexRGB('#d4a640'),null,al);}
     else{ // a small rocket (fits the tube): body, nose cone, tail fins
       const d=it.d,q=(a,b)=>vadd(it.p,vscale(d,a));
@@ -837,7 +894,7 @@ function drawWeaponsSK(e,P,SK,acc,al){
       const sd=vnorm(vcross(d,Math.abs(d.y)<.9?V(0,1,0):V(1,0,0))),up=vcross(sd,d);
       drawCubeM(segM(q(-1.7),q(-1),.12,0,1.5),hexRGB('#222633'),null,null,al);drawCubeM(segM(q(-1.7),q(-1),1.5,0,.12),hexRGB('#222633'),null,null,al);}
   }
-  if((!(P.gunOn&&e.weapon!=='shotgun')||(busy&&!e._gunF))&&SK.uR){ // pistol holstered on the right thigh
+  if((!(P.gunOn&&e.weapon==='pistol')||(busy&&!e._gunF))&&SK.uR){ // pistol holstered on the right thigh
     const d=vnorm(vsub(SK.kR,SK.uR)),F={o:vadd(vadd(SK.uR,vscale(d,6)),vscale(rt,4.2)),u:d,v:vnorm(vsub(V(Math.sin(by),0,Math.cos(by)),vscale(d,vdot(V(Math.sin(by),0,Math.cos(by)),d)))),w:null};
     F.w=vcross(F.u,F.v);drawPistolModel(F,acc,al,0);
   }
