@@ -310,7 +310,7 @@ function startTutorial(id){
   chars=[makeChar('YOU','#29f0ff',false)];
   for(let i=0;i<(cfg.bots||0);i++)chars.push(makeChar('DUMMY','#ffb020',true));
   player=chars[0];
-  props=[];bullets=[];rockets=[];parts=[];dolls=[];feed=[];spiders=[];
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];feed=[];spiders=[];
   if(cfg.props)cfg.props();
   if(cfg.spawn)setCp(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z,cfg.yaw);
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}

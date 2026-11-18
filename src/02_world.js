@@ -1,3 +1,4 @@
+const PARTITIONS=false; // side-to-side walls and a mid floor splitting the hall into rooms
 // =====================================================================
 //  WORLD — voxel construction site, collision, 90° gravity turns, nav
 // =====================================================================
@@ -56,7 +57,8 @@ function genLevel(seed){
   }
   // ---- partitions: full walls from side to side (and one full floor) with doorways, windows and holes,
   //      splitting the arena into smaller rooms so fights happen closer
-  const PX=[R()<.5?12:24],PZ=[R()<.5?12:24],PY=R()<.5?12:24;
+  // switched off for now (PARTITIONS=false) — the code stays so they can come back
+  let PX=[R()<.5?12:24],PZ=[R()<.5?12:24],PY=R()<.5?12:24;
   if(R()<.5)PX.push(PX[0]===12?24:12);else if(R()<.5)PZ.push(PZ[0]===12?24:12);
   const part=(plane,f)=>{
     const put=(u,y,t)=>{if(plane==='x')setT(f,y,u,t);else setT(u,y,f,t);};
@@ -67,10 +69,11 @@ function genLevel(seed){
       if(R()<.45){const du=1+(R()*8|0);for(let u=u0+du;u<u0+du+2;u++)for(let y=y0+2;y<y0+4;y++)if(y<N-1)put(u,y,0);}        // window to shoot through
     }
   };
+  if(!PARTITIONS){PX=[];PZ=[];PY=-99;}
   for(const f of PX)part('x',f);for(const f of PZ)part('z',f);
-  box(1,PY,1,N-2,PY,N-2,1);
+  if(PARTITIONS)box(1,PY,1,N-2,PY,N-2,1);
   let holes=0;
-  for(let a=0;a<MC;a++)for(let c=0;c<MC;c++)if(R()<.35||(a===2&&c===2&&holes<2)){
+  if(PARTITIONS)for(let a=0;a<MC;a++)for(let c=0;c<MC;c++)if(R()<.35||(a===2&&c===2&&holes<2)){
     const x0=a*M+2+(R()*5|0),z0=c*M+2+(R()*5|0);clear(x0,PY,z0,x0+3,PY,z0+3);holes++;}
   // ---- a few steel columns at room corners and beams
   for(const x of [12,24])for(const z of [12,24])for(let b=0;b<MC;b++)if(R()<.18)for(let y=b*M;y<=b*M+M;y++)setT(x,y,z,3);

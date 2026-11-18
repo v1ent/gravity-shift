@@ -103,20 +103,6 @@ function jointsFromDoll(d){
     eR:p('eN'),hR:p('hN'),eL:p('eF'),hL:p('hF'),doll:true};
 }
 
-// ---------- quaternions ([x,y,z,w]) ----------
-function qFromR(R3){const m=(i,j)=>R3[j][['x','y','z'][i]];const t=m(0,0)+m(1,1)+m(2,2);let q;
-  if(t>0){const s=Math.sqrt(t+1)*2;q=[(m(2,1)-m(1,2))/s,(m(0,2)-m(2,0))/s,(m(1,0)-m(0,1))/s,.25*s];}
-  else if(m(0,0)>m(1,1)&&m(0,0)>m(2,2)){const s=Math.sqrt(1+m(0,0)-m(1,1)-m(2,2))*2;q=[.25*s,(m(0,1)+m(1,0))/s,(m(0,2)+m(2,0))/s,(m(2,1)-m(1,2))/s];}
-  else if(m(1,1)>m(2,2)){const s=Math.sqrt(1+m(1,1)-m(0,0)-m(2,2))*2;q=[(m(0,1)+m(1,0))/s,.25*s,(m(1,2)+m(2,1))/s,(m(0,2)-m(2,0))/s];}
-  else{const s=Math.sqrt(1+m(2,2)-m(0,0)-m(1,1))*2;q=[(m(0,2)+m(2,0))/s,(m(1,2)+m(2,1))/s,.25*s,(m(1,0)-m(0,1))/s];}
-  return qn(q);}
-const qn=q=>{const l=Math.hypot(q[0],q[1],q[2],q[3])||1;return [q[0]/l,q[1]/l,q[2]/l,q[3]/l];};
-const qmul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
-function qrot(q,v){const [x,y,z,w]=q,ix=w*v.x+y*v.z-z*v.y,iy=w*v.y+z*v.x-x*v.z,iz=w*v.z+x*v.y-y*v.x,iw=-x*v.x-y*v.y-z*v.z;
-  return V(ix*w+iw*-x+iy*-z-iz*-y,iy*w+iw*-y+iz*-x-ix*-z,iz*w+iw*-z+ix*-y-iy*-x);}
-const qaxis=(ax,an)=>{const s=Math.sin(an/2);return [ax.x*s,ax.y*s,ax.z*s,Math.cos(an/2)];};
-function qlerp(a,b,t){const d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3],sg=d<0?-1:1;return qn([a[0]*(1-t)+b[0]*t*sg,a[1]*(1-t)+b[1]*t*sg,a[2]*(1-t)+b[2]*t*sg,a[3]*(1-t)+b[3]*t*sg]);}
-
 // a pose: world rotation (relative to the rest pose) of each of the 20 bones, hips position, arm stretch
 const mkPose=()=>({q:Array.from({length:20},()=>[0,0,0,1]),K:new Array(20).fill(1),hip:V(0,0,0)});
 function blendPose(a,b,t){const o=mkPose();for(let i=0;i<20;i++){o.q[i]=qlerp(a.q[i],b.q[i],t);o.K[i]=lerp(a.K[i],b.K[i],t);}o.hip=vadd(vscale(a.hip,1-t),vscale(b.hip,t));return o;}
@@ -186,59 +172,6 @@ function mixPoses(list){
   for(const [p,w] of list)P.hip=vadd(P.hip,vscale(p.hip,w/tot));
   return P;
 }
-// locomotion: the legs play the forward (or backward) clips turned toward the direction of travel;
-// the upper body twists back at the waist so the chest keeps facing the aim
-const LOCO={F:['walking_forward','running'],B:['walking_backward','running_backward']};
-function locoPose(e,dt){
-  const sp=Math.hypot(e.vx,e.vz),by=e.bodyYaw;
-  const A=e.anim||(e.anim={ph:0,idle:Math.random()*8,legYaw:by,back:false});
-  A.idle+=dt;
-  const wMove=clamp((sp-8)/40,0,1);
-  if(sp>12){
-    const mv=Math.atan2(e.vx,e.vz),rel=Math.abs(angDiff(mv,by));
-    if(!A.back&&rel>2.05)A.back=true;else if(A.back&&rel<1.75)A.back=false;   // hysteresis: no flicker around 110 degrees
-    const tgt=A.back?mv+Math.PI:mv;
-    A.legYaw+=clamp(angDiff(tgt,A.legYaw),-dt*11,dt*11);
-  }else{ // standing: feet stay put until the aim turns too far, then step round
-    const d=angDiff(by,A.legYaw);if(Math.abs(d)>.9||A.turning){A.turning=Math.abs(d)>.1;A.legYaw+=clamp(d,-dt*6,dt*6);}
-  }
-  const idle=sampleClip('idle',A.idle,false);
-  let P=idle;
-  if(wMove>.01){
-    const [wn,rn]=LOCO[A.back?'B':'F'],cw=SKN.clips[wn],cr=SKN.clips[rn];
-    const k=clamp((sp-cw.speed)/(cr.speed-cw.speed),0,1),nat=lerp(cw.speed,cr.speed,k),dur=lerp(cw.dur,cr.dur,k);
-    A.ph=(A.ph+(Math.max(sp,10)/nat)/dur*dt)%1;
-    const mv=blendPose(sampleClip(wn,A.ph*cw.dur,false),sampleClip(rn,A.ph*cr.dur,false),k);
-    P=wMove>=.99?mv:blendPose(idle,mv,wMove);
-  }else A.ph=0;
-  return {P,yaw:A.legYaw};
-}
-// character space -> world (yaw and position), then twist the upper body round to the aim
-function placePose(L,e){
-  const P=L.P,qy=qaxis(V(0,1,0),L.yaw);
-  for(let b=0;b<20;b++)P.q[b]=qmul(qy,P.q[b]);
-  P.hip=vadd(V(e.x+(e.visX||0),e.y+(e.visY||0),e.z+(e.visZ||0)),qrot(qy,P.hip));
-  const tw=angDiff(e.bodyYaw,L.yaw),bi=SKN.bi;
-  const share={Spine:.3,Spine1:.6,Spine2:1,Neck:1,Head:1,LeftShoulder:1,RightShoulder:1,LeftArm:1,RightArm:1,LeftForeArm:1,RightForeArm:1,LeftHand:1,RightHand:1};
-  for(const nm in share)P.q[bi[nm]]=qmul(qaxis(V(0,1,0),tw*share[nm]),P.q[bi[nm]]);
-  return P;
-}
-// arms from the game's IK on top of a clip (two-hand aim, rocket arm), torso pitched with the aim
-function overlayArms(P,J,wR,wL,pitch){
-  const B=SKN.bones,bi=SKN.bi,rest=i=>B[i].head,restVec=c=>vsub(rest(c),rest(B[c].parent));
-  if(pitch){const rt=vcross(J.fwdB,V(0,1,0));for(const nm of ['Spine1','Spine2','Neck','Head','LeftShoulder','RightShoulder']){const i=bi[nm];P.q[i]=qmul(qaxis(vnorm(rt),pitch*(nm==='Spine1'?.35:.65)),P.q[i]);}}
-  const H=fkHeads(P);
-  for(const [s,w] of [['Right',wR],['Left',wL]]){
-    if(w<.01)continue;
-    const ar=bi[s+'Arm'],fo=bi[s+'ForeArm'],ha=bi[s+'Hand'];
-    const a=vlen(restVec(fo))*ARM_STRETCH,b=vlen(restVec(ha))*ARM_STRETCH;
-    const r=ik3(H[ar],s==='Right'?J.hR:J.hL,a,b,s==='Right'?J.eR:J.eL,vscale(J.fwdB,-1)),ref0=V(0,0,-1);
-    const qa=qFromR(rotBetween(frame3(vsub(r.mid,H[ar]),r.n),frame3(restVec(fo),ref0))),qf=qFromR(rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(restVec(ha),ref0)));
-    P.q[ar]=qlerp(P.q[ar],qa,w);P.q[fo]=qlerp(P.q[fo],qf,w);P.q[ha]=qlerp(P.q[ha],qf,w);
-    P.K[ar]=lerp(1,ARM_STRETCH,w);P.K[fo]=P.K[ar];
-  }
-  return P;
-}
 function fkHeads(P){
   const B=SKN.bones,H=new Array(20);H[0]=P.hip;
   for(let i=1;i<20;i++){const pa=B[i].parent;let off=vsub(B[i].head,B[pa].head);
@@ -259,24 +192,281 @@ function writeMatrices(P){
   }
   return H;
 }
-// pick the source for a fighter: clips for ordinary movement on the ground, the procedural skeleton for everything else
+// =====================================================================
+//  CLIP-DRIVEN ANIMATION: every state picks a Mixamo clip (or a piece of one);
+//  states no clip covers (kick, dive, vault, tumble) keep the procedural skeleton
+// =====================================================================
+const FPS_C=30;
+const qconj=q=>[-q[0],-q[1],-q[2],q[3]];
+const charOrigin=e=>V(e.x+(e.visX||0),e.y+(e.visY||0),e.z+(e.visZ||0));
+// clip pose at frame f, character space; root: 'feet' (feet under the origin), 'center' (body centred), 'clip' (travel kept), 'none'
+function clipAt(name,f,mirror,root){
+  const P=sampleClip(name,f/FPS_C,mirror);
+  if(root==='feet'||root==='center'){const H=fkHeads(P),bi=SKN.bi,lf=H[bi.LeftFoot],rf=H[bi.RightFoot];
+    let cx=(lf.x+rf.x)/2,cz=(lf.z+rf.z)/2;if(root==='center'){cx=(cx+P.hip.x)/2;cz=(cz+P.hip.z)/2;}P.hip.x-=cx;P.hip.z-=cz;}
+  else if(root==='none'){P.hip.x=0;P.hip.z=0;}
+  return P;
+}
+function placeAt(P,yaw,o){const qy=qaxis(V(0,1,0),yaw);for(let b=0;b<20;b++)P.q[b]=qmul(qy,P.q[b]);P.hip=vadd(o,qrot(qy,P.hip));return P;}
+const UPPER_SHARE={Spine:.3,Spine1:.6,Spine2:1,Neck:1,Head:1,LeftShoulder:1,RightShoulder:1,LeftArm:1,RightArm:1,LeftForeArm:1,RightForeArm:1,LeftHand:1,RightHand:1};
+function twistUpper(P,tw){if(Math.abs(tw)<1e-3)return;const bi=SKN.bi;for(const nm in UPPER_SHARE)P.q[bi[nm]]=qmul(qaxis(V(0,1,0),tw*UPPER_SHARE[nm]),P.q[bi[nm]]);}
+// rotate a whole pose about a world pivot
+function rotatePose(P,q,piv){for(let b=0;b<20;b++)P.q[b]=qmul(q,P.q[b]);P.hip=vadd(piv,qrot(q,vsub(P.hip,piv)));}
+// copy some bones from another pose, carried along by a reference bone (e.g. arms relative to the chest)
+function layerBones(P,src,names,ref,w){
+  if(w<=.01)return;const bi=SKN.bi,r=ref?qmul(P.q[bi[ref]],qconj(src.q[bi[ref]])):[0,0,0,1];
+  for(const nm of names){const i=bi[nm];P.q[i]=qlerp(P.q[i],qmul(r,src.q[i]),w);}
+}
+const LEGS=['LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot'];
+const ARM_L=['LeftShoulder','LeftArm','LeftForeArm','LeftHand'];
+
+// ---------- locomotion ----------
+const LOCO={F:['walking_forward','running'],B:['walking_backward','running_backward']};
+function locoPose(e,A,dt){
+  const sp=Math.hypot(e.vx,e.vz),by=e.bodyYaw;
+  const wMove=clamp((sp-8)/40,0,1);
+  if(sp>12){
+    const mv=Math.atan2(e.vx,e.vz),rel=Math.abs(angDiff(mv,by));
+    if(!A.back&&rel>2.05)A.back=true;else if(A.back&&rel<1.75)A.back=false;
+    A.legYaw+=clamp(angDiff(A.back?mv+Math.PI:mv,A.legYaw),-dt*11,dt*11);
+  }
+  const idle=sampleClip('idle',A.idle,false);
+  if(wMove<=.01){A.ph=0;return idle;}
+  const [wn,rn]=LOCO[A.back?'B':'F'],cw=SKN.clips[wn],cr=SKN.clips[rn];
+  const k=clamp((sp-cw.speed)/(cr.speed-cw.speed),0,1),nat=lerp(cw.speed,cr.speed,k),dur=lerp(cw.dur,cr.dur,k);
+  A.ph=(A.ph+(Math.max(sp,10)/nat)/dur*dt)%1;
+  const mv=blendPose(sampleClip(wn,A.ph*cw.dur,false),sampleClip(rn,A.ph*cr.dur,false),k);
+  return wMove>=.99?mv:blendPose(idle,mv,wMove);
+}
+// a wall straight ahead at body height (for bracing against it)
+function wallAhead(e,yaw,dist){const fx=Math.sin(yaw),fz=Math.cos(yaw);
+  for(const h of [30,50])if(solid(tileAt(e.x+fx*(e.w/2+dist),e.y+h,e.z+fz*(e.w/2+dist))))return true;return false;}
+
+// ---------- one-shot actions layered over locomotion on the ground ----------
+// name, first/last frame, playback rate, root mode, how strongly it replaces the legs
+const ACTS={
+  stop:{clip:'run_to_stop',f0:9,f1:46,rate:1.25,root:'feet'},          // braking into a wall, hands out
+  turnR:{clip:'right_turn_90',f0:0,f1:28,rate:1.6,root:'feet'},        // stepping round on the spot
+  turn180:{clip:'running_turn_180',f0:0,f1:20,rate:1.5,root:'none'},
+  hop:{clip:'jump',f0:41,f1:56,rate:1.3,root:'feet'},                  // small landing
+  slideUp:{clip:'running_slide',f0:27,f1:44,rate:1.5,root:'feet'},     // getting up out of a slide
+};
+function startAct(A,kind,o){A.act=Object.assign({kind,t:0,w:0,out:false},o||{});}
+function actPose(e,A,dt){
+  const a=A.act,D=ACTS[a.kind],c=SKN.clips[D.clip];
+  a.t+=dt*D.rate;const f=D.f0+a.t*FPS_C;
+  if(f>=D.f1)a.out=true;
+  a.w=a.out?a.w-dt/.16:Math.min(1,a.w+dt/.1);
+  if(a.w<=0){A.act=null;if(a.onEnd)a.onEnd();return null;}
+  return clipAt(D.clip,Math.min(f,D.f1),a.mirror,D.root);
+}
+
+// ---------- the aim: hands on the gun along the 3D aim line, chest bends for steep angles ----------
+function overlayAim(P,e,wGun,wRocket){
+  const bi=SKN.bi,B=SKN.bones,a=clamp(e.pitch||0,-1.35,1.35),yaw=e.yaw;
+  const rt=V(-Math.cos(yaw),0,Math.sin(yaw)),aim=fwdOf(yaw,a),wA=Math.max(wGun,wRocket);
+  // head always follows the view a little; the waist takes what the arms can't
+  const bend=(a-clamp(a,-.4,.5))*wA,head=a*lerp(.55,1,wA);
+  const rot=(nm,an)=>{const i=bi[nm];P.q[i]=qmul(qaxis(rt,an),P.q[i]);};
+  rot('Spine',bend*.3);rot('Spine1',bend*.65);
+  for(const nm of ['Spine2','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'])rot(nm,bend);
+  rot('Neck',bend+(head-bend)*.45);rot('Head',bend+(head-bend)*.9);
+  e._aimDir=aim;
+  if(wA<.01)return P;
+  const H=fkHeads(P),shR=H[bi.RightArm],shL=H[bi.LeftArm],mid=vscale(vadd(shR,shL),.5),up=V(0,1,0);
+  const len=i=>vlen(vsub(B[i+1].head,B[i].head))*ARM_STRETCH;
+  const lr=len(bi.RightArm)+len(bi.RightForeArm),ll=len(bi.LeftArm)+len(bi.LeftForeArm);
+  const sg=e.weapon==='shotgun';
+  // gun hand
+  const g=sg?vadd(vadd(shR,vscale(aim,lr*.5)),vadd(vscale(rt,-2.5),V(0,-1.5,0))):vadd(vadd(mid,vscale(aim,lr*.8)),vadd(vscale(rt,1.5),V(0,-3,0)));
+  let tL=sg?vadd(g,vadd(vscale(aim,11*CHAR_SCALE),vadd(vscale(rt,-1.5),V(0,-1.5,0)))):vadd(g,vadd(vscale(aim,.8),vadd(vscale(rt,-2.6),V(0,-1.6,0))));
+  if(wRocket>0)tL=vadd(vscale(tL,1-wRocket),vscale(vadd(shL,vscale(aim,ll*.97)),wRocket));
+  const solveArm=(s,tgt,w,pole)=>{
+    if(w<.01)return;const ar=bi[s+'Arm'],fo=bi[s+'ForeArm'],ha=bi[s+'Hand'];
+    const rv=c=>vsub(B[c].head,B[B[c].parent].head);
+    const r=ik3(H[ar],tgt,vlen(rv(fo))*ARM_STRETCH,vlen(rv(ha))*ARM_STRETCH,pole,vscale(up,-1)),ref0=V(0,0,-1);
+    const qa=qFromR(rotBetween(frame3(vsub(r.mid,H[ar]),r.n),frame3(rv(fo),ref0))),qf=qFromR(rotBetween(frame3(vsub(r.end,r.mid),r.n),frame3(rv(ha),ref0)));
+    P.q[ar]=qlerp(P.q[ar],qa,w);P.q[fo]=qlerp(P.q[fo],qf,w);P.q[ha]=qlerp(P.q[ha],qf,w);
+    P.K[ar]=lerp(P.K[ar],ARM_STRETCH,w);P.K[fo]=P.K[ar];
+  };
+  solveArm('Right',g,wGun,vadd(shR,vadd(vscale(rt,9),V(0,-12,0))));
+  solveArm('Left',tL,Math.max(wGun*.95,wRocket),vadd(shL,vadd(vscale(rt,wRocket>.5?-4:-9),V(0,-12,0))));
+  return P;
+}
+
+// ---------- which clip for which state ----------
+// hang / pull-up: pull_up_wall is anchored to the ledge; hands at the edge, feet on the wall (or dangling when there is none)
+const LEDGE_C={y:83,z:4};
+function ledgeFrame(e,d,ly,base){
+  const yaw=Math.atan2(d[0],d[1]),fp=V(base.x+d[0]*(e.w/2+.5),ly,base.z+d[1]*(e.w/2+.5));
+  return {yaw,o:vsub(fp,qrot(qaxis(V(0,1,0),yaw),V(0,LEDGE_C.y,LEDGE_C.z)))};
+}
+const wallBelow=(lg)=>lg&&lg.ci!==undefined&&solid(tile(lg.ci,lg.r-1,lg.ck));
+const PULL_KEYS=[[0,25],[.22,72],[.42,100],[.5,140],[.78,198],[1,218]];
+function warp(keys,u){for(let i=1;i<keys.length;i++)if(u<=keys[i][0]){const [a,fa]=keys[i-1],[b,fb]=keys[i];return lerp(fa,fb,(u-a)/(b-a));}return keys[keys.length-1][1];}
+function clipFor(e,A,dt){
+  const st=e.state,o=charOrigin(e);
+  if(st==='hang'){
+    const hs=e.st,lg=hs.lg;if(!lg||lg.ly===undefined)return null;
+    const L=ledgeFrame(e,hs.d,lg.ly,V(e.x,e.y,e.z));
+    A.hangT=(A.hangT||0)+dt;const f=12+12*Math.sin(A.hangT*1.6);
+    const P=clipAt('pull_up_wall',f,false,'clip');
+    if(!wallBelow(lg)){const idl=sampleClip('idle',0,false);layerBones(P,idl,LEGS,null,.9);}
+    placeAt(P,L.yaw,L.o);
+    const piv=vadd(L.o,qrot(qaxis(V(0,1,0),L.yaw),V(0,80,2))),ax=vcross(V(0,-1,0),V(hs.d[0],0,hs.d[1]));
+    rotatePose(P,qaxis(ax,hs.ph||0),piv);
+    return {P,key:'hang'};
+  }
+  if(st==='climbup'&&!e.st.vault){
+    const s=e.st,u=clamp(s.t,0,1),f=warp(PULL_KEYS,u);
+    const lg=s.lg||{ci:undefined};const L=ledgeFrame(e,s.d,s.ly,s.s0);
+    const P=clipAt('pull_up_wall',f,false,'clip');
+    if(s.noWall){const idl=sampleClip('idle',0,false);layerBones(P,idl,LEGS,null,.9*(1-smooth(clamp((f-110)/60,0,1))));}
+    placeAt(P,L.yaw,L.o);
+    // ease into the game's standing spot at the end
+    if(!s.endHip){const E=placeAt(clipAt('pull_up_wall',218,false,'clip'),L.yaw,L.o);s.endHip=E.hip;}
+    const k=smooth(clamp((u-.55)/.45,0,1));P.hip=vadd(P.hip,V((s.s1.x-s.endHip.x)*k,0,(s.s1.z-s.endHip.z)*k));
+    return {P,key:'climb'};
+  }
+  if(st==='land'){
+    const s=e.st,u=clamp(s.t/s.dur,0,1);let P;
+    if(s.dur>=.6)P=clipAt('landing',lerp(18,70,u<.5?u*1.2:.6+(u-.5)*.8),false,'feet');
+    else P=clipAt('jump',lerp(40,56,u),false,'feet');
+    return {P:placeAt(P,e.bodyYaw,o),key:'land'};
+  }
+  if(st==='slide'){
+    const t=e.st.t,f=t<.13?3+t/.13*8:11+4.5+4.5*Math.sin((t-.13)*5-Math.PI/2);
+    return {P:placeAt(clipAt('running_slide',f,false,'center'),e.st.yaw,o),key:'slide',aim:true};
+  }
+  if(st==='down'&&e.st.side===1&&e.grounded){
+    const t=e.st.t,f=Math.min(45,20+t*42);
+    return {P:placeAt(clipAt('fall_flat',f,false,'center'),e.bodyYaw,o),key:'down'};
+  }
+  if(st!=='normal'||Math.abs(e.ba||0)>.05||e.runJump||e.knocked)return null;
+  if(!e.grounded&&!e.wasBox){
+    A.air=(A.air||0)+dt;
+    let P;
+    if(e.vy<-430&&e.airT>.3){P=clipAt('landing',4+3.5*Math.sin(world.time*4),false,'none');P.hip.y-=52;}
+    else{const jumped=world.time-(e.jumpAt||-9)<e.airT+.08;
+      const f=e.vy>0?lerp(jumped?23:32,30,clamp(1-e.vy/JUMPV,0,1)):lerp(30,37,clamp(-e.vy/450,0,1));
+      P=clipAt('jump',f,false,'none');P.hip.y-=7;}
+    const yaw=A.legYaw;A.legYaw+=clamp(angDiff(e.bodyYaw,A.legYaw),-dt*6,dt*6);
+    P=placeAt(P,yaw,o);twistUpper(P,angDiff(e.bodyYaw,yaw));
+    return {P,key:'air',aim:true};
+  }
+  if(e.h<STAND_H-1)return null; // crouched: procedural
+  // landed after being in the air: a short knee bend
+  if(A.air>.25&&!A.act)startAct(A,'hop',{mirror:false});
+  A.air=0;
+  const sp=Math.hypot(e.vx,e.vz),mv=Math.atan2(e.vx,e.vz);
+  // sprinting into a wall: brake and catch it with the hands
+  if((!A.act||A.act.kind==='hop')&&sp>150&&wallAhead(e,mv,38)&&!wallAhead(e,mv,-6)){startAct(A,'stop',{yaw:mv});A.stopDir=mv;}
+  if(A.act&&A.act.kind==='stop'&&!A.act.out){const away=sp>60&&Math.abs(angDiff(mv,A.stopDir))>.9;if(away||!wallAhead(e,A.stopDir,40))A.act.out=true;}
+  // a sharp reversal at running speed
+  if(sp>150){if(A.runDir!==undefined&&Math.abs(angDiff(mv,A.runDir))>2.5&&world.time-A.runT<.7&&!A.act){startAct(A,'turn180',{yaw:A.runDir,onEnd:null});A.legYaw=mv;}A.runDir=mv;A.runT=world.time;}
+  // standing and the aim swung far round: step round with the feet
+  if(sp<12&&!A.act){const d=angDiff(e.bodyYaw,A.legYaw);if(Math.abs(d)>1.05){const y0=A.legYaw,s=d<0?-1:1;startAct(A,'turnR',{mirror:s>0,yaw:y0,turn:s});}}
+  let P=locoPose(e,A,dt),yaw=A.legYaw,key='loco';
+  if(A.act){
+    const a=A.act,ap=actPose(e,A,dt);
+    if(ap){
+      const ay=a.yaw!==undefined?a.yaw:A.legYaw;
+      if(a.kind==='turnR'){const prog=smooth(clamp(a.t*FPS_C/28,0,1));ay;A.turnYaw=a.yaw+a.turn*Math.PI/2*prog;
+        if(a.out||a.t*FPS_C>=27){A.legYaw=a.yaw+a.turn*Math.PI/2;}}
+      // the action's own yaw: rotate it into the locomotion frame before blending
+      const dy=angDiff(ay,yaw);if(Math.abs(dy)>1e-3){const q=qaxis(V(0,1,0),dy);for(let b=0;b<20;b++)ap.q[b]=qmul(q,ap.q[b]);ap.hip=qrot(q,ap.hip);}
+      P=blendPose(P,ap,smooth(a.w));key='act';
+    }
+  }
+  P=placeAt(P,yaw,o);
+  let base=yaw;if(A.act&&A.act.kind==='turnR'&&A.turnYaw!==undefined)base=A.turnYaw;
+  twistUpper(P,angDiff(e.bodyYaw,base)*(A.act&&A.act.kind==='stop'?A.act.w<1?1-A.act.w:0:1));
+  return {P,key,aim:!(A.act&&A.act.kind==='stop'&&!A.act.out)};
+}
+
+// shotgun kick in the chest after a shot, rocket arm lowering after the launch
+function addRecoil(P,e){
+  const bi=SKN.bi;
+  if(e.weapon==='shotgun'){const t=world.time-(e.lastShot||-9);if(t<.55){const f0=SKN.clips.shotgun_shot,f=50+t*40;
+    const S=sampleClip('shotgun_shot',f/FPS_C,false),S0=sampleClip('shotgun_shot',48/FPS_C,false),w=Math.sin(Math.PI*t/.55)*.8;
+    for(const nm of ['Spine','Spine1','Spine2']){const i=bi[nm];P.q[i]=qlerp(P.q[i],qmul(qmul(S.q[i],qconj(S0.q[i])),P.q[i]),w);}}}
+}
+function rocketLower(P,e){
+  const t=world.time-(e.rFireT||-9)-.5;if(t<0||t>.45)return;
+  const S=clipAt('rocket_aim_shot',38+t*55,true,'none');
+  layerBones(P,S,ARM_L,'Spine2',Math.sin(Math.PI*Math.min(1,t/.45))*.85);
+}
+
+// pick the source for a fighter and blend between sources
 function charPose(e){
   const J=jointsFromChar(e),now=world.time,dt=clamp(now-(e.skT||now),0,.1);e.skT=now;
-  const clipOK=SKN.clips&&e.alive&&e.state==='normal'&&e.grounded&&!e.crouch&&Math.abs(e.ba||0)<.05&&e.h>=STAND_H-1;
-  let P,src;
-  if(clipOK){
-    P=placePose(locoPose(e,dt),e);src='clip';
-    const wR=e.weapon==='shotgun'?1:smooth(clamp(e.aimW||0,0,1)),wL=Math.max(e.weapon==='shotgun'?1:wR*.9,e.rArm>0?1:0);
-    P=overlayArms(P,J,wR,wL,-(e.pitch||0)*Math.max(wR,.4));
-  }else{P=procPose(J);src='proc';}
-  if(e.skSrc&&e.skSrc!==src)e.skFade=.22;e.skSrc=src;
-  if(e.skFade>0&&e.skLast){e.skFade-=dt;P=blendPose(e.skLast,P,clamp(1-e.skFade/.22,0,1)*.6+.2);}
+  const A=e.anim||(e.anim={ph:0,idle:Math.random()*8,legYaw:e.bodyYaw,back:false,act:null});
+  A.idle+=dt;
+  if(e.forceClip){const f=e.forceClip;const P=placeAt(clipAt(f.name,f.t*FPS_C,f.mirror,f.root||'none'),e.bodyYaw,V(e.x,e.y,e.z));e.skLast=P;e.skSrc='force';return {P,J};}
+  let P=null,src='proc';
+  if(SKN.clips&&e.alive){
+    const r=clipFor(e,A,dt);
+    if(r){P=r.P;src=r.key;
+      if(r.aim){const sg=e.weapon==='shotgun';const wG=sg?1:smooth(clamp(e.aimW||0,0,1));
+        const wR=e.rArm>0?clamp(e.rArm/.08,0,1)*clamp(e.rArm/.2,0,1):0;
+        overlayAim(P,e,wG,wR);addRecoil(P,e);rocketLower(P,e);}}
+    else{A.legYaw=e.legYaw;A.act=null;}
+    if(e.state!=='hang')A.hangT=0;
+  }
+  if(!P){P=procPose(J);src='proc';}
+  if(e.skSrc&&e.skSrc!==src)e.skFade=src==='act'||e.skSrc==='act'?.12:.2;e.skSrc=src;
+  if(e.skFade>0&&e.skLast){e.skFade-=dt;P=blendPose(e.skLast,P,clamp(1-e.skFade/.2,0,1)*.65+.15);}
   e.skLast=P;
   return {P,J};
 }
-function drawSkinnedChar(e,col,alpha){const {P}=charPose(e);return drawPose(P,col,alpha);}
+function drawSkinnedChar(e,col,alpha,flash){const {P}=charPose(e);return drawPose(P,col,alpha,flash);}
 function drawSkinned(J,col,alpha){return drawPose(procPose(J),col,alpha);}
-function drawPose(P,col,alpha){
+
+// ---------- death clips: the body crumples, then lies until it fades ----------
+let corpses=[];
+function spawnCorpse(e,dir){
+  if(!SKN.clips||!SKN.ready||!e.grounded||e.knocked||(e.state!=='normal'&&e.state!=='land'&&e.state!=='kick'))return false;
+  if(dir&&dir.y>.45)return false;
+  const by=e.bodyYaw,fw=V(Math.sin(by),0,Math.cos(by)),rt=V(-Math.cos(by),0,Math.sin(by));
+  const fsp=e.vx*fw.x+e.vz*fw.z,dh=dir?vnorm(V(dir.x,0,dir.z)):fw,side=vdot(dh,rt);
+  let opts;
+  if(fsp>150)opts=[['fall_flat',false]];
+  else if(Math.abs(side)>.6)opts=[['death3',side>0],['death1',rnd()<.5]];
+  else opts=rnd()<.5?[['death1',false],['death2',rnd()<.5],['death3',rnd()<.5]]:[['death2',rnd()<.5],['death1',false],['death3',rnd()<.5]];
+  const o=V(e.x,e.y,e.z),bi=SKN.bi;
+  for(const [clip,mirror] of opts){
+    const c=SKN.clips[clip],end=placeAt(clipAt(clip,c.n-1,mirror,'clip'),by,o),H=fkHeads(end);
+    let ok=true;
+    for(const i of [bi.Head,bi.Hips,bi.Spine2,bi.LeftFoot,bi.RightFoot,bi.LeftHand,bi.RightHand]){const p=H[i];
+      if(solid(tileAt(p.x,p.y+6,p.z))||((i===bi.Head||i===bi.Hips)&&!solid(tileAt(p.x,p.y-12,p.z)))){ok=false;break;}}
+    if(!ok)continue;
+    corpses.push({clip,mirror,yaw:by,o,t:0,life:7,col:e.col,from:e.skLast});
+    if(corpses.length>8)corpses.shift();
+    return true;
+  }
+  return false;
+}
+function corpsePose(c){
+  const cl=SKN.clips[c.clip];let P=placeAt(clipAt(c.clip,Math.min(cl.n-1,c.t*FPS_C),c.mirror,'clip'),c.yaw,c.o);
+  if(c.from&&c.t<.18)P=blendPose(c.from,P,c.t/.18);
+  return P;
+}
+function updateCorpses(dt){for(let i=corpses.length-1;i>=0;i--){const c=corpses[i];c.t+=dt;c.life-=dt;if(c.life<=0)corpses.splice(i,1);}}
+function drawCorpses(){for(const c of corpses)drawPose(corpsePose(c),c.col,Math.min(1,c.life/1.5));}
+// the arena turns: lying bodies become ragdolls so they fall with everything else
+function corpsesToDolls(){
+  const bi=SKN.bi;
+  for(const c of corpses){
+    const H=fkHeads(corpsePose(c)),pts={head:H[bi.Head],neck:H[bi.Neck],hip:H[bi.Hips],kA:H[bi.RightLeg],fA:H[bi.RightFoot],kB:H[bi.LeftLeg],fB:H[bi.LeftFoot],
+      eN:H[bi.RightForeArm],hN:H[bi.RightHand],eF:H[bi.LeftForeArm],hF:H[bi.LeftHand]};
+    const list=[],idx={};for(const k in pts){idx[k]=list.length;const p=pts[k];list.push({x:p.x,y:p.y,z:p.z,ox:p.x,oy:p.y,oz:p.z,r:DOLL_R[k]});}
+    const links=DOLL_LINKS.map(([a,b])=>{const A=list[idx[a]],Bp=list[idx[b]];return {a:idx[a],b:idx[b],len:Math.hypot(A.x-Bp.x,A.y-Bp.y,A.z-Bp.z)};});
+    dolls.push({pts:list,idx,links,life:c.life,col:c.col});
+  }
+  corpses=[];
+}
+
+function drawPose(P,col,alpha,flash){
   const gl=R.gl,L=SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
   gl.useProgram(SKN.p);
   for(let a=0;a<8;a++)gl.disableVertexAttribArray(a);
@@ -288,13 +478,21 @@ function drawPose(P,col,alpha){
   gl.uniformMatrix4fv(L.uVP,false,FR.vp);gl.uniformMatrix4fv(L.uWorldFix,false,FR.fix);
   gl.uniformMatrix4fv(L.uB,false,SKN.mats);gl.uniform1f(L.uQ,SKN.meta.q);
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
-  gl.uniform3f(L.uBody,col[0]*.55+.05,col[1]*.55+.05,col[2]*.55+.06);gl.uniform3f(L.uJoint,.1,.11,.15);gl.uniform3f(L.uGlow,col[0]*.35,col[1]*.35,col[2]*.35);
-  gl.uniform1f(L.uAlpha,alpha);
-  gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);
+  const fl=flash||0;
+  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);gl.uniform3f(L.uJoint,.1+col[0]*fl*.3,.11+col[1]*fl*.3,.15+col[2]*fl*.3);
+  gl.uniform3f(L.uGlow,col[0]*(.35+fl),col[1]*(.35+fl),col[2]*(.35+fl));
+  if(alpha<.99){
+    // see-through: lay down the body's depth first, so only its front shows and nothing behind it (guns, its own far side) bleeds through
+    gl.colorMask(false,false,false,false);gl.depthMask(true);gl.disable(gl.BLEND);gl.uniform1f(L.uAlpha,1);
+    gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);
+    gl.colorMask(true,true,true,true);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthFunc(gl.LEQUAL);gl.depthMask(false);
+    gl.uniform1f(L.uAlpha,alpha);gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);
+    gl.depthFunc(gl.LESS);gl.depthMask(true);
+  }else{gl.uniform1f(L.uAlpha,1);gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);}
   for(const a of [L.aPos,L.aNor,L.aJ,L.aW])gl.disableVertexAttribArray(a);
   gl.useProgram(R.main.p);cubeBegin();
-  // pistol rides in the right hand: barrel along the hand's forward, grip down
   const qh=P.q[bi.RightHand];
-  return {hR:H[bi.RightHand],hL:H[bi.LeftHand],eR:H[bi.RightForeArm],eL:H[bi.LeftForeArm],handFwd:qrot(qh,V(0,0,1)),handDown:qrot(qh,V(0,-1,0))};
+  return {hR:H[bi.RightHand],hL:H[bi.LeftHand],eR:H[bi.RightForeArm],eL:H[bi.LeftForeArm],handFwd:qrot(qh,V(0,0,1)),handDown:qrot(qh,V(0,-1,0)),
+    sh:H[bi.Spine2],hd:H[bi.Head],uR:H[bi.RightUpLeg],kR:H[bi.RightLeg]};
 }
 if(R.ok)loadModel().then(()=>{if(SKN.ready)return loadAnims();}).catch(e=>console.warn('anims not loaded',e));

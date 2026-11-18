@@ -23,21 +23,25 @@ function doRotate(key,kicker,stop){
     }else{
       e.state='normal';e.h=STAND_H;e.crouch=false;e.runJump=false;e.sprinting=false;
       e.x=c.x;e.y=c.y-e.h/2;e.z=c.z;e.vx=v.x*.4;e.vy=v.y*.4;e.vz=v.z*.4;
-      e.knocked=true;e.stun=.35;e.trail=[];e.grounded=false;e.ba=Math.PI/2;e.bav=0;e.tumbleHold=.5;e.poseBlend=1;e.kickerSpin=0;
+      e.turnT=world.time;e.knocked=true;e.stun=.35;e.trail=[];e.grounded=false;e.ba=Math.PI/2;e.bav=0;e.tumbleHold=.5;e.poseBlend=1;e.kickerSpin=0;
       pushOut(e);
     }
     e.fallStart=e.y;
   }
+  const ex=[Vv(1,0,0),Vv(0,1,0),Vv(0,0,1)].map(v=>V(Math.round(v.x),Math.round(v.y),Math.round(v.z))),qr=qFromR(ex);
   for(const b of props){
     if(b.dead)continue;
     const c=P(b.x,b.y+b.h/2,b.z),v=Vv(b.vx,b.vy,b.vz);
-    if(key[1]==='x'){const t=b.w;b.w=b.h;b.h=t;}else{const t=b.d;b.d=b.h;b.h=t;}
-    b.x=c.x;b.y=c.y-b.h/2;b.z=c.z;b.vx=v.x;b.vy=v.y;b.vz=v.z;b.grounded=false;pushOut(b);
+    if(b.rb){b.x=c.x;b.z=c.z;b.y=c.y-b.h/2;rbTurn(b,qr);b.av=vadd(b.av,V((rnd()-.5)*1.6,(rnd()-.5)*1.6,(rnd()-.5)*1.6));}
+    else{if(key[1]==='x'){const t=b.w;b.w=b.h;b.h=t;}else{const t=b.d;b.d=b.h;b.h=t;}b.x=c.x;b.y=c.y-b.h/2;b.z=c.z;}
+    b.vx=v.x;b.vy=v.y;b.vz=v.z;b.grounded=false;if(b.rb?solid(tileAt(b.x,b.y+b.h/2,b.z)):true)pushOut(b);
   }
   for(const s of spiders){s.p=P(s.p.x,s.p.y,s.p.z);s.n=Vv(s.n.x,s.n.y,s.n.z);s.n=V(Math.round(s.n.x),Math.round(s.n.y),Math.round(s.n.z));if(s.v)s.v=Vv(s.v.x,s.v.y,s.v.z);if(s.dir)s.dir=Vv(s.dir.x,s.dir.y,s.dir.z);s.look=null;if(s.state==='crawl'&&s.atWp===false){s.state='leap';s.v=V(0,0,0);s.leapT=0;}s.path=null;s.repath=0;syncSpider(s);}
   for(const b of bullets){const p=P(b.x,b.y,b.z),v=Vv(b.vx,b.vy,b.vz);Object.assign(b,{x:p.x,y:p.y,z:p.z,vx:v.x,vy:v.y,vz:v.z});}
   for(const q of rockets){const p=P(q.x,q.y,q.z);q.x=p.x;q.y=p.y;q.z=p.z;q.d=Vv(q.d.x,q.d.y,q.d.z);}
-  for(const p of parts){const a=P(p.x,p.y,p.z),v=Vv(p.vx,p.vy,p.vz);Object.assign(p,{x:a.x,y:a.y,z:a.z,vx:v.x,vy:v.y,vz:v.z});}
+  for(const p of parts){const a=P(p.x,p.y,p.z),v=Vv(p.vx,p.vy,p.vz);Object.assign(p,{x:a.x,y:a.y,z:a.z,vx:v.x,vy:v.y,vz:v.z});if(p.type==='splat')p.type='drop';}
+  for(const g of gibs){const a=P(g.x,g.y,g.z),v=Vv(g.vx,g.vy,g.vz);Object.assign(g,{x:a.x,y:a.y,z:a.z,vx:v.x,vy:v.y,vz:v.z});rbTurn(g,qr);}
+  corpsesToDolls();
   for(const d of dolls)for(const p of d.pts){const a=P(p.x,p.y,p.z),o=P(p.ox,p.oy,p.oz);Object.assign(p,{x:a.x,y:a.y,z:a.z,ox:o.x,oy:o.y,oz:o.z});}
   for(const e of chars)if(e.ai){e.ai.path=null;e.ai.kickGoal=null;e.ai.wander=null;}
   const piv=player&&player.alive?V(player.x,player.y+48,player.z):V(L/2,L/2,L/2);
@@ -166,7 +170,7 @@ function step(dt,first){
   for(const e of chars)charProps(e);
   if(props.some(b=>b.dead))props=props.filter(b=>!b.dead);
   updateSpiders(dt);
-  updateBullets(dt);updateRockets(dt);updateDolls(dt);updateGibs(dt);updateParts(dt);
+  updateBullets(dt);updateRockets(dt);updateDolls(dt);updateCorpses(dt);updateGibs(dt);updateParts(dt);
   if(TUT.on)tutStep(dt);
 }
 
@@ -191,7 +195,7 @@ function render(){
   for(const b of props)drawProp(b);
   for(const s of spiders)drawSpider(s);
   drawDrones();
-  for(const d of dolls)drawDoll(d);
+  for(const d of dolls)drawDoll(d);if(SKN.ready)drawCorpses();
   drawGibs();
   // bullets & rockets
   for(const b of bullets){const tail=V(b.x-b.vx*.03,b.y-b.vy*.03,b.z-b.vz*.03);drawSeg(tail,V(b.x,b.y,b.z),1.6,b.col,b.col,null,1);}
@@ -212,6 +216,7 @@ function render(){
   for(const p of parts){
     const a=clamp(p.life/p.max,0,1);
     if(p.type==='spark'||p.type==='glow'||p.type==='flame')add.push({x:p.x,y:p.y,z:p.z,r:p.col[0],g:p.col[1],b:p.col[2],a:a,s:p.size*(p.type==='flame'?(.6+a*.6):1)});
+    else if(p.type==='drop'||p.type==='splat')alpha.push({x:p.x,y:p.y,z:p.z,r:p.col[0],g:p.col[1],b:p.col[2],a:p.type==='drop'?.95:Math.min(1,a*3)*.9,s:p.size*(p.type==='splat'?1.5:1)});
     else alpha.push({x:p.x,y:p.y,z:p.z,r:p.col[0],g:p.col[1],b:p.col[2],a:a*(p.type==='smoke'?.55:.45),s:p.size*(1.6-a*.6)});
   }
   drawParticles(alpha,false);drawParticles(add,true);
@@ -310,7 +315,7 @@ function newMatch(seed){
   chars=[makeChar('YOU','#29f0ff',false)];
   for(let i=0;i<cfg.bots;i++)chars.push(makeChar(roster[i][0],roster[i][1],true));
   player=chars[0];
-  props=[];bullets=[];rockets=[];parts=[];dolls=[];gibs=[];feed=[];
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];
   spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');spawnDrop('shotgun');spawnDrop('shotgun');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;
