@@ -150,7 +150,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <div id="padstat"></div>
 <div class="lab">LOOK SPEED</div><div class="fragrow"><input type="range" id="sensSl" min="25" max="250" step="5"><b id="sensV"></b></div>
 <div class="lab">AIM ASSIST</div><div class="fragrow"><span id="assistopt"></span><input type="range" id="asSl" min="0" max="100" step="5"><b id="asV"></b></div>
-<div id="asdesc">gamepad only · slows the look near a target and gently pulls toward it</div>
+<div id="asdesc">gamepad only · slows the look on a target, tracks and pulls toward it · RB snaps on</div>
 <div class="lab">MUSIC</div><div class="fragrow"><input type="range" id="musSl" min="0" max="100" step="1"><b id="musV"></b></div>
 <div class="lab">EFFECTS</div><div class="fragrow"><input type="range" id="fxSl" min="0" max="100" step="1"><b id="fxV"></b></div>
 <div class="lab">FPS</div><div id="fpsopt"></div>
@@ -190,7 +190,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <div class="ptitle" style="margin-top:12px">GAMEPAD <small>(Options → Controls → Gamepad)</small></div>
 <table>
 <tr><td>LEFT STICK</td><td>Move · click it to sprint</td></tr>
-<tr><td>RIGHT STICK</td><td>Look / aim · click it to dodge (in the left stick's direction, back if centred) · aim assist (Options) slows the look over an enemy and pulls gently toward them</td></tr>
+<tr><td>RIGHT STICK</td><td>Look / aim · click it to dodge (in the left stick's direction, back if centred) · aim assist (Options) slows the look over an enemy, follows them and pulls toward them · RB snaps onto a nearby enemy</td></tr>
 <tr><td>LT</td><td>Fire the selected weapon (left click)</td></tr>
 <tr><td>RB</td><td>Aim (right click)</td></tr>
 <tr><td>RT</td><td>Fire a rocket (middle click)</td></tr>
@@ -3722,7 +3722,7 @@ function musicNote(i,t){
 
 // ---------- gamepad ----------
 // standard mapping: 0 A,1 B,2 X,3 Y,4 LB,5 RB,6 LT,7 RT,8 back,9 start,10 L3,11 R3,12 up,13 down,14 left,15 right
-let padStatT=0,padPrev=[],padFocus=-1,padMove=null,padDodge=null,padSprint=false,padRep=0;
+let padTrk=null,padStatT=0,padPrev=[],padFocus=-1,padMove=null,padDodge=null,padSprint=false,padRep=0;
 function findPad(){const l=navigator.getGamepads?navigator.getGamepads():[];for(const g of l)if(g&&g.connected)return g;return null;}
 const padDZ=(v,d)=>Math.abs(v)<d?0:(v-Math.sign(v)*d)/(1-d);
 function pollPad(dt){
@@ -3754,13 +3754,21 @@ function pollPad(dt){
   if(SETTINGS.input!=='gamepad'){padPrev=now;return;}
   // look: right stick, eased so small tilts aim finely
   const k=3.1*(SETTINGS.sens/100)*(cam.zoom||1)*dt;
-  const A=SETTINGS.assist&&SETTINGS.assistStr>0?assistTarget():null;
-  // friction: the look slows down while the crosshair is over a target
-  const fr=A?1-.65*(SETTINGS.assistStr/100)*(1-A.e):1;
+  const S=SETTINGS.assist?SETTINGS.assistStr/100:0;
+  const A=S>0?assistTarget(down(5)?2.6:1):null;
+  // snap: pressing RB (aim) swings the crosshair onto the nearest enemy in a wide cone
+  if(A&&down(5)){const sn=.35+.6*S;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
+  // friction: the look slows down a lot while the crosshair is over a target
+  const fr=A?1-(.45+.45*S)*(1-A.e*.6):1;
   cam.yaw-=rx*Math.abs(rx)*k*fr;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75*fr,-1.35,1.25);
-  // magnetism: while you move, look or shoot, the aim is drawn gently onto the target
-  if(A&&(rx||ry||lx||ly||now[6]||now[5])){const s=SETTINGS.assistStr/100,pull=Math.min(1,(now[5]?3.6:2.4)*s*dt*(1.2-A.e*.7));
-    cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
+  if(A){
+    // tracking: follow the target as it (or you) moves
+    if(padTrk&&padTrk.t===A.t){const ddy=angDiff(A.ay,padTrk.ay),ddp=A.ap-padTrk.ap;if(Math.abs(ddy)<.3){const tk=.5+.5*S;cam.yaw+=ddy*tk;cam.pitch=clamp(cam.pitch+ddp*tk,-1.35,1.25);}}
+    // magnetism: pull onto the target while you move, look or shoot
+    if(rx||ry||lx||ly||now[6]||now[5]){const pull=Math.min(.6,(now[5]?14:9)*S*dt*(1.3-A.e*.6));
+      cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
+    padTrk={t:A.t,ay:A.ay,ap:A.ap};
+  }else padTrk=null;
   // move: left stick; L3 latches sprint until the stick is let go
   if(lx||ly)padMove={f:-ly,s:lx};
   if(down(10))padSprint=!padSprint;if(Math.hypot(lx,ly)<.3)padSprint=false;
@@ -3775,19 +3783,19 @@ function pollPad(dt){
   padPrev=now;
 }
 // aim assist: the enemy closest to the crosshair, inside a cone that grows with the strength and with how near they are
-function assistTarget(){
+function assistTarget(wide){
   const p=player;if(!p||!p.alive||world.rot||world.demo||!cam.pos)return null;
   const s=SETTINGS.assistStr/100,o=headPos(p);let best=null;
   for(const e of chars){
     if(e===p||!e.alive||allied(e,p)||e.vis<.35)continue;
     const t=chestPos(e),d=vsub(t,cam.pos),dist=vlen(d);if(dist<20||dist>1600)continue;
-    const dy=angDiff(Math.atan2(d.x,d.z),cam.yaw),dp=Math.asin(clamp(d.y/dist,-1,1))-cam.pitch;
-    if(Math.abs(dy)>1.2)continue;
-    const err=Math.hypot(dy*Math.cos(cam.pitch),dp),rad=(.05+30/dist)*(.4+1.2*s);
+    const ay=Math.atan2(d.x,d.z),ap=Math.asin(clamp(d.y/dist,-1,1)),dy=angDiff(ay,cam.yaw),dp=ap-cam.pitch;
+    if(Math.abs(dy)>1.4)continue;
+    const err=Math.hypot(dy*Math.cos(cam.pitch),dp),rad=(.07+40/dist)*(.5+1.6*s)*(wide||1);
     if(err>rad)continue;
     const e2=err/rad;if(best&&e2>=best.e)continue;
     if(!losClear(o,t))continue;
-    best={t:e,e:e2,dy,dp};
+    best={t:e,e:e2,dy,dp,ay,ap};
   }
   return best;
 }
