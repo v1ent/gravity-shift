@@ -8,6 +8,7 @@ const TUT_ROOMS=[
   {id:'range',name:'TARGET PRACTICE',desc:'Follow the yellow line and shoot the drones'},
   {id:'rj',name:'ROCKET JUMPING',desc:"Blast yourself up to platforms you can't reach otherwise"},
   {id:'shift',name:'ARENA SHIFT',desc:'Kick the panels to walk on the walls and the ceiling'},
+  {id:'ally',name:'ALLIANCES',desc:'Wave, bow and fight as a team'},
   {id:'fight',name:'BASIC FIGHT',desc:'One easy bot — first to 3 frags'},
 ];
 try{Object.assign(TUT.done,JSON.parse(localStorage.getItem('gravityShiftTutorial')||'{}'));}catch(e){}
@@ -216,7 +217,8 @@ TUT_BUILD.rj=()=>{
   TUT.rjCount=0;TUT.rjLaunch=null;TUT.reached=[false,false,false,false];
   return {
     name:'ROCKET JUMPING',spawn:{x:20*T,y:fy,z:8*T},yaw:-Math.PI/2,infRockets:true,damage:true,noDeath:true,
-    card:['ROCKET JUMPING',`<p>Look down at your feet and fire a rocket with the <b>middle mouse button</b> (or switch to the launcher with <b>2</b> and click). The blast <b>always</b> launches you — but standing on the ground it costs about <b>60% of your health</b>.</p>
+    props(){props.push(makeProp(18.2*T,fy,8*T,'launcher'));}, // the big launcher, right in front of you
+    card:['ROCKET JUMPING',`<p>Walk over the <b style="color:#ff5a3c">launcher</b> in front of you to pick it up. Then look down at your feet and fire a rocket with the <b>middle mouse button</b> (or switch to the launcher with <b>2</b> and click). The blast <b>always</b> launches you — but standing on the ground it costs about <b>60% of your health</b>.</p>
       <p>The trick: <b>JUMP just before the rocket hits the floor</b>. Caught in the air, you fly higher and lose only <b>15–20%</b>. You have about half a second.</p>
       <p>Near the top of the jump you <b>float</b> for a moment — use it to steer onto a ledge. Each platform needs a rocket jump. You can't die in this room, and your health refills when you stand still.</p>`],
     obj:[{text:'Fire at your feet WITHOUT jumping — see what it costs',short:'NO-JUMP BLAST'},
@@ -276,7 +278,68 @@ TUT_BUILD.shift=()=>{
   };
 };
 
-// ---------- 5. basic fight ----------
+// ---------- 5. alliances ----------
+// actors: walk / face helpers write the bot's controls directly
+function actWalk(b,c,x,z,stop,run){const dx=x-b.x,dz=z-b.z,d=Math.hypot(dx,dz);if(d>(stop||8)){c.mx=dx/d;c.mz=dz/d;c.sprint=!!run&&d>90;}return d;}
+function actFace(b,c,o){c.aimYaw=Math.atan2(o.x-b.x,o.z-b.z);c.aimPitch=0;}
+// follow the player a little behind and to one side
+function actFollow(b,c,side){const p=player,f=V(Math.sin(p.bodyYaw),0,Math.cos(p.bodyYaw)),r=V(-f.z,0,f.x);
+  const gx=p.x-f.x*48+r.x*side*34,gz=p.z-f.z*48+r.z*side*34;const d=actWalk(b,c,gx,gz,14,true);if(d<=14)actFace(b,c,V(p.x+f.x*200,0,p.z+f.z*200));else c.aimYaw=Math.atan2(gx-b.x,gz-b.z);}
+TUT_BUILD.ally=()=>{
+  const fy=5*T;
+  gbox(2,5,5,36,12,17,0);
+  for(let x=4;x<30.5;x+=1.6)floorChev(x*T,11.5*T,fy,1,0,MKC.yel,3.2);
+  for(const x of [9,17,24])floorRect(x*T,10.2*T,(x+1.2)*T,12.8*T,fy,MKC.cyan,3);
+  floorRect(31*T,8.5*T,35*T,14.5*T,fy,MKC.grn,4);
+  const say=(k,text,col,dur)=>{if(TUT.said&&TUT.said[k])return;(TUT.said||(TUT.said={}))[k]=1;toast(text,col||'#ccd',dur||4.5);};
+  const A=()=>chars.find(c=>c.name==='VOLT'),B=()=>chars.find(c=>c.name==='NYX'),C=()=>chars.find(c=>c.name==='RAZOR'),D=()=>chars.find(c=>c.name==='KAI');
+  const actors=[
+    // case 1: VOLT offers, NYX accepts — VOLT takes NYX's colour
+    {name:'VOLT',color:'#ff3fa4',x:10.6,z:8,yaw:Math.PI/2,script(b,c){const n=B();
+      if(TUT.stage===1&&!b.team){actFace(b,c,n);if(!b.emote&&TUT.t-TUT.st0>.6&&TUT.t-TUT.st0<1.2)c.wave=true;}else if(b.team)actFace(b,c,player);}},
+    {name:'NYX',color:'#ffb020',x:13,z:8,yaw:-Math.PI/2,script(b,c){const a=A();
+      if(TUT.stage===1&&!b.team){actFace(b,c,a);if(a.emote&&a.emote.kind==='wave'&&a.emote.t>2.2)c.wave=true;}else if(b.team)actFace(b,c,player);}},
+    // case 2: you wave at RAZOR, he comes over and accepts — you take his colour
+    {name:'RAZOR',color:'#9dff3a',x:19.5,z:8,yaw:0,script(b,c){const p=player;
+      if(b.team&&b.team===p.team){actFollow(b,c,-1);return;}
+      if(TUT.stage>=2&&p.emote&&p.emote.kind==='wave'&&Math.hypot(p.x-b.x,p.z-b.z)<330){
+        const gx=p.x+Math.sin(p.bodyYaw)*70,gz=p.z+Math.cos(p.bodyYaw)*70;const d=actWalk(b,c,gx,gz,10);
+        if(d>10)c.aimYaw=Math.atan2(gx-b.x,gz-b.z);else{actFace(b,c,p);if(inFrontOf(p,b)&&p.emote.t>.8)c.wave=true;}}
+      else actFace(b,c,p);}},
+    // case 3: KAI comes to you and waves — you accept, and he joins your team
+    {name:'KAI',color:'#b06bff',x:27.5,z:14.6,yaw:Math.PI,script(b,c){const p=player;
+      if(b.team&&b.team===p.team){actFollow(b,c,1);return;}
+      if(TUT.stage>=3){const gx=p.x+Math.sin(p.yaw)*72,gz=p.z+Math.cos(p.yaw)*72;
+        if(b.emote){actFace(b,c,p);return;}
+        const d=actWalk(b,c,gx,gz,12);if(d>12)c.aimYaw=Math.atan2(gx-b.x,gz-b.z);else{actFace(b,c,p);if(Math.abs(angDiff(Math.atan2(p.x-b.x,p.z-b.z),b.bodyYaw))<.3)c.wave=true;}}
+      else actFace(b,c,p);}},
+  ];
+  return {
+    name:'ALLIANCES',spawn:{x:3.5*T,y:fy,z:11.5*T},yaw:Math.PI/2,allyHud:true,actors,hud:{gravity:false},
+    card:['ALLIANCES',`<p>Any fighter can offer an alliance. Press <b>T</b> to <b>wave</b>. Someone who comes to <b>stand in front of you</b> and presses <b>T</b> too <b>bows</b> with you — and the one who waved first <b>takes the other's colour</b>. You're a team until the round ends.</p>
+      <p>Allies don't target each other (friendly fire still hurts), the team's score is its members' frags averaged, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
+      <p>Follow the yellow line. Stop at each blue marker and watch, then do it yourself.</p>`],
+    obj:[{text:'Walk to the first blue marker and watch VOLT and NYX',short:'WATCH'},
+         {text:'Second marker: face RAZOR and press T to wave — he comes over and accepts',short:'ASK'},
+         {text:'Third marker: KAI comes to you and waves — face him and press T',short:'ACCEPT'},
+         {text:'Walk with your team to the green area',short:'FINISH'}],
+    update(dt,p){
+      const o=TUT.cfg.obj;TUT.stage=TUT.stage||0;
+      if(TUT.stage===0&&p.x>8.6*T){TUT.stage=1;TUT.st0=TUT.t;say('s1','VOLT waves at NYX — offering an alliance');}
+      if(TUT.stage===1){const a=A(),b=B();
+        if(a.emote&&a.emote.kind==='bow')say('s1b','NYX stood in front of VOLT and pressed T — they bow…');
+        if(a.team&&a.team===b.team){say('s1c','VOLT took NYX\'s colour — they are allies now','#ffb020');objDone(0,'✓ WATCHED');TUT.stage=2;}}
+      if(TUT.stage===2&&p.x>15.5*T)say('s2','Your turn: face RAZOR and press T to wave','#9dff3a');
+      if(TUT.stage===2&&p.team&&p.team===C().team){say('s2b','RAZOR accepted — you took his colour. He follows you now','#9dff3a');objDone(1,'✓ ALLIANCE');TUT.stage=3;}
+      if(TUT.stage===3&&p.x>22.5*T)say('s3','KAI wants to join you — face him and press T when he waves',D().color);
+      if(TUT.stage===3&&D().team&&D().team===p.team){say('s3b','KAI joined your team. Walk to the green area together',p.color);objDone(2,'✓ NEW MEMBER');TUT.stage=4;}
+      if(TUT.stage===4){const inG=e=>e.x>30.6*T&&e.x<35.4*T&&e.z>8*T&&e.z<15*T;
+        if(inG(p)&&inG(C())&&inG(D())){o[3].done=true;TUT.result='Your team: '+sideName(p).split('+').join(' · ');tutComplete();}}
+    },
+  };
+};
+
+// ---------- 6. basic fight ----------
 TUT_BUILD.fight=()=>{
   gbox(9,5,9,27,12,27,0);
   for(const [x,z] of [[13,13],[22,13],[13,22],[22,22]])gbox(x,5,z,x+1,8,z+1,3);
@@ -300,20 +363,24 @@ TUT_BUILD.fight=()=>{
 // ================= runtime =================
 function startTutorial(id){
   TUT.on=true;TUT.id=id;TUT.t=0;TUT.toast=[];TUT.complete=false;TUT.cp=null;TUT.cardDelay=-1;TUT.prevState='normal';TUT.overSeen=false;TUT.shots=0;
-  for(const k of ['v1','v2','p1','p2','slid','result'])delete TUT[k];
+  for(const k of ['v1','v2','p1','p2','slid','result','stage','st0','said'])delete TUT[k];
   drones=[];rnd=Math.random;
   grid.fill(1);stairO.fill(0);deco=[];
   const cfg=TUT_BUILD[id]();TUT.cfg=cfg;
   for(const o of cfg.obj){o.done=false;if('n' in o)o.n=0;}
   nav=null;buildNav();buildLevelMesh();buildDecoMesh();
   applyBotSkill('easy');
-  chars=[makeChar('YOU','#29f0ff',false)];
+  chars=[makeChar('YOU',SETTINGS.color,false)];
   for(let i=0;i<(cfg.bots||0);i++)chars.push(makeChar('DUMMY','#ffb020',true));
   player=chars[0];
+  // scripted actors (they don't think for themselves: the room drives them)
+  for(const a of cfg.actors||[]){const b=makeChar(a.name,a.color,true);b.script=a.script;b.actor=a;chars.push(b);}
+  fixColorClash();
   props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];feed=[];spiders=[];
   if(cfg.props)cfg.props();
   if(cfg.spawn)setCp(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z,cfg.yaw);
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
+  for(const b of chars)if(b.actor){const a=b.actor;Object.assign(b,{x:a.x*T,y:5*T,z:a.z*T,vx:0,vy:0,vz:0,invuln:0,grounded:true});b.yaw=b.bodyYaw=b.legYaw=a.yaw;b.fallStart=b.y;}
   Object.assign(world,{rotCD:0,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,
     medT:cfg.medkits?12:1e9,barrelQ:[],sgQ:[],arQ:[],lnQ:[],noises:[],spiderT:1e9,fragLimit:cfg.frags||FRAG_LIMIT});
   TUT.turns0=0;TUT.cpSec=0;

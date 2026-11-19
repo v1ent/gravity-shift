@@ -16,8 +16,9 @@ function applyBotSkill(key){
 }
 function botThink(b,dt){
   const c=b.ctl;
-  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;
+  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;
   if(!b.alive){b.ai=null;return;}
+  if(b.script){c.mx=0;c.mz=0;b.script(b,c,dt);return;} // tutorial actors
   const ai=b.ai||(b.ai={known:null,acquire:0,lostT:0,lastSeen:null,alert:null,alertT:0,yaw:b.yaw,pitch:0,errT:0,ex:0,ey:0,ez:0,burst:0,pause:0,path:null,replan:0,stuckT:0,last:V(b.x,b.y,b.z),flip:0,hold:0,strafe:1,strafeT:0,skill:BOT_CFG.skill[0]+rnd()*(BOT_CFG.skill[1]-BOT_CFG.skill[0]),rocketT:(2+rnd()*3)/BOT_CFG.rocket,jumpWait:0,scanT:0});
   const eye=headPos(b);
   // decisions happen at a human rhythm (~4 times a second), not every frame; in between the bot commits

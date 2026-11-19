@@ -65,6 +65,8 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #pause .seedrow{display:flex;gap:6px;align-items:center;margin-top:14px;color:#ff3fa4;letter-spacing:2px;font-size:13px}
 #pause .seedrow input{width:150px;flex:1}
 #pause .seedrow button{display:inline-block;width:auto;margin:0;padding:6px 10px;font-size:12px;letter-spacing:1px}
+.fragrow{display:flex;align-items:center;gap:12px}.fragrow input{flex:1;accent-color:#29f0ff}.fragrow b{min-width:2.2em;color:#29f0ff;font-size:16px}
+#ov button.sw{width:26px;height:26px;padding:0;margin:3px;border-radius:50%;border:2px solid #05060c;box-shadow:none;vertical-align:middle}#ov button.sw.on{border-color:#fff;box-shadow:0 0 12px currentColor;transform:scale(1.18)}
 </style>
 </head>
 <body>
@@ -98,15 +100,17 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <tr><td>R / ESC</td><td>Reload / pause</td></tr>
 </table>
 <p><b style="color:#ff8a2a">Rockets</b> (middle mouse, or slot 2): slow, then accelerating. A direct hit kills outright, and the blast hurts anyone near it — aim at the floor or a wall beside your target. Fighters in the air take little damage but get thrown hard. <b style="color:#ff8a2a">Rocket jump:</b> fire at your feet — the blast always launches you, but on the ground it costs 60% of your health; <b>jump just before it explodes</b> and you fly higher for only 15–20%. Near the top you float for a moment. The tutorial teaches it.</p>
-<p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red barrels: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins.</p>
+<p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red barrels: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins (set it from 10 to 50 below).</p>
 <p><b style="color:#ccd">Alliances:</b> press T to wave. A fighter who comes to stand in front of you and presses T too bows with you, and you take their colour: from then on you're a team until the round ends. Bots stop targeting you (friendly fire still hurts — a teamkill costs a frag), the team's score is its members' frags averaged, and if the team wins you all win. Bots offer and accept alliances too, and like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
 <div class="setup">
 <div class="lab">BOTS</div><div id="bots"></div>
 <div class="lab">SKILL</div><div id="skill"></div>
 <div id="skilldesc"></div>
+<div class="lab">YOUR COLOUR</div><div id="pcol"></div>
+<div class="lab">FRAGS TO WIN</div><div class="fragrow"><input type="range" id="fragSl" min="10" max="50" step="1" value="15"><b id="fragV">15</b></div>
 <div class="lab">SEED</div><div><input id="seedIn" placeholder="random — or type a number / word" maxlength="40"></div>
 </div>
-<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button> <button id="tutbtn" class="alt">TUTORIAL</button></div>
+<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button> <button id="tutbtn" class="alt">TUTORIAL</button> <button id="demo" class="alt">WATCH DEMO</button></div>
 <div id="nogl">WebGL is not available in this browser, so the 3D arena can't be drawn.</div>
 </div></div>
 <div id="tut"><div class="box">

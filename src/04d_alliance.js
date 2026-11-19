@@ -6,7 +6,7 @@
 //  wins together. Teams last until the end of the round. The last fighter
 //  standing alone can never be absorbed: there must always be two sides.
 // =====================================================================
-const WAVE_T=3.2,BOW_T=2.6,ALLY_RANGE=120;
+const WAVE_T=6,BOW_T=2.6,ALLY_RANGE=120;
 const allied=(a,b)=>!!a&&!!b&&a!==b&&!!a.team&&a.team===b.team;
 const sideMembers=e=>e.team?chars.filter(c=>c.team===e.team):[e];
 const sideScore=e=>{const m=sideMembers(e);return m.reduce((a,c)=>a+c.kills,0)/m.length;};

@@ -65,6 +65,8 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #pause .seedrow{display:flex;gap:6px;align-items:center;margin-top:14px;color:#ff3fa4;letter-spacing:2px;font-size:13px}
 #pause .seedrow input{width:150px;flex:1}
 #pause .seedrow button{display:inline-block;width:auto;margin:0;padding:6px 10px;font-size:12px;letter-spacing:1px}
+.fragrow{display:flex;align-items:center;gap:12px}.fragrow input{flex:1;accent-color:#29f0ff}.fragrow b{min-width:2.2em;color:#29f0ff;font-size:16px}
+#ov button.sw{width:26px;height:26px;padding:0;margin:3px;border-radius:50%;border:2px solid #05060c;box-shadow:none;vertical-align:middle}#ov button.sw.on{border-color:#fff;box-shadow:0 0 12px currentColor;transform:scale(1.18)}
 </style>
 </head>
 <body>
@@ -98,15 +100,17 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <tr><td>R / ESC</td><td>Reload / pause</td></tr>
 </table>
 <p><b style="color:#ff8a2a">Rockets</b> (middle mouse, or slot 2): slow, then accelerating. A direct hit kills outright, and the blast hurts anyone near it — aim at the floor or a wall beside your target. Fighters in the air take little damage but get thrown hard. <b style="color:#ff8a2a">Rocket jump:</b> fire at your feet — the blast always launches you, but on the ground it costs 60% of your health; <b>jump just before it explodes</b> and you fly higher for only 15–20%. Near the top you float for a moment. The tutorial teaches it.</p>
-<p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red barrels: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins.</p>
+<p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red barrels: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins (set it from 10 to 50 below).</p>
 <p><b style="color:#ccd">Alliances:</b> press T to wave. A fighter who comes to stand in front of you and presses T too bows with you, and you take their colour: from then on you're a team until the round ends. Bots stop targeting you (friendly fire still hurts — a teamkill costs a frag), the team's score is its members' frags averaged, and if the team wins you all win. Bots offer and accept alliances too, and like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
 <div class="setup">
 <div class="lab">BOTS</div><div id="bots"></div>
 <div class="lab">SKILL</div><div id="skill"></div>
 <div id="skilldesc"></div>
+<div class="lab">YOUR COLOUR</div><div id="pcol"></div>
+<div class="lab">FRAGS TO WIN</div><div class="fragrow"><input type="range" id="fragSl" min="10" max="50" step="1" value="15"><b id="fragV">15</b></div>
 <div class="lab">SEED</div><div><input id="seedIn" placeholder="random — or type a number / word" maxlength="40"></div>
 </div>
-<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button> <button id="tutbtn" class="alt">TUTORIAL</button></div>
+<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button> <button id="tutbtn" class="alt">TUTORIAL</button> <button id="demo" class="alt">WATCH DEMO</button></div>
 <div id="nogl">WebGL is not available in this browser, so the 3D arena can't be drawn.</div>
 </div></div>
 <div id="tut"><div class="box">
@@ -2793,7 +2797,7 @@ function rbDraw(b,lc,ls,col,em,edge,alpha){
 //  wins together. Teams last until the end of the round. The last fighter
 //  standing alone can never be absorbed: there must always be two sides.
 // =====================================================================
-const WAVE_T=3.2,BOW_T=2.6,ALLY_RANGE=120;
+const WAVE_T=6,BOW_T=2.6,ALLY_RANGE=120;
 const allied=(a,b)=>!!a&&!!b&&a!==b&&!!a.team&&a.team===b.team;
 const sideMembers=e=>e.team?chars.filter(c=>c.team===e.team):[e];
 const sideScore=e=>{const m=sideMembers(e);return m.reduce((a,c)=>a+c.kills,0)/m.length;};
@@ -2927,8 +2931,9 @@ function applyBotSkill(key){
 }
 function botThink(b,dt){
   const c=b.ctl;
-  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;
+  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;
   if(!b.alive){b.ai=null;return;}
+  if(b.script){c.mx=0;c.mz=0;b.script(b,c,dt);return;} // tutorial actors
   const ai=b.ai||(b.ai={known:null,acquire:0,lostT:0,lastSeen:null,alert:null,alertT:0,yaw:b.yaw,pitch:0,errT:0,ex:0,ey:0,ez:0,burst:0,pause:0,path:null,replan:0,stuckT:0,last:V(b.x,b.y,b.z),flip:0,hold:0,strafe:1,strafeT:0,skill:BOT_CFG.skill[0]+rnd()*(BOT_CFG.skill[1]-BOT_CFG.skill[0]),rocketT:(2+rnd()*3)/BOT_CFG.rocket,jumpWait:0,scanT:0});
   const eye=headPos(b);
   // decisions happen at a human rhythm (~4 times a second), not every frame; in between the bot commits
@@ -3165,13 +3170,17 @@ function rotUnfix(){
 // ---------- input ----------
 const keys={},pressed={};let mouseDown=false,mouseRight=false,locked=false;
 const SENS=.0024;
+// demo: switch the camera to the next / previous fighter
+function demoCycle(d){const l=chars.filter(c=>!c.isSpider);if(!l.length)return;const i=l.indexOf(player);player=l[((i<0?0:i)+d+l.length)%l.length];cam.yaw=player.yaw;}
 const cv=document.getElementById('c'),hud=document.getElementById('hud'),hctx=hud.getContext('2d');
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k]=true;keys[k]=true;
+  if(world.demo&&gameState==='play'&&!paused&&!e.repeat){if(k==='a'||k==='arrowleft')demoCycle(-1);if(k==='d'||k==='arrowright')demoCycle(1);}
   if(k==='escape'&&gameState==='play'&&!TUT.cardOpen){setPaused(!paused);}
-  if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch();}
+  if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(undefined,{demo:world.demo});}
   if(['w','a','s','d',' ','c','e','r','shift'].includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
-addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0){mouseDown=true;pressed['lmb']=true;}if(e.button===2)mouseRight=true;if(e.button===1){pressed['mmb']=true;e.preventDefault();}
+addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;
+  if(world.demo){if(e.button===0||e.button===2)demoCycle(e.button===2?-1:1);return;}if(e.button===0){mouseDown=true;pressed['lmb']=true;}if(e.button===2)mouseRight=true;if(e.button===1){pressed['mmb']=true;e.preventDefault();}
   if(!locked&&cv.requestPointerLock){try{const r=cv.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(err){}}});
 addEventListener('wheel',e=>{if(gameState==='play'&&!paused){pressed['wheel']=true;e.preventDefault();}},{passive:false});
 addEventListener('mouseup',e=>{if(e.button===0)mouseDown=false;if(e.button===2)mouseRight=false;});
@@ -3224,6 +3233,8 @@ const dblTap={};
 
 // ---------- camera ----------
 function updateCamera(){
+  // demo: the camera looks where the followed bot looks
+  if(world.demo&&player){cam.yaw+=angDiff(player.yaw,cam.yaw)*.12;cam.pitch+=(clamp((player.pitch||0)*.6-.12,-.8,.6)-cam.pitch)*.08;}
   // aiming zooms in a little (and slows the mouse to match)
   {const p=player,z=p&&p.alive&&p.aiming?.72:1;cam.zoom=(cam.zoom||1)+(z-(cam.zoom||1))*.18;}
   const p=player;
@@ -3267,7 +3278,7 @@ function step(dt,first){
   world.medT-=dt;
   if(world.medT<=0){world.medT=13+rnd()*9;if(props.filter(b=>b.kind==='medkit'&&!b.dead).length<3)spawnDrop('medkit');}
   if(world.barrelQ.length&&world.time>=world.barrelQ[0]){world.barrelQ.shift();spawnDrop('barrel');}
-  world.lnQ.sort((a,b)=>a-b);if(world.lnQ.length&&world.time>=world.lnQ[0]){world.lnQ.shift();if(props.filter(q=>q.kind==='launcher'&&!q.dead).length<3)spawnDrop('launcher');}
+  world.lnQ.sort((a,b)=>a-b);if(world.lnQ.length&&world.time>=world.lnQ[0]){world.lnQ.shift();if(props.filter(q=>q.kind==='launcher'&&!q.dead).length<5)spawnDrop('launcher');}
   world.arQ.sort((a,b)=>a-b);if(world.arQ.length&&world.time>=world.arQ[0]){world.arQ.shift();if(props.filter(q=>q.kind==='rifle'&&!q.dead).length<1)spawnDrop('rifle');}
   world.sgQ.sort((a,b)=>a-b);if(world.sgQ.length&&world.time>=world.sgQ[0]){world.sgQ.shift();if(props.filter(q=>q.kind==='shotgun'&&!q.dead).length<2)spawnDrop('shotgun');}
   world.noises=world.noises.filter(n=>world.time-n.t<.15);
@@ -3400,8 +3411,12 @@ function drawHUD(){
      const cx=s&&s.x!==undefined?s.x:W/2,cy=s&&s.y!==undefined?s.y:H/2,r0=Math.min(W,H)*.16,r1=Math.min(W,H)*.62;
      const g=c.createRadialGradient(cx,cy,r0,cx,cy,r1);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,`rgba(0,0,6,${.62*world.bowDim})`);
      c.fillStyle=g;c.fillRect(0,0,W,H);}}
+  // demo banner
+  if(world.demo){c.font='bold 13px "Courier New",monospace';c.textAlign='center';c.fillStyle='rgba(5,6,14,.65)';c.fillRect(W/2-300,52,600,24);
+    c.fillStyle=p.color;c.fillText(`DEMO · following ${p.name} · A / D or click to switch · ESC for the menu`,W/2,69);
+    if(gameState==='over'){world.demoT=(world.demoT||0)+1/60;if(world.demoT>7)newMatch(undefined,{demo:true});}}
   // alliance prompts
-  if(p.alive&&gameState==='play'&&!TUT.on){
+  if(p.alive&&gameState==='play'&&!world.demo&&(!TUT.on||(TUT.cfg&&TUT.cfg.allyHud))){
     c.font='bold 14px "Courier New",monospace';c.textAlign='center';
     if(p.emote&&p.emote.kind==='wave'){c.fillStyle='#ccd';c.fillText('WAVING — an enemy who stands in front of you and presses T joins you',W/2,H/2+96);}
     else if(p.emote&&p.emote.kind==='bow'){c.fillStyle=p.emote.partner.color;c.fillText(`⚑ FORMING AN ALLIANCE WITH ${p.emote.partner.name}…`,W/2,H/2+96);}
@@ -3410,16 +3425,25 @@ function drawHUD(){
   }
   if(TUT.on)tutHUD(c);
   if(paused){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);}
-  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(winner===p||allied(winner,p)?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
+  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(!world.demo&&(winner===p||allied(winner,p))?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
   if(world.flash>0){c.fillStyle=`rgba(255,63,164,${world.flash*.3})`;c.fillRect(0,0,W,H);}
 }
 
 // ---------- settings (start screen) ----------
-const SETTINGS={bots:3,skill:'normal'};
-try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;}}catch(e){}
+const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff'};
+const PLAYER_COLORS=['#29f0ff','#ff3fa4','#ffb020','#9dff3a','#b06bff','#ff5a3c','#ffffff','#3c8cff','#ffe23c','#00e0a0'];
+// a bot (or tutorial actor) that would share your colour gets the colour you gave up
+function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_COLORS.find(k=>!used.has(k))||col;}
+function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
+try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;}}catch(e){}
 function getSettings(){return SETTINGS;}
 function saveSettings(){try{localStorage.setItem('gravityShiftSettings',JSON.stringify(SETTINGS));}catch(e){}}
 function setupMenu(){
+  {const cw=document.getElementById('pcol');
+   const drawC=()=>{if(!cw)return;cw.innerHTML='';for(const k of PLAYER_COLORS){const b=document.createElement('button');b.className='sw'+(SETTINGS.color===k?' on':'');b.style.background=k;b.style.color=k;b.title=k;b.onclick=()=>{SETTINGS.color=k;saveSettings();drawC();};cw.appendChild(b);}};
+   drawC();}
+  {const sl=document.getElementById('fragSl'),fv=document.getElementById('fragV');
+   if(sl){sl.value=SETTINGS.frags;fv.textContent=SETTINGS.frags;sl.oninput=()=>{SETTINGS.frags=+sl.value;fv.textContent=sl.value;saveSettings();};}}
   const bw=document.getElementById('bots'),sw=document.getElementById('skill');if(!bw||!sw)return;
   const draw=()=>{
     bw.innerHTML='';for(let n=0;n<=7;n++){const b=document.createElement('button');b.className='opt'+(SETTINGS.bots===n?' on':'');b.textContent=n;b.onclick=()=>{SETTINGS.bots=n;saveSettings();draw();};bw.appendChild(b);}
@@ -3437,8 +3461,9 @@ function seedNumber(label){
   if(/^\d+$/.test(t))return Number(t)%4294967296;
   let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;
 }
-function newMatch(seed){
-  TUT.on=false;drones=[];world.fragLimit=FRAG_LIMIT;
+function newMatch(seed,opt){
+  opt=opt||{};world.demo=!!opt.demo;world.demoT=0;world.fragLimit=world.demo?10:(SETTINGS.frags||FRAG_LIMIT);
+  TUT.on=false;drones=[];
   // the seed decides the level, its decoration, furniture and starting spots; gameplay stays random
   const label=seed!==undefined&&seed!==null&&String(seed).trim()!==''?String(seed).trim():String((Math.random()*1e6)|0);
   world.seedLabel=label;
@@ -3448,11 +3473,14 @@ function newMatch(seed){
   nav=null;buildNav();buildLevelMesh();genDeco();buildDecoMesh();
   const cfg=getSettings();applyBotSkill(cfg.skill);
   const roster=[['VOLT','#ff3fa4'],['NYX','#ffb020'],['RAZOR','#9dff3a'],['HEX','#b06bff'],['ONYX','#ff5a3c'],['CIPHER','#ffffff'],['VEGA','#3c8cff']];
-  chars=[makeChar('YOU','#29f0ff',false)];
-  for(let i=0;i<cfg.bots;i++)chars.push(makeChar(roster[i][0],roster[i][1],true));
+  if(world.demo){ // demo: bots only; 'player' is simply whichever fighter the camera follows
+    chars=[];for(let i=0;i<6;i++)chars.push(makeChar(roster[i][0],roster[i][1],true));
+  }else{
+  chars=[makeChar('YOU',SETTINGS.color,false)];
+  for(let i=0;i<cfg.bots;i++)chars.push(makeChar(roster[i][0],roster[i][1],true));fixColorClash();}
   player=chars[0];
   props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];
-  spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');spawnDrop('launcher');spawnDrop('launcher');spawnDrop('launcher');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');
+  spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');for(let i=4+(rnd()<.5?1:0);i>0;i--)spawnDrop('launcher');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;
   Object.assign(world,{rotCD:2,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],arQ:[],lnQ:[],noises:[]});
@@ -3481,6 +3509,10 @@ function frame(now){
 }
 if(!initGL(cv)){document.getElementById('nogl').style.display='block';}
 requestAnimationFrame(frame);
+document.getElementById('demo').onclick=()=>{
+  if(!AC)initAudio();if(AC&&AC.state==='suspended')AC.resume();
+  document.getElementById('ov').style.display='none';newMatch(undefined,{demo:true});
+};
 document.getElementById('go').onclick=()=>{
   if(!AC)initAudio();if(AC&&AC.state==='suspended')AC.resume();
   const si=document.getElementById('seedIn');
@@ -3498,6 +3530,7 @@ const TUT_ROOMS=[
   {id:'range',name:'TARGET PRACTICE',desc:'Follow the yellow line and shoot the drones'},
   {id:'rj',name:'ROCKET JUMPING',desc:"Blast yourself up to platforms you can't reach otherwise"},
   {id:'shift',name:'ARENA SHIFT',desc:'Kick the panels to walk on the walls and the ceiling'},
+  {id:'ally',name:'ALLIANCES',desc:'Wave, bow and fight as a team'},
   {id:'fight',name:'BASIC FIGHT',desc:'One easy bot — first to 3 frags'},
 ];
 try{Object.assign(TUT.done,JSON.parse(localStorage.getItem('gravityShiftTutorial')||'{}'));}catch(e){}
@@ -3706,7 +3739,8 @@ TUT_BUILD.rj=()=>{
   TUT.rjCount=0;TUT.rjLaunch=null;TUT.reached=[false,false,false,false];
   return {
     name:'ROCKET JUMPING',spawn:{x:20*T,y:fy,z:8*T},yaw:-Math.PI/2,infRockets:true,damage:true,noDeath:true,
-    card:['ROCKET JUMPING',`<p>Look down at your feet and fire a rocket with the <b>middle mouse button</b> (or switch to the launcher with <b>2</b> and click). The blast <b>always</b> launches you — but standing on the ground it costs about <b>60% of your health</b>.</p>
+    props(){props.push(makeProp(18.2*T,fy,8*T,'launcher'));}, // the big launcher, right in front of you
+    card:['ROCKET JUMPING',`<p>Walk over the <b style="color:#ff5a3c">launcher</b> in front of you to pick it up. Then look down at your feet and fire a rocket with the <b>middle mouse button</b> (or switch to the launcher with <b>2</b> and click). The blast <b>always</b> launches you — but standing on the ground it costs about <b>60% of your health</b>.</p>
       <p>The trick: <b>JUMP just before the rocket hits the floor</b>. Caught in the air, you fly higher and lose only <b>15–20%</b>. You have about half a second.</p>
       <p>Near the top of the jump you <b>float</b> for a moment — use it to steer onto a ledge. Each platform needs a rocket jump. You can't die in this room, and your health refills when you stand still.</p>`],
     obj:[{text:'Fire at your feet WITHOUT jumping — see what it costs',short:'NO-JUMP BLAST'},
@@ -3766,7 +3800,68 @@ TUT_BUILD.shift=()=>{
   };
 };
 
-// ---------- 5. basic fight ----------
+// ---------- 5. alliances ----------
+// actors: walk / face helpers write the bot's controls directly
+function actWalk(b,c,x,z,stop,run){const dx=x-b.x,dz=z-b.z,d=Math.hypot(dx,dz);if(d>(stop||8)){c.mx=dx/d;c.mz=dz/d;c.sprint=!!run&&d>90;}return d;}
+function actFace(b,c,o){c.aimYaw=Math.atan2(o.x-b.x,o.z-b.z);c.aimPitch=0;}
+// follow the player a little behind and to one side
+function actFollow(b,c,side){const p=player,f=V(Math.sin(p.bodyYaw),0,Math.cos(p.bodyYaw)),r=V(-f.z,0,f.x);
+  const gx=p.x-f.x*48+r.x*side*34,gz=p.z-f.z*48+r.z*side*34;const d=actWalk(b,c,gx,gz,14,true);if(d<=14)actFace(b,c,V(p.x+f.x*200,0,p.z+f.z*200));else c.aimYaw=Math.atan2(gx-b.x,gz-b.z);}
+TUT_BUILD.ally=()=>{
+  const fy=5*T;
+  gbox(2,5,5,36,12,17,0);
+  for(let x=4;x<30.5;x+=1.6)floorChev(x*T,11.5*T,fy,1,0,MKC.yel,3.2);
+  for(const x of [9,17,24])floorRect(x*T,10.2*T,(x+1.2)*T,12.8*T,fy,MKC.cyan,3);
+  floorRect(31*T,8.5*T,35*T,14.5*T,fy,MKC.grn,4);
+  const say=(k,text,col,dur)=>{if(TUT.said&&TUT.said[k])return;(TUT.said||(TUT.said={}))[k]=1;toast(text,col||'#ccd',dur||4.5);};
+  const A=()=>chars.find(c=>c.name==='VOLT'),B=()=>chars.find(c=>c.name==='NYX'),C=()=>chars.find(c=>c.name==='RAZOR'),D=()=>chars.find(c=>c.name==='KAI');
+  const actors=[
+    // case 1: VOLT offers, NYX accepts — VOLT takes NYX's colour
+    {name:'VOLT',color:'#ff3fa4',x:10.6,z:8,yaw:Math.PI/2,script(b,c){const n=B();
+      if(TUT.stage===1&&!b.team){actFace(b,c,n);if(!b.emote&&TUT.t-TUT.st0>.6&&TUT.t-TUT.st0<1.2)c.wave=true;}else if(b.team)actFace(b,c,player);}},
+    {name:'NYX',color:'#ffb020',x:13,z:8,yaw:-Math.PI/2,script(b,c){const a=A();
+      if(TUT.stage===1&&!b.team){actFace(b,c,a);if(a.emote&&a.emote.kind==='wave'&&a.emote.t>2.2)c.wave=true;}else if(b.team)actFace(b,c,player);}},
+    // case 2: you wave at RAZOR, he comes over and accepts — you take his colour
+    {name:'RAZOR',color:'#9dff3a',x:19.5,z:8,yaw:0,script(b,c){const p=player;
+      if(b.team&&b.team===p.team){actFollow(b,c,-1);return;}
+      if(TUT.stage>=2&&p.emote&&p.emote.kind==='wave'&&Math.hypot(p.x-b.x,p.z-b.z)<330){
+        const gx=p.x+Math.sin(p.bodyYaw)*70,gz=p.z+Math.cos(p.bodyYaw)*70;const d=actWalk(b,c,gx,gz,10);
+        if(d>10)c.aimYaw=Math.atan2(gx-b.x,gz-b.z);else{actFace(b,c,p);if(inFrontOf(p,b)&&p.emote.t>.8)c.wave=true;}}
+      else actFace(b,c,p);}},
+    // case 3: KAI comes to you and waves — you accept, and he joins your team
+    {name:'KAI',color:'#b06bff',x:27.5,z:14.6,yaw:Math.PI,script(b,c){const p=player;
+      if(b.team&&b.team===p.team){actFollow(b,c,1);return;}
+      if(TUT.stage>=3){const gx=p.x+Math.sin(p.yaw)*72,gz=p.z+Math.cos(p.yaw)*72;
+        if(b.emote){actFace(b,c,p);return;}
+        const d=actWalk(b,c,gx,gz,12);if(d>12)c.aimYaw=Math.atan2(gx-b.x,gz-b.z);else{actFace(b,c,p);if(Math.abs(angDiff(Math.atan2(p.x-b.x,p.z-b.z),b.bodyYaw))<.3)c.wave=true;}}
+      else actFace(b,c,p);}},
+  ];
+  return {
+    name:'ALLIANCES',spawn:{x:3.5*T,y:fy,z:11.5*T},yaw:Math.PI/2,allyHud:true,actors,hud:{gravity:false},
+    card:['ALLIANCES',`<p>Any fighter can offer an alliance. Press <b>T</b> to <b>wave</b>. Someone who comes to <b>stand in front of you</b> and presses <b>T</b> too <b>bows</b> with you — and the one who waved first <b>takes the other's colour</b>. You're a team until the round ends.</p>
+      <p>Allies don't target each other (friendly fire still hurts), the team's score is its members' frags averaged, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
+      <p>Follow the yellow line. Stop at each blue marker and watch, then do it yourself.</p>`],
+    obj:[{text:'Walk to the first blue marker and watch VOLT and NYX',short:'WATCH'},
+         {text:'Second marker: face RAZOR and press T to wave — he comes over and accepts',short:'ASK'},
+         {text:'Third marker: KAI comes to you and waves — face him and press T',short:'ACCEPT'},
+         {text:'Walk with your team to the green area',short:'FINISH'}],
+    update(dt,p){
+      const o=TUT.cfg.obj;TUT.stage=TUT.stage||0;
+      if(TUT.stage===0&&p.x>8.6*T){TUT.stage=1;TUT.st0=TUT.t;say('s1','VOLT waves at NYX — offering an alliance');}
+      if(TUT.stage===1){const a=A(),b=B();
+        if(a.emote&&a.emote.kind==='bow')say('s1b','NYX stood in front of VOLT and pressed T — they bow…');
+        if(a.team&&a.team===b.team){say('s1c','VOLT took NYX\'s colour — they are allies now','#ffb020');objDone(0,'✓ WATCHED');TUT.stage=2;}}
+      if(TUT.stage===2&&p.x>15.5*T)say('s2','Your turn: face RAZOR and press T to wave','#9dff3a');
+      if(TUT.stage===2&&p.team&&p.team===C().team){say('s2b','RAZOR accepted — you took his colour. He follows you now','#9dff3a');objDone(1,'✓ ALLIANCE');TUT.stage=3;}
+      if(TUT.stage===3&&p.x>22.5*T)say('s3','KAI wants to join you — face him and press T when he waves',D().color);
+      if(TUT.stage===3&&D().team&&D().team===p.team){say('s3b','KAI joined your team. Walk to the green area together',p.color);objDone(2,'✓ NEW MEMBER');TUT.stage=4;}
+      if(TUT.stage===4){const inG=e=>e.x>30.6*T&&e.x<35.4*T&&e.z>8*T&&e.z<15*T;
+        if(inG(p)&&inG(C())&&inG(D())){o[3].done=true;TUT.result='Your team: '+sideName(p).split('+').join(' · ');tutComplete();}}
+    },
+  };
+};
+
+// ---------- 6. basic fight ----------
 TUT_BUILD.fight=()=>{
   gbox(9,5,9,27,12,27,0);
   for(const [x,z] of [[13,13],[22,13],[13,22],[22,22]])gbox(x,5,z,x+1,8,z+1,3);
@@ -3790,20 +3885,24 @@ TUT_BUILD.fight=()=>{
 // ================= runtime =================
 function startTutorial(id){
   TUT.on=true;TUT.id=id;TUT.t=0;TUT.toast=[];TUT.complete=false;TUT.cp=null;TUT.cardDelay=-1;TUT.prevState='normal';TUT.overSeen=false;TUT.shots=0;
-  for(const k of ['v1','v2','p1','p2','slid','result'])delete TUT[k];
+  for(const k of ['v1','v2','p1','p2','slid','result','stage','st0','said'])delete TUT[k];
   drones=[];rnd=Math.random;
   grid.fill(1);stairO.fill(0);deco=[];
   const cfg=TUT_BUILD[id]();TUT.cfg=cfg;
   for(const o of cfg.obj){o.done=false;if('n' in o)o.n=0;}
   nav=null;buildNav();buildLevelMesh();buildDecoMesh();
   applyBotSkill('easy');
-  chars=[makeChar('YOU','#29f0ff',false)];
+  chars=[makeChar('YOU',SETTINGS.color,false)];
   for(let i=0;i<(cfg.bots||0);i++)chars.push(makeChar('DUMMY','#ffb020',true));
   player=chars[0];
+  // scripted actors (they don't think for themselves: the room drives them)
+  for(const a of cfg.actors||[]){const b=makeChar(a.name,a.color,true);b.script=a.script;b.actor=a;chars.push(b);}
+  fixColorClash();
   props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];feed=[];spiders=[];
   if(cfg.props)cfg.props();
   if(cfg.spawn)setCp(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z,cfg.yaw);
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
+  for(const b of chars)if(b.actor){const a=b.actor;Object.assign(b,{x:a.x*T,y:5*T,z:a.z*T,vx:0,vy:0,vz:0,invuln:0,grounded:true});b.yaw=b.bodyYaw=b.legYaw=a.yaw;b.fallStart=b.y;}
   Object.assign(world,{rotCD:0,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,
     medT:cfg.medkits?12:1e9,barrelQ:[],sgQ:[],arQ:[],lnQ:[],noises:[],spiderT:1e9,fragLimit:cfg.frags||FRAG_LIMIT});
   TUT.turns0=0;TUT.cpSec=0;
