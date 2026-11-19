@@ -67,6 +67,32 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #pause .seedrow button{display:inline-block;width:auto;margin:0;padding:6px 10px;font-size:12px;letter-spacing:1px}
 .fragrow{display:flex;align-items:center;gap:12px}.fragrow input{flex:1;accent-color:#29f0ff}.fragrow b{min-width:2.2em;color:#29f0ff;font-size:16px}
 #ov button.sw{width:26px;height:26px;padding:0;margin:3px;border-radius:50%;border:2px solid #05060c;box-shadow:none;vertical-align:middle}#ov button.sw.on{border-color:#fff;box-shadow:0 0 12px currentColor;transform:scale(1.18)}
+#ov .menu{min-width:420px;text-align:center}
+#ov .page{display:none;flex-direction:column;align-items:stretch;gap:9px;margin-top:10px}
+#ov .page.on{display:flex}
+#ov button.mi{font-size:19px;letter-spacing:4px;padding:11px 20px;background:#0e1424;color:#cfe8ff;border:1px solid #29f0ff55;box-shadow:none;text-align:center}
+#ov button.mi:hover,#ov button.mi:focus,#ov button.mi.pf{background:#29f0ff;color:#05060c;box-shadow:0 0 18px #29f0ff99;outline:none}
+#ov button.mi small{display:block;font-size:11px;letter-spacing:1px;opacity:.6;margin-top:2px}
+#ov button.mi.back{margin-top:6px;font-size:15px;background:transparent;border-color:#ff3fa466;color:#ff8ac8}
+#ov button.mi.back:hover,#ov button.mi.back:focus,#ov button.mi.back.pf{background:#ff3fa4;color:#05060c;box-shadow:0 0 16px #ff3fa4}
+#ov .ptitle,#tut .ptitle{color:#ff3fa4;letter-spacing:5px;font-size:16px;margin-bottom:4px}
+#tut .ptitle small{color:#7f8fa8;letter-spacing:0;font-size:11px}
+#ov .rndrow{display:flex;gap:8px;align-items:stretch}
+#ov .rndrow button.mi{flex:1}
+#ov .rndrow input{width:130px;text-align:center;font-size:16px;letter-spacing:2px}
+#ov .rndrow button.opt{font-size:20px;padding:4px 12px}
+#ov .setsum{color:#7f8fa8;font-size:12px;letter-spacing:1px}
+#ov .setup{text-align:left}
+#ov #padstat{grid-column:2;color:#7f8fa8;font-size:12px}
+#tut .box{width:680px}
+#tut table{border-collapse:collapse;width:100%;margin:8px 0 14px}
+#tut td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:13px;color:#b9c8dd}
+#tut td:first-child{color:#ffcc33;width:130px}
+#tut p{line-height:1.45;color:#b9c8dd;margin:7px 0;font-size:13px}
+#tut details.howto{margin-top:10px;border:1px solid #29f0ff33;padding:6px 12px;background:#0b0f1d}
+#tut details.howto summary{cursor:pointer;color:#29f0ff;letter-spacing:3px;font-size:14px;padding:4px 0}
+#tut button.room.pf,#tut button.alt.pf,#tut summary.pf{outline:2px solid #29f0ff}
+#pause button.pf{background:#29f0ff;color:#05060c}
 </style>
 </head>
 <body>
@@ -82,9 +108,65 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <div class="seedrow" id="seedrow"><span>SEED</span><input id="seedOut" readonly><button id="copyseed">COPY</button></div>
 <div class="hint" id="phint">ESC to resume · restart keeps your bot settings</div>
 </div></div>
-<div id="ov"><div class="box">
+<div id="ov"><div class="box menu">
 <h1>GRAVITY<span>SHIFT</span></h1>
 <div class="sub">ARENA 7 // CONSTRUCTION SECTOR // DEATHMATCH</div>
+<div class="page" id="pgMain">
+<button class="mi" data-go="pgGame">GAME</button>
+<button class="mi" data-go="pgSet">ARENA SETTINGS</button>
+<button class="mi" data-go="pgOpt">OPTIONS</button>
+<button class="mi" id="tutbtn">TUTORIAL</button>
+<button class="mi" id="demo">WATCH DEMO</button>
+<button class="mi" id="exitbtn">EXIT</button>
+</div>
+<div class="page" id="pgGame">
+<div class="ptitle">GAME</div>
+<button class="mi arena" data-seed="0001">ARENA 1 <small>seed 0001</small></button>
+<button class="mi arena" data-seed="0002">ARENA 2 <small>seed 0002</small></button>
+<button class="mi arena" data-seed="0003">ARENA 3 <small>seed 0003</small></button>
+<button class="mi arena" data-seed="0004">ARENA 4 <small>seed 0004</small></button>
+<div class="rndrow"><button class="mi" id="go">RANDOM ARENA</button><input id="seedRnd" maxlength="40" title="arena seed — type a number or a word"><button class="opt" id="reroll" title="new random seed">⟳</button></div>
+<div class="setsum" id="setsum"></div>
+<button class="mi back" data-go="pgMain">BACK</button>
+</div>
+<div class="page" id="pgSet">
+<div class="ptitle">ARENA SETTINGS</div>
+<div class="setup">
+<div class="lab">BOTS</div><div id="bots"></div>
+<div class="lab">BOT SKILL</div><div id="skill"></div>
+<div id="skilldesc"></div>
+<div class="lab">YOUR NAME</div><div><input id="pname" maxlength="12" placeholder="YOU"></div>
+<div class="lab">YOUR COLOUR</div><div id="pcol"></div>
+<div class="lab">FRAGS TO WIN</div><div class="fragrow"><input type="range" id="fragSl" min="10" max="50" step="1" value="15"><b id="fragV">15</b></div>
+<div class="lab">ARENA SEED</div><div><input id="seedIn" placeholder="random — or type a number / word" maxlength="40"></div>
+</div>
+<button class="mi back" data-go="pgMain">BACK</button>
+</div>
+<div class="page" id="pgOpt">
+<div class="ptitle">OPTIONS</div>
+<div class="setup">
+<div class="lab">CONTROLS</div><div id="ctlmode"></div>
+<div id="padstat"></div>
+<div class="lab">LOOK SPEED</div><div class="fragrow"><input type="range" id="sensSl" min="25" max="250" step="5"><b id="sensV"></b></div>
+<div class="lab">MUSIC</div><div class="fragrow"><input type="range" id="musSl" min="0" max="100" step="1"><b id="musV"></b></div>
+<div class="lab">EFFECTS</div><div class="fragrow"><input type="range" id="fxSl" min="0" max="100" step="1"><b id="fxV"></b></div>
+<div class="lab">FPS</div><div id="fpsopt"></div>
+</div>
+<button class="mi back" data-go="pgMain">BACK</button>
+</div>
+<div class="page" id="pgBye">
+<div class="ptitle">THANKS FOR PLAYING</div>
+<p style="text-align:center">You can close this tab now.</p>
+<button class="mi back" data-go="pgMain">BACK TO THE MENU</button>
+</div>
+<div id="nogl">WebGL is not available in this browser, so the 3D arena can't be drawn.</div>
+</div></div>
+<div id="tut"><div class="box">
+<h1>GRAVITY<span>SHIFT</span></h1>
+<div class="sub">TUTORIAL // HOW TO PLAY</div>
+<div id="tutlist"></div>
+<p class="note">ESC in any room opens the menu — restart the room, pick another one, or go back to the main menu.</p>
+<details class="howto"><summary>HOW TO PLAY — CONTROLS AND RULES</summary>
 <table>
 <tr><td>MOUSE</td><td>Look / aim (click the game to capture the mouse)</td></tr>
 <tr><td>W A S D</td><td>Walk · <b>double-tap S / A / D</b> to dodge back / left / right (costs stamina)</td></tr>
@@ -100,25 +182,22 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <tr><td>R / ESC</td><td>Reload / pause</td></tr>
 </table>
 <p><b style="color:#ff8a2a">Rockets</b> (middle mouse, or slot 2): slow, then accelerating. A direct hit kills outright, and the blast hurts anyone near it — aim at the floor or a wall beside your target. Fighters in the air take little damage but get thrown hard. <b style="color:#ff8a2a">Rocket jump:</b> fire at your feet — the blast always launches you, but on the ground it costs 60% of your health; <b>jump just before it explodes</b> and you fly higher for only 15–20%. Near the top you float for a moment. The tutorial teaches it.</p>
-<p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red barrels: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins (set it from 10 to 50 below).</p>
+<p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red exploding boxes: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins — set 10 to 50 in Arena settings.</p>
 <p><b style="color:#ccd">Alliances:</b> press T to wave. A fighter who comes to stand in front of you and presses T too bows with you, and you take their colour: from then on you're a team until the round ends. Bots stop targeting you (friendly fire still hurts — a teamkill costs a frag), the team's score is its members' frags averaged, and if the team wins you all win. Bots offer and accept alliances too, and like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
-<div class="setup">
-<div class="lab">BOTS</div><div id="bots"></div>
-<div class="lab">SKILL</div><div id="skill"></div>
-<div id="skilldesc"></div>
-<div class="lab">YOUR COLOUR</div><div id="pcol"></div>
-<div class="lab">FRAGS TO WIN</div><div class="fragrow"><input type="range" id="fragSl" min="10" max="50" step="1" value="15"><b id="fragV">15</b></div>
-<div class="lab">SEED</div><div><input id="seedIn" placeholder="random — or type a number / word" maxlength="40"></div>
-</div>
-<div style="text-align:center;margin-top:14px"><button id="go">ENTER ARENA</button> <button id="tutbtn" class="alt">TUTORIAL</button> <button id="demo" class="alt">WATCH DEMO</button></div>
-<div id="nogl">WebGL is not available in this browser, so the 3D arena can't be drawn.</div>
-</div></div>
-<div id="tut"><div class="box">
-<h1>GRAVITY<span>SHIFT</span></h1>
-<div class="sub">TUTORIAL // PRACTICE ROOMS</div>
-<div id="tutlist"></div>
-<p class="note">ESC in any room opens the menu — restart the room, pick another one, or go back to the main menu.</p>
-<div style="text-align:center;margin-top:10px"><button id="tutback" class="alt">BACK</button></div>
+<div class="ptitle" style="margin-top:12px">GAMEPAD <small>(Options → Controls → Gamepad)</small></div>
+<table>
+<tr><td>LEFT STICK</td><td>Move · click it to sprint</td></tr>
+<tr><td>RIGHT STICK</td><td>Look / aim · click it to dodge (in the left stick's direction, back if centred)</td></tr>
+<tr><td>LT</td><td>Fire the selected weapon (left click)</td></tr>
+<tr><td>RB</td><td>Aim (right click)</td></tr>
+<tr><td>RT</td><td>Fire a rocket (middle click)</td></tr>
+<tr><td>A · X · B</td><td>Jump · kick · crouch (B while sprinting = slide)</td></tr>
+<tr><td>D-PAD UP</td><td>Wave — offer / accept an alliance</td></tr>
+<tr><td>Y · LB</td><td>Next weapon · reload</td></tr>
+<tr><td>START</td><td>Pause · in menus the D-pad / left stick moves, A selects, B goes back</td></tr>
+</table>
+</details>
+<div style="text-align:center;margin-top:12px"><button id="tutback" class="alt">BACK</button></div>
 </div></div>
 <div id="card"><div class="box"><h2 id="cardT"></h2><div id="cardB"></div><div id="cardBtns"></div></div></div>
 <script>

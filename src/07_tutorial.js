@@ -370,7 +370,7 @@ function startTutorial(id){
   for(const o of cfg.obj){o.done=false;if('n' in o)o.n=0;}
   nav=null;buildNav();buildLevelMesh();buildDecoMesh();
   applyBotSkill('easy');
-  chars=[makeChar('YOU',SETTINGS.color,false)];
+  chars=[makeChar(playerName(),SETTINGS.color,false)];
   for(let i=0;i<(cfg.bots||0);i++)chars.push(makeChar('DUMMY','#ffb020',true));
   player=chars[0];
   // scripted actors (they don't think for themselves: the room drives them)
@@ -477,5 +477,4 @@ function openTutMenu(){
     list.appendChild(b);});
   document.getElementById('tut').style.display='flex';
 }
-document.getElementById('tutbtn').onclick=openTutMenu;
-document.getElementById('tutback').onclick=()=>{document.getElementById('tut').style.display='none';document.getElementById('ov').style.display='flex';};
+document.getElementById('tutback').onclick=()=>{document.getElementById('tut').style.display='none';showMenu('pgMain');};

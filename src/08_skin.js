@@ -520,7 +520,7 @@ function charPose(e){
   if(SKN.clips&&e.alive){
     const r=clipFor(e,A,dt);
     if(r){P=r.P;src=r.key;
-      if(r.aim){const sg=twoHanded(e);const wG=sg?1:smooth(clamp(e.aimW||0,0,1));
+      if(r.aim){const sg=twoHanded(e);const wG=sg?1:e.weapon==='rocket'?0:smooth(clamp(e.aimW||0,0,1));
         const wR=e.rArm>0?clamp(e.rArm/.08,0,1)*clamp(e.rArm/.2,0,1):0;
         overlayAim(P,e,wG,wR);addRecoil(P,e);rocketLower(P,e);}}
     else{A.legYaw=e.legYaw;A.act=null;}

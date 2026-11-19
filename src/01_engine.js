@@ -153,9 +153,11 @@ function drawLevelMesh(){
 }
 // solid cube with model matrix
 let _cubeBound=false;
+let WXF=null; // optional extra model transform (pickups are drawn scaled up)
+const scaleAbout=(c,s)=>M4.basis(V(c.x*(1-s),c.y*(1-s),c.z*(1-s)),V(s,0,0),V(0,s,0),V(0,0,s));
 function cubeBegin(){bindMain(R.cube);_cubeBound=true;const gl=R.gl,L=R.main.loc;gl.uniform1f(L.uUseTint,1);gl.uniform1f(L.uEdge,.06);}
 function drawCubeM(m,col,em,edgeCol,alpha){
-  const gl=R.gl,L=R.main.loc;
+  const gl=R.gl,L=R.main.loc;if(WXF)m=M4.mul(WXF,m);
   gl.uniformMatrix4fv(L.uModel,false,m);gl.uniform3f(L.uTint,col[0],col[1],col[2]);
   if(em)gl.uniform3f(L.uEmis,em[0],em[1],em[2]);else gl.uniform3f(L.uEmis,0,0,0);
   const ec=edgeCol||[0,0,0];gl.uniform3f(L.uEdgeCol,ec[0],ec[1],ec[2]);

@@ -57,7 +57,7 @@ function updateParts(dt){
 
 // ---------- audio ----------
 let AC=null,noiseBuf=null,master=null;
-function initAudio(){try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=.5;master.connect(AC.destination);
+function initAudio(){try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=.5*SETTINGS.fx/100;master.connect(AC.destination);
   noiseBuf=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;}catch(e){AC=null;}}
 function sfx(kind,at){
   if(!AC)return;let vol=1;
@@ -489,10 +489,26 @@ function spawnDrop(kind){
     return;
   }
 }
+// floating weapon pickups: drawn bigger than in the hands, with a halo and a light beam (see render)
+const PICKUP_S=2.5,PICKUP_GLOW={shotgun:[1,.55,.2],launcher:[1,.35,.15],rifle:[.45,.9,1]};
+function drawPickupModel(b){
+  const yaw=world.time*.7+b.x*.01,bob=Math.sin(world.time*1.8+b.z*.01)*1.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0),gc=PICKUP_GLOW[b.kind];
+  if(b.kind==='shotgun')drawShotgunModel({o:vsub(V(b.x,b.y+9+bob,b.z),vscale(u,5)),u,v,w:vcross(u,v)},gc,1,0);
+  else if(b.kind==='launcher'){const c=V(b.x,b.y+10+bob,b.z);drawLauncherModel({bigLauncher:true,rockets:RMAG,rreload:0,bodyYaw:yaw},vsub(c,vscale(u,7)),vadd(c,vscale(u,7)),V(0,1,0),gc,1);}
+  else drawRifleModel({o:vsub(V(b.x,b.y+9+bob,b.z),vscale(u,4)),u,v,w:vcross(u,v)},gc,1,0);
+}
+function pickupGlows(add){
+  for(const b of props){if(b.dead||b.rb||!PICKUP_GLOW[b.kind])continue;const g=PICKUP_GLOW[b.kind],pl=.75+.25*Math.sin(world.time*3+b.x*.02),cy=b.y+17;
+    add.push({x:b.x,y:cy,z:b.z,r:g[0],g:g[1],b:g[2],a:.42*pl,s:46*PICKUP_S});
+    add.push({x:b.x,y:cy,z:b.z,r:1,g:1,b:1,a:.18*pl,s:16*PICKUP_S});
+    add.push({x:b.x,y:b.y+2,z:b.z,r:g[0],g:g[1],b:g[2],a:.5*pl,s:30*PICKUP_S});
+    for(let i=1;i<=7;i++)add.push({x:b.x,y:b.y+i*22,z:b.z,r:g[0],g:g[1],b:g[2],a:.22*pl*(1-i/8),s:14});}
+}
 function drawProp(b){
   if(b.dead)return;
   if(!b.rb){ // pickups stay upright
     const c=V(b.x,b.y+b.h/2,b.z);
+    if(PICKUP_GLOW[b.kind]){WXF=scaleAbout(V(b.x,b.y+(b.kind==='launcher'?10:9),b.z),PICKUP_S);WXF=M4.mul(M4.basis(V(0,8,0),V(1,0,0),V(0,1,0),V(0,0,1)),WXF);try{drawPickupModel(b);}finally{WXF=null;}return;}
     if(b.kind==='shotgun'){
       const pl=.6+.4*Math.sin(world.time*4);
       const yaw=world.time*.7+b.x*.01,hy=b.y+9+Math.sin(world.time*1.8+b.z*.01)*1.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);

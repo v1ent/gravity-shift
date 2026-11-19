@@ -681,6 +681,7 @@ function updatePose(e,dt){
   if(st==='kick'&&e.st.t>.3&&e.st.t<.8){e.trail.push(localToWorld(e,P.fA.x,P.fA.y,'body',5));if(e.trail.length>9)e.trail.shift();}
   else if(e.trail.length)e.trail.shift();
   e.aimT=Math.max(0,(e.aimT||0)-dt);e.rArm=Math.max(0,(e.rArm||0)-dt);
+  if(e.weapon==='rocket'&&e.state==='normal'&&!e.emote&&!(e.rreload>0&&e.rrl))e.rArm=Math.max(e.rArm,.25); // launcher selected: the arm stays up
   const sg=twoHanded(e),wantAim=sg||e.aimT>0;
   e.aimW=approach(e.aimW||0,wantAim?1:0,dt*(wantAim?14:2.6));
   // the aimed position is always computed (bullets leave from it)
@@ -712,6 +713,7 @@ function updatePose(e,dt){
 }
 // world-space muzzle for shooting
 function muzzleOf(e){
+  if(e._mzRel&&e._mzW===e.weapon&&world.time-e._mzT<.12)return V(e.x+e._mzRel.x,e.y+e._mzRel.y,e.z+e._mzRel.z);
   const P=e.pose;
   if(!P)return V(e.x,e.y+44,e.z);
   const m=P.muzzleAim||P.muzzle;return localToWorld(e,m.x,m.y,'body',3);
@@ -895,22 +897,26 @@ function drawRifleModel(F,acc,al,recoil,magOut){
   drawTube(vadd(F.o,vadd(vscale(F.u,12.5-k),vscale(F.v,1.5))),vadd(F.o,vadd(vscale(F.u,17-k),vscale(F.v,1.5))),.42,MET,null,al); // barrel
   P(17.6,1.5,0,1.4,1,1,DK);P(18.35,1.5,0,.15,.6,.6,CY,[.3,.8,1]); // muzzle brake
 }
+// the muzzle of the gun model as last drawn, kept relative to the fighter so it follows them between frames
+const MUZZLE_AT={pistol:[6.5,1.65],shotgun:[21.4,2],rifle:[18.5,1.5]};
+function noteMuzzle(e,F){const m=MUZZLE_AT[e.weapon];if(!m||WXF)return;const p=vadd(F.o,vadd(vscale(F.u,m[0]),vscale(F.v,m[1])));e._mzRel=V(p.x-e.x,p.y-e.y,p.z-e.z);e._mzT=world.time;e._mzW=e.weapon;}
 function drawWeaponsSK(e,P,SK,acc,al){
   const by=e.bodyYaw,rt=V(-Math.cos(by),0,Math.sin(by));
   const busy=e._handsBusy==='rocket'||e._handsBusy==='emote';
   if(e._gunF&&P.gunOn){ // reloading: the gun sits where the reload puts it
     if(e.weapon==='shotgun')drawShotgunModel(e._gunF,acc,al,0);else if(e.weapon==='rifle')drawRifleModel(e._gunF,acc,al,0,e._gunF.mag);else drawPistolModel(e._gunF,acc,al,e._gunF.slide||0);
+    noteMuzzle(e,e._gunF);
   }else if(P.gunOn&&e.weapon==='pistol'&&!busy){
     // carried in the hand along the hand's own axis; snapped onto the aim line while shooting
     const w=clamp((e.aimW||0)*1.6,0,1),pd=e._aimDir||SK.handFwd;
     const u=vnorm(vadd(vscale(SK.handFwd,1-w),vscale(pd,w)));
     let v=vnorm(vadd(vscale(SK.handDown,-(1-w)),vscale(V(0,1,0),w)));v=vnorm(vsub(v,vscale(u,vdot(v,u))));
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
-    drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);
-  }else if(P.gunOn&&!busy){ // long gun, both hands
+    drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);noteMuzzle(e,F);
+  }else if(P.gunOn&&!busy&&twoHanded(e)){ // long gun, both hands
     const u=e._aimDir&&e.aimW>.3?e._aimDir:vnorm(vsub(SK.hL,SK.hR));let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?V(1,0,0):vnorm(v);
     const F={o:vadd(SK.hR,vadd(vscale(u,.5),vscale(v,1.4))),u,v,w:vcross(u,v)};
-    if(e.weapon==='rifle')drawRifleModel(F,acc,al,e.recoil);else drawShotgunModel(F,acc,al,e.recoil);
+    if(e.weapon==='rifle')drawRifleModel(F,acc,al,e.recoil);else drawShotgunModel(F,acc,al,e.recoil);noteMuzzle(e,F);
   }
   // long guns not in the hands are slung across the back (one each way)
   {const fw=V(Math.sin(by),0,Math.cos(by)),b=vadd(SK.sh,vscale(fw,-6.5)),v=vscale(fw,-1);let side=0;

@@ -16,6 +16,7 @@ function applyBotSkill(key){
 }
 function botThink(b,dt){
   const c=b.ctl;
+  if(b.skill&&BOT_CFG!==BOT_SKILLS[b.skill])applyBotSkill(b.skill); // each bot can have its own skill (demo)
   c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;
   if(!b.alive){b.ai=null;return;}
   if(b.script){c.mx=0;c.mz=0;b.script(b,c,dt);return;} // tutorial actors
