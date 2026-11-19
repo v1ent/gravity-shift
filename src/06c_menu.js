@@ -131,15 +131,15 @@ function pollPad(dt){
   const S=SETTINGS.assist?SETTINGS.assistStr/100:0;
   const A=S>0?assistTarget(down(5)?2.6:1):null;
   // snap: pressing RB (aim) swings the crosshair onto the nearest enemy in a wide cone
-  if(A&&down(5)){const sn=.35+.6*S;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
+  if(A&&down(5)){const sn=(.35+.6*S)*.5;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
   // friction: the look slows down a lot while the crosshair is over a target
-  const fr=A?1-(.45+.45*S)*(1-A.e*.6):1;
+  const fr=A?1-(.45+.45*S)*.5*(1-A.e*.6):1;
   cam.yaw-=rx*Math.abs(rx)*k*fr;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75*fr,-1.35,1.25);
   if(A){
     // tracking: follow the target as it (or you) moves
-    if(padTrk&&padTrk.t===A.t){const ddy=angDiff(A.ay,padTrk.ay),ddp=A.ap-padTrk.ap;if(Math.abs(ddy)<.3){const tk=.5+.5*S;cam.yaw+=ddy*tk;cam.pitch=clamp(cam.pitch+ddp*tk,-1.35,1.25);}}
+    if(padTrk&&padTrk.t===A.t){const ddy=angDiff(A.ay,padTrk.ay),ddp=A.ap-padTrk.ap;if(Math.abs(ddy)<.3){const tk=(.5+.5*S)*.5;cam.yaw+=ddy*tk;cam.pitch=clamp(cam.pitch+ddp*tk,-1.35,1.25);}}
     // magnetism: pull onto the target while you move, look or shoot
-    if(rx||ry||lx||ly||now[6]||now[5]){const pull=Math.min(.6,(now[5]?14:9)*S*dt*(1.3-A.e*.6));
+    if(rx||ry||lx||ly||now[6]||now[5]){const pull=Math.min(.6,(now[5]?7:4.5)*S*dt*(1.3-A.e*.6));
       cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
     padTrk={t:A.t,ay:A.ay,ap:A.ap};
   }else padTrk=null;
@@ -165,7 +165,7 @@ function assistTarget(wide){
     const t=chestPos(e),d=vsub(t,cam.pos),dist=vlen(d);if(dist<20||dist>1600)continue;
     const ay=Math.atan2(d.x,d.z),ap=Math.asin(clamp(d.y/dist,-1,1)),dy=angDiff(ay,cam.yaw),dp=ap-cam.pitch;
     if(Math.abs(dy)>1.4)continue;
-    const err=Math.hypot(dy*Math.cos(cam.pitch),dp),rad=(.07+40/dist)*(.5+1.6*s)*(wide||1);
+    const err=Math.hypot(dy*Math.cos(cam.pitch),dp),rad=(.07+40/dist)*(.5+1.6*s)*.5*(wide||1);
     if(err>rad)continue;
     const e2=err/rad;if(best&&e2>=best.e)continue;
     if(!losClear(o,t))continue;
