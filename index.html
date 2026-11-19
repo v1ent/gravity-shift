@@ -83,7 +83,8 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #ov .rndrow button.opt{font-size:20px;padding:4px 12px}
 #ov .setsum{color:#7f8fa8;font-size:12px;letter-spacing:1px}
 #ov .setup{text-align:left}
-#ov #padstat{grid-column:2;color:#7f8fa8;font-size:12px}
+#ov #padstat,#ov #asdesc{grid-column:2;color:#7f8fa8;font-size:12px}
+body.nocur,body.nocur canvas{cursor:none!important}
 #tut .box{width:680px}
 #tut table{border-collapse:collapse;width:100%;margin:8px 0 14px}
 #tut td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:13px;color:#b9c8dd}
@@ -148,6 +149,8 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <div class="lab">CONTROLS</div><div id="ctlmode"></div>
 <div id="padstat"></div>
 <div class="lab">LOOK SPEED</div><div class="fragrow"><input type="range" id="sensSl" min="25" max="250" step="5"><b id="sensV"></b></div>
+<div class="lab">AIM ASSIST</div><div class="fragrow"><span id="assistopt"></span><input type="range" id="asSl" min="0" max="100" step="5"><b id="asV"></b></div>
+<div id="asdesc">gamepad only · slows the look near a target and gently pulls toward it</div>
 <div class="lab">MUSIC</div><div class="fragrow"><input type="range" id="musSl" min="0" max="100" step="1"><b id="musV"></b></div>
 <div class="lab">EFFECTS</div><div class="fragrow"><input type="range" id="fxSl" min="0" max="100" step="1"><b id="fxV"></b></div>
 <div class="lab">FPS</div><div id="fpsopt"></div>
@@ -187,7 +190,7 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <div class="ptitle" style="margin-top:12px">GAMEPAD <small>(Options → Controls → Gamepad)</small></div>
 <table>
 <tr><td>LEFT STICK</td><td>Move · click it to sprint</td></tr>
-<tr><td>RIGHT STICK</td><td>Look / aim · click it to dodge (in the left stick's direction, back if centred)</td></tr>
+<tr><td>RIGHT STICK</td><td>Look / aim · click it to dodge (in the left stick's direction, back if centred) · aim assist (Options) slows the look over an enemy and pulls gently toward them</td></tr>
 <tr><td>LT</td><td>Fire the selected weapon (left click)</td></tr>
 <tr><td>RB</td><td>Aim (right click)</td></tr>
 <tr><td>RT</td><td>Fire a rocket (middle click)</td></tr>
@@ -3537,7 +3540,7 @@ function drawHUD(){
 }
 
 // ---------- settings (start screen) ----------
-const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false};
+const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50};
 const playerName=()=>(SETTINGS.name||'').trim().toUpperCase().slice(0,12)||'YOU';
 const PLAYER_COLORS=['#29f0ff','#ff3fa4','#ffb020','#9dff3a','#b06bff','#ff5a3c','#ffffff','#3c8cff','#ffe23c','#00e0a0'];
 // a bot (or tutorial actor) that would share your colour gets the colour you gave up
@@ -3545,7 +3548,7 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;}}catch(e){}
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;}}catch(e){}
 function getSettings(){return SETTINGS;}
 function saveSettings(){try{localStorage.setItem('gravityShiftSettings',JSON.stringify(SETTINGS));}catch(e){}}
 function setupMenu(){
@@ -3662,10 +3665,12 @@ function wireMenu(){
   // options
   const opts=(el,list,get,set)=>{const draw=()=>{el.innerHTML='';for(const [v,label] of list){const b=document.createElement('button');b.className='opt'+(get()===v?' on':'');b.textContent=label;b.onclick=()=>{set(v);saveSettings();draw();};el.appendChild(b);}};draw();};
   opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{SETTINGS.input=v;});
+  opts($('assistopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.assist,v=>{SETTINGS.assist=v;$('asSl').disabled=!v;});$('asSl').disabled=!SETTINGS.assist;
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
   slider('sensSl','sensV','sens',v=>(v/100).toFixed(2)+'×');
+  slider('asSl','asV','assistStr',v=>v+'%');
   slider('musSl','musV','music',v=>v+'%',()=>{wakeAudio();applyVolumes();});
   slider('fxSl','fxV','fx',v=>v+'%',()=>{wakeAudio();applyVolumes();sfx('hit');});
   showMenu('pgMain');
@@ -3722,6 +3727,7 @@ function findPad(){const l=navigator.getGamepads?navigator.getGamepads():[];for(
 const padDZ=(v,d)=>Math.abs(v)<d?0:(v-Math.sign(v)*d)/(1-d);
 function pollPad(dt){
   const g=findPad();padMove=null;padDodge=null;
+  {const hide=SETTINGS.input==='gamepad'&&gameState!=='menu'&&!paused&&!TUT.cardOpen;if(hide!==document.body.classList.contains('nocur'))document.body.classList.toggle('nocur',hide);}
   if(gameState==='menu'&&(padStatT-=dt)<=0){padStatT=.5;const el=$('padstat');if(el)el.textContent=g?'gamepad: '+g.id.replace(/\s*\(.*\)\s*/,'').slice(0,40):'no gamepad found — connect one and press a button';}
   if(!g){padPrev=[];return;}
   const btn=i=>{const b=g.buttons[i];return !!b&&(b.pressed||b.value>.5);};
@@ -3748,7 +3754,13 @@ function pollPad(dt){
   if(SETTINGS.input!=='gamepad'){padPrev=now;return;}
   // look: right stick, eased so small tilts aim finely
   const k=3.1*(SETTINGS.sens/100)*(cam.zoom||1)*dt;
-  cam.yaw-=rx*Math.abs(rx)*k;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75,-1.35,1.25);
+  const A=SETTINGS.assist&&SETTINGS.assistStr>0?assistTarget():null;
+  // friction: the look slows down while the crosshair is over a target
+  const fr=A?1-.65*(SETTINGS.assistStr/100)*(1-A.e):1;
+  cam.yaw-=rx*Math.abs(rx)*k*fr;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75*fr,-1.35,1.25);
+  // magnetism: while you move, look or shoot, the aim is drawn gently onto the target
+  if(A&&(rx||ry||lx||ly||now[6]||now[5])){const s=SETTINGS.assistStr/100,pull=Math.min(1,(now[5]?3.6:2.4)*s*dt*(1.2-A.e*.7));
+    cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
   // move: left stick; L3 latches sprint until the stick is let go
   if(lx||ly)padMove={f:-ly,s:lx};
   if(down(10))padSprint=!padSprint;if(Math.hypot(lx,ly)<.3)padSprint=false;
@@ -3761,6 +3773,23 @@ function pollPad(dt){
   if(down(7))pressed['mmb']=true;
   if(down(11))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):'back';
   padPrev=now;
+}
+// aim assist: the enemy closest to the crosshair, inside a cone that grows with the strength and with how near they are
+function assistTarget(){
+  const p=player;if(!p||!p.alive||world.rot||world.demo||!cam.pos)return null;
+  const s=SETTINGS.assistStr/100,o=headPos(p);let best=null;
+  for(const e of chars){
+    if(e===p||!e.alive||allied(e,p)||e.vis<.35)continue;
+    const t=chestPos(e),d=vsub(t,cam.pos),dist=vlen(d);if(dist<20||dist>1600)continue;
+    const dy=angDiff(Math.atan2(d.x,d.z),cam.yaw),dp=Math.asin(clamp(d.y/dist,-1,1))-cam.pitch;
+    if(Math.abs(dy)>1.2)continue;
+    const err=Math.hypot(dy*Math.cos(cam.pitch),dp),rad=(.05+30/dist)*(.4+1.2*s);
+    if(err>rad)continue;
+    const e2=err/rad;if(best&&e2>=best.e)continue;
+    if(!losClear(o,t))continue;
+    best={t:e,e:e2,dy,dp};
+  }
+  return best;
 }
 // which overlay the pad is driving, and what in it can be selected
 function padLayer(){

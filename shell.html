@@ -83,7 +83,8 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #ov .rndrow button.opt{font-size:20px;padding:4px 12px}
 #ov .setsum{color:#7f8fa8;font-size:12px;letter-spacing:1px}
 #ov .setup{text-align:left}
-#ov #padstat{grid-column:2;color:#7f8fa8;font-size:12px}
+#ov #padstat,#ov #asdesc{grid-column:2;color:#7f8fa8;font-size:12px}
+body.nocur,body.nocur canvas{cursor:none!important}
 #tut .box{width:680px}
 #tut table{border-collapse:collapse;width:100%;margin:8px 0 14px}
 #tut td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:13px;color:#b9c8dd}
@@ -148,6 +149,8 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <div class="lab">CONTROLS</div><div id="ctlmode"></div>
 <div id="padstat"></div>
 <div class="lab">LOOK SPEED</div><div class="fragrow"><input type="range" id="sensSl" min="25" max="250" step="5"><b id="sensV"></b></div>
+<div class="lab">AIM ASSIST</div><div class="fragrow"><span id="assistopt"></span><input type="range" id="asSl" min="0" max="100" step="5"><b id="asV"></b></div>
+<div id="asdesc">gamepad only · slows the look near a target and gently pulls toward it</div>
 <div class="lab">MUSIC</div><div class="fragrow"><input type="range" id="musSl" min="0" max="100" step="1"><b id="musV"></b></div>
 <div class="lab">EFFECTS</div><div class="fragrow"><input type="range" id="fxSl" min="0" max="100" step="1"><b id="fxV"></b></div>
 <div class="lab">FPS</div><div id="fpsopt"></div>
@@ -187,7 +190,7 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 <div class="ptitle" style="margin-top:12px">GAMEPAD <small>(Options → Controls → Gamepad)</small></div>
 <table>
 <tr><td>LEFT STICK</td><td>Move · click it to sprint</td></tr>
-<tr><td>RIGHT STICK</td><td>Look / aim · click it to dodge (in the left stick's direction, back if centred)</td></tr>
+<tr><td>RIGHT STICK</td><td>Look / aim · click it to dodge (in the left stick's direction, back if centred) · aim assist (Options) slows the look over an enemy and pulls gently toward them</td></tr>
 <tr><td>LT</td><td>Fire the selected weapon (left click)</td></tr>
 <tr><td>RB</td><td>Aim (right click)</td></tr>
 <tr><td>RT</td><td>Fire a rocket (middle click)</td></tr>

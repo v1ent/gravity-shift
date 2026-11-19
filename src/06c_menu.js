@@ -39,10 +39,12 @@ function wireMenu(){
   // options
   const opts=(el,list,get,set)=>{const draw=()=>{el.innerHTML='';for(const [v,label] of list){const b=document.createElement('button');b.className='opt'+(get()===v?' on':'');b.textContent=label;b.onclick=()=>{set(v);saveSettings();draw();};el.appendChild(b);}};draw();};
   opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{SETTINGS.input=v;});
+  opts($('assistopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.assist,v=>{SETTINGS.assist=v;$('asSl').disabled=!v;});$('asSl').disabled=!SETTINGS.assist;
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
   slider('sensSl','sensV','sens',v=>(v/100).toFixed(2)+'×');
+  slider('asSl','asV','assistStr',v=>v+'%');
   slider('musSl','musV','music',v=>v+'%',()=>{wakeAudio();applyVolumes();});
   slider('fxSl','fxV','fx',v=>v+'%',()=>{wakeAudio();applyVolumes();sfx('hit');});
   showMenu('pgMain');
@@ -99,6 +101,7 @@ function findPad(){const l=navigator.getGamepads?navigator.getGamepads():[];for(
 const padDZ=(v,d)=>Math.abs(v)<d?0:(v-Math.sign(v)*d)/(1-d);
 function pollPad(dt){
   const g=findPad();padMove=null;padDodge=null;
+  {const hide=SETTINGS.input==='gamepad'&&gameState!=='menu'&&!paused&&!TUT.cardOpen;if(hide!==document.body.classList.contains('nocur'))document.body.classList.toggle('nocur',hide);}
   if(gameState==='menu'&&(padStatT-=dt)<=0){padStatT=.5;const el=$('padstat');if(el)el.textContent=g?'gamepad: '+g.id.replace(/\s*\(.*\)\s*/,'').slice(0,40):'no gamepad found — connect one and press a button';}
   if(!g){padPrev=[];return;}
   const btn=i=>{const b=g.buttons[i];return !!b&&(b.pressed||b.value>.5);};
@@ -125,7 +128,13 @@ function pollPad(dt){
   if(SETTINGS.input!=='gamepad'){padPrev=now;return;}
   // look: right stick, eased so small tilts aim finely
   const k=3.1*(SETTINGS.sens/100)*(cam.zoom||1)*dt;
-  cam.yaw-=rx*Math.abs(rx)*k;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75,-1.35,1.25);
+  const A=SETTINGS.assist&&SETTINGS.assistStr>0?assistTarget():null;
+  // friction: the look slows down while the crosshair is over a target
+  const fr=A?1-.65*(SETTINGS.assistStr/100)*(1-A.e):1;
+  cam.yaw-=rx*Math.abs(rx)*k*fr;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75*fr,-1.35,1.25);
+  // magnetism: while you move, look or shoot, the aim is drawn gently onto the target
+  if(A&&(rx||ry||lx||ly||now[6]||now[5])){const s=SETTINGS.assistStr/100,pull=Math.min(1,(now[5]?3.6:2.4)*s*dt*(1.2-A.e*.7));
+    cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
   // move: left stick; L3 latches sprint until the stick is let go
   if(lx||ly)padMove={f:-ly,s:lx};
   if(down(10))padSprint=!padSprint;if(Math.hypot(lx,ly)<.3)padSprint=false;
@@ -138,6 +147,23 @@ function pollPad(dt){
   if(down(7))pressed['mmb']=true;
   if(down(11))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):'back';
   padPrev=now;
+}
+// aim assist: the enemy closest to the crosshair, inside a cone that grows with the strength and with how near they are
+function assistTarget(){
+  const p=player;if(!p||!p.alive||world.rot||world.demo||!cam.pos)return null;
+  const s=SETTINGS.assistStr/100,o=headPos(p);let best=null;
+  for(const e of chars){
+    if(e===p||!e.alive||allied(e,p)||e.vis<.35)continue;
+    const t=chestPos(e),d=vsub(t,cam.pos),dist=vlen(d);if(dist<20||dist>1600)continue;
+    const dy=angDiff(Math.atan2(d.x,d.z),cam.yaw),dp=Math.asin(clamp(d.y/dist,-1,1))-cam.pitch;
+    if(Math.abs(dy)>1.2)continue;
+    const err=Math.hypot(dy*Math.cos(cam.pitch),dp),rad=(.05+30/dist)*(.4+1.2*s);
+    if(err>rad)continue;
+    const e2=err/rad;if(best&&e2>=best.e)continue;
+    if(!losClear(o,t))continue;
+    best={t:e,e:e2,dy,dp};
+  }
+  return best;
 }
 // which overlay the pad is driving, and what in it can be selected
 function padLayer(){
