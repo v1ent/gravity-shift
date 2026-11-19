@@ -19,8 +19,8 @@ let chars=[],player=null;
 const DODGE_STAM=.3;
 const DODGES={
   back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
-  right:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:false,scale:2,fb:V(-83,0,-39),fix:93*Math.PI/180,fix0:56,fix1:96},
-  left:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:true,scale:2,fb:V(83,0,-39),fix:-93*Math.PI/180,fix0:56,fix1:96},
+  right:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:false,scale:2.6,fb:V(-83,0,-39),fix:93*Math.PI/180,fix0:56,fix1:96},
+  left:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:true,scale:2.6,fb:V(83,0,-39),fix:-93*Math.PI/180,fix0:56,fix1:96},
 };
 for(const k in DODGES){const D=DODGES[k];D.dur=(D.f1-D.f0)/30/D.rate;}
 // travel so far (character space: +z forward, -x right)
@@ -441,8 +441,15 @@ function updateChar(e,dt){
   const canFire=(e.state==='normal'&&!e.runJump)||e.state==='kick'||e.state==='slide';
   if(ctrl&&canFire&&gameState!=='over'){
     if(c.fireClick)e.clickBuf=.12; // a click just before the gun is ready still counts
-    if(e.weapon==='rocket'){ // launcher selected: click to fire
-      if((e.clickBuf>0||c.fireClick)&&e.rfireCD<=0){e.clickBuf=0;if(e.rockets>0&&e.rreload<=0){fireRocket(e);e.lastShot=world.time;}else if(c.fireClick)sfx('empty',e);}
+    // middle click: a rocket, whatever is in your hands
+    if(c.rocketClick&&e.rfireCD<=0){if(e.rockets>0&&e.rreload<=0)fireRocket(e);else sfx('empty',e);}
+    if(e.weapon==='rocket'){ // launcher selected: left click fires it
+      if(e.clickBuf>0||c.fireClick){
+        if(e.rockets>0&&e.rreload<=0){if(e.rfireCD<=0){e.clickBuf=0;fireRocket(e);e.lastShot=world.time;}}
+        else if(!e.bigLauncher){ // the one-shot launcher is recharging: straight to the pistol and shoot
+          e.weapon='pistol';e.ammo=e.stash.pistol;e.reload=0;e.recoil=.3;sfx('swap',e);
+          if(e.ammo>0&&e.fireCD<=0){e.clickBuf=0;fireRifle(e);e.lastShot=world.time;}else if(e.ammo<=0)e.reload=RELOAD;}
+        else if(c.fireClick){e.clickBuf=0;sfx('empty',e);}}
     }else{
     const pistol=e.weapon==='pistol',held=c.fire&&world.time-(e.lastShot||-9)>=FIRE_CD;
     const wants=pistol?(e.clickBuf>0||held):c.fire;

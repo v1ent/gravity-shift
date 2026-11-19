@@ -107,6 +107,9 @@ function kill(e,src,dir){
   else if(killer&&killer!==e&&allied(killer,e)){killer.kills=Math.max(0,killer.kills-1);feed.unshift({t:4,text:`${killer.name} ✕ ${e.name}  TEAMKILL`,color:'#ff3f5a'});}
   else if(killer&&killer!==e){killer.kills++;feed.unshift({t:4,text:`${killer.name} ⌁ ${e.name}`,color:killer.color});}
   else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,text:`${e.name} ✕ self-destructed`,color:'#888'});}
+  // the special weapon in their hands stays where they fell
+  {const dk=e.weapon==='shotgun'?'shotgun':e.weapon==='rifle'?'rifle':(e.weapon==='rocket'&&e.bigLauncher)?'launcher':null;
+   if(dk&&!(TUT&&TUT.on)){const d=makeProp(e.x,e.y+8,e.z,dk);d.dropped=true;d.ttl=30;d.vy=140;d.vx=(rnd()-.5)*60;d.vz=(rnd()-.5)*60;props.push(d);}}
   if(e.gibbed){spawnGibs(e,dir);e.gibbed=false;}else if(!spawnCorpse(e,dir))makeDoll(e,dir);sfx('die',e);
   for(let i=0;i<30;i++)addPart(e.x,e.y+30,e.z,(rnd()-.5)*500,rnd()*300,(rnd()-.5)*500,.9,e.col,3,'spark');
   if(killer&&!killer.isSpider&&sideScore(killer)>=(world.fragLimit||FRAG_LIMIT)&&gameState==='play'){gameState='over';winner=killer;}
@@ -338,7 +341,6 @@ function makeProp(x,y,z,kind,rot){
   const k=KINDS[kind];let w=k.w,d=k.d;if(rot){const t=w;w=d;d=t;}
   const b={kind,x,y,z,w,h:k.h,d,m:k.m,vx:0,vy:0,vz:0,grounded:false,dead:false,col:hexRGB(k.col),edge:hexRGB(k.edge),kickedBy:null,kickT:-99};
   if(kind!=='shotgun'&&kind!=='rifle'&&kind!=='launcher')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
-  if(kind==='barrel'){b.cyl=true;b.col=hexRGB(rnd()<.5?'#b4381f':'#d8641c');}
   return b;
 }
 function hurtBarrel(b,src,n){
@@ -349,6 +351,7 @@ function hurtBarrel(b,src,n){
 function updateProps(dt){
   for(const b of props){
     if(b.dead)continue;
+    if(b.ttl!==undefined){b.ttl-=dt;if(b.ttl<=0){b.dead=true;continue;}} // dropped weapons vanish after a while
     if(b.fuse!==undefined){b.fuse-=dt;if(b.fuse<=0){b.dead=true;explode(V(b.x,b.y+b.h/2,b.z),{radius:125,dmg:80,push:520,src:b.lastHitBy,barrel:b});world.barrelQ.push(world.time+22+rnd()*10);continue;}}
     if(b.kind==='barrel'&&b.hits){
       if(rnd()<dt*(b.hits>=2?10:7))addPart(b.x+(rnd()-.5)*10,b.y+b.h,b.z+(rnd()-.5)*10,(rnd()-.5)*30,50+rnd()*60,(rnd()-.5)*30,1.2,b.hits>=2?[.16,.14,.16]:[.35,.35,.4],10,'smoke');
@@ -399,7 +402,7 @@ function charProps(e){
     if(b.kind==='launcher'){
       if(e.state!=='down'){
         e.bigLauncher=true;e.rockets=RMAG;e.rreload=0;e.rrl=null;
-        b.dead=true;sfx('pickup',b);world.lnQ.push(world.time+32);
+        b.dead=true;sfx('pickup',b);if(!b.dropped)world.lnQ.push(world.time+25);
         if(e===player)feed.unshift({t:3,text:'YOU PICKED UP THE BIG LAUNCHER — 3 ROCKETS',color:'#ff5a3c'});
         for(let i=0;i<14;i++)addPart(b.x,b.y+8,b.z,(rnd()-.5)*160,rnd()*200,(rnd()-.5)*160,.5,[1,.4,.2],3,'spark');
       }
@@ -409,7 +412,7 @@ function charProps(e){
         if(!had){e.hasRifle=true;e.stash[e.weapon]=e.ammo;e.weapon='rifle';e.ammo=AR_MAG;e.reload=0;}
         else if(e.weapon==='rifle'){e.ammo=AR_MAG;e.reload=0;}else e.stash.rifle=AR_MAG;
         b.dead=true;sfx('pickup',b);
-        world.arQ.push(world.time+28);
+        if(!b.dropped)world.arQ.push(world.time+40);
         if(e===player)feed.unshift({t:3,text:had?'RIFLE AMMO REFILLED':'YOU PICKED UP A RIFLE',color:'#7cf0ff'});
         for(let i=0;i<14;i++)addPart(b.x,b.y+8,b.z,(rnd()-.5)*160,rnd()*200,(rnd()-.5)*160,.5,[.5,.95,1],3,'spark');
       }
@@ -419,7 +422,7 @@ function charProps(e){
         if(!had){e.hasShotgun=true;e.stash[e.weapon]=e.ammo;e.weapon='shotgun';e.ammo=SG_MAG;e.reload=0;}
         else if(e.weapon==='shotgun'){e.ammo=SG_MAG;e.reload=0;}else e.stash.shotgun=SG_MAG;
         b.dead=true;sfx('pickup',b);
-        world.sgQ.push(world.time+25);
+        if(!b.dropped)world.sgQ.push(world.time+30);
         if(e===player)feed.unshift({t:3,text:had?'SHOTGUN SHELLS REFILLED':'YOU PICKED UP A SHOTGUN',color:'#ff8a2a'});
         for(let i=0;i<14;i++)addPart(b.x,b.y+8,b.z,(rnd()-.5)*160,rnd()*200,(rnd()-.5)*160,.5,[1,.55,.15],3,'spark');
       }
@@ -492,18 +495,15 @@ function drawProp(b){
     const c=V(b.x,b.y+b.h/2,b.z);
     if(b.kind==='shotgun'){
       const pl=.6+.4*Math.sin(world.time*4);
-      drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.25*pl,.1*pl,0],b.edge);
-      const yaw=world.time*1.6,hy=b.y+16+Math.sin(world.time*2.5)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
+      const yaw=world.time*.7+b.x*.01,hy=b.y+9+Math.sin(world.time*1.8+b.z*.01)*1.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
       drawShotgunModel({o:vsub(V(b.x,hy,b.z),vscale(u,5)),u,v,w:vcross(u,v)},[1,.55,.2],1,0);
     }else if(b.kind==='launcher'){
       const pl=.6+.4*Math.sin(world.time*4);
-      drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.3*pl,.06*pl,.03*pl],b.edge);
-      const yaw=world.time*1.6+2,hy=b.y+17+Math.sin(world.time*2.5+2)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),c=V(b.x,hy,b.z);
+      const yaw=world.time*.7+b.x*.01,hy=b.y+10+Math.sin(world.time*1.8+b.z*.01)*1.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),c=V(b.x,hy,b.z);
       drawLauncherModel({bigLauncher:true,rockets:RMAG,rreload:0,bodyYaw:yaw},vsub(c,vscale(u,7)),vadd(c,vscale(u,7)),V(0,1,0),[1,.4,.2],1);
     }else if(b.kind==='rifle'){
       const pl=.6+.4*Math.sin(world.time*4);
-      drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.05*pl,.2*pl,.25*pl],b.edge);
-      const yaw=world.time*1.6+1,hy=b.y+16+Math.sin(world.time*2.5+1)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
+      const yaw=world.time*.7+b.x*.01,hy=b.y+9+Math.sin(world.time*1.8+b.z*.01)*1.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
       drawRifleModel({o:vsub(V(b.x,hy,b.z),vscale(u,4)),u,v,w:vcross(u,v)},[.5,.95,1],1,0);
     }else drawBox(c,b.w,b.h,b.d,b.col,null,b.edge);
     return;
@@ -515,7 +515,6 @@ function drawProp(b){
   if(b.kind==='barrel'){if(b.hits>=2)em=[.4*(.6+.4*Math.sin(world.time*25)),.12,0];if(b.fuse!==undefined&&b.fuse<1.5&&Math.sin(world.time*(b.fuse<.6?22:10))>0)em=[.8,.75,.5];}
   if(b.kind==='pallet')em=[.02,.03,.05];
   if(b.kind==='medkit'){const pl=.6+.4*Math.sin(world.time*6);em=[.1*pl,.25*pl,.12*pl];}
-  if(b.kind==='barrel'){drawBarrel(b,em);gl.disable(gl.POLYGON_OFFSET_FILL);return;}
   rbDraw(b,V(0,0,0),V(W,H,D),b.kind==='spool'?hexRGB('#2a1c0e'):b.col,em,b.kind==='spool'?null:b.edge);
   gl.disable(gl.POLYGON_OFFSET_FILL);
   drawPropDetail(b,W,H,D);

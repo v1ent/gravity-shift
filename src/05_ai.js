@@ -16,7 +16,7 @@ function applyBotSkill(key){
 }
 function botThink(b,dt){
   const c=b.ctl;
-  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;
+  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;
   if(!b.alive){b.ai=null;return;}
   const ai=b.ai||(b.ai={known:null,acquire:0,lostT:0,lastSeen:null,alert:null,alertT:0,yaw:b.yaw,pitch:0,errT:0,ex:0,ey:0,ez:0,burst:0,pause:0,path:null,replan:0,stuckT:0,last:V(b.x,b.y,b.z),flip:0,hold:0,strafe:1,strafeT:0,skill:BOT_CFG.skill[0]+rnd()*(BOT_CFG.skill[1]-BOT_CFG.skill[0]),rocketT:(2+rnd()*3)/BOT_CFG.rocket,jumpWait:0,scanT:0});
   const eye=headPos(b);
@@ -81,12 +81,12 @@ function botThink(b,dt){
   const onTarget=Math.abs(angDiff(ty,ai.yaw))<loose&&Math.abs(tp-ai.pitch)<loose+.03;
   const range=b.weapon==='shotgun'?560:1100;
   if(see&&t&&ai.acquire<=0&&onTarget&&dist<range){
-    if(wantRocket){if(b.weapon==='rocket'&&b.rfireCD<=0){c.fireClick=true;ai.rocketT=(3+rnd()*4)/BOT_CFG.rocket;}}
+    if(wantRocket&&b.rfireCD<=0){c.rocketClick=true;ai.rocketT=(3+rnd()*4)/BOT_CFG.rocket;}
     else if(ai.pause>0)ai.pause-=dt;
     else{c.fire=true;ai.burst+=dt;if(ai.burst>(.9+rnd()*.7)*BOT_CFG.burst){ai.burst=0;ai.pause=(.6+rnd()*.6)*BOT_CFG.pause;}}
   }
   // weapon choice: the launcher only for the moment of a rocket shot, otherwise the best gun for the range
-  {const want=wantRocket?'rocket':(b.hasShotgun&&dist<420?'shotgun':b.hasRifle?'rifle':'pistol');if(b.weapon!==want&&(want==='rocket'||b.weapon==='rocket'||(t&&see&&b.fireCD<=0)))c.select=want;}
+  {const want=b.hasShotgun&&dist<420?'shotgun':b.hasRifle?'rifle':'pistol';if(b.weapon!==want&&(b.weapon==='rocket'||(t&&see&&b.fireCD<=0)))c.select=want;}
   if(b.ammo<4&&!see)c.reload=true;
   if(b.state==='hang'){c.grab=true;c.jump=rnd()<dt*4;return;}
   if(b.state!=='normal')return;

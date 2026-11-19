@@ -72,7 +72,7 @@ function updateEmote(e,c,ctrl,dt){
     if(m.init&&m.t>=BOW_T){if(canAlly(e,p))formAlliance(e,p);e.emote=null;p.emote=null;return;}
   }
   // while emoting the hands are busy: no moving, shooting, jumping, kicking
-  c.mx=0;c.mz=0;c.fire=false;c.fireClick=false;c.alt=false;c.aim=false;c.jump=false;c.kick=false;c.dodge=null;c.sprint=false;
+  c.mx=0;c.mz=0;c.fire=false;c.fireClick=false;c.rocketClick=false;c.alt=false;c.aim=false;c.jump=false;c.kick=false;c.dodge=null;c.sprint=false;
 }
 
 // ---------- bots: offering and accepting alliances ----------

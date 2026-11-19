@@ -72,7 +72,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k
   if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch();}
   if(['w','a','s','d',' ','c','e','r','shift'].includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
-addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0){mouseDown=true;pressed['lmb']=true;}if(e.button===2)mouseRight=true;
+addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;if(e.button===0){mouseDown=true;pressed['lmb']=true;}if(e.button===2)mouseRight=true;if(e.button===1){pressed['mmb']=true;e.preventDefault();}
   if(!locked&&cv.requestPointerLock){try{const r=cv.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(err){}}});
 addEventListener('wheel',e=>{if(gameState==='play'&&!paused){pressed['wheel']=true;e.preventDefault();}},{passive:false});
 addEventListener('mouseup',e=>{if(e.button===0)mouseDown=false;if(e.button===2)mouseRight=false;});
@@ -113,7 +113,7 @@ function playerInput(first){
   c.mx=mx;c.mz=mz;
   c.jump=first&&!!pressed[' '];c.jumpHeld=!!keys[' '];c.grab=!!keys[' '];
   c.sprint=!!keys['shift'];c.crouch=!!keys['c'];c.crouchPressed=first&&!!pressed['c'];
-  c.fire=mouseDown;c.fireClick=first&&!!pressed['lmb'];c.alt=false;c.aim=mouseRight;c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
+  c.fire=mouseDown;c.fireClick=first&&!!pressed['lmb'];c.alt=false;c.aim=mouseRight;c.rocketClick=first&&!!pressed['mmb'];c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
   c.swap=first&&!!(pressed['wheel']||pressed['q']);c.select=first?(pressed['1']?'pistol':pressed['2']?'rocket':pressed['3']?'shotgun':pressed['4']?'rifle':null):null;
   // double-tap S / A / D: dodge
   const tap=k=>{if(!(first&&pressed[k]))return false;const t=performance.now()/1000,l=dblTap[k]||-9;dblTap[k]=t;if(t-l<.3){dblTap[k]=-9;return true;}return false;};
@@ -168,8 +168,8 @@ function step(dt,first){
   world.medT-=dt;
   if(world.medT<=0){world.medT=13+rnd()*9;if(props.filter(b=>b.kind==='medkit'&&!b.dead).length<3)spawnDrop('medkit');}
   if(world.barrelQ.length&&world.time>=world.barrelQ[0]){world.barrelQ.shift();spawnDrop('barrel');}
-  world.lnQ.sort((a,b)=>a-b);if(world.lnQ.length&&world.time>=world.lnQ[0]){world.lnQ.shift();if(!props.some(q=>q.kind==='launcher'&&!q.dead))spawnDrop('launcher');}
-  world.arQ.sort((a,b)=>a-b);if(world.arQ.length&&world.time>=world.arQ[0]){world.arQ.shift();if(props.filter(q=>q.kind==='rifle'&&!q.dead).length<2)spawnDrop('rifle');}
+  world.lnQ.sort((a,b)=>a-b);if(world.lnQ.length&&world.time>=world.lnQ[0]){world.lnQ.shift();if(props.filter(q=>q.kind==='launcher'&&!q.dead).length<3)spawnDrop('launcher');}
+  world.arQ.sort((a,b)=>a-b);if(world.arQ.length&&world.time>=world.arQ[0]){world.arQ.shift();if(props.filter(q=>q.kind==='rifle'&&!q.dead).length<1)spawnDrop('rifle');}
   world.sgQ.sort((a,b)=>a-b);if(world.sgQ.length&&world.time>=world.sgQ[0]){world.sgQ.shift();if(props.filter(q=>q.kind==='shotgun'&&!q.dead).length<2)spawnDrop('shotgun');}
   world.noises=world.noises.filter(n=>world.time-n.t<.15);
   if(player&&!player.isBot)playerInput(first);
@@ -353,7 +353,7 @@ function newMatch(seed){
   for(let i=0;i<cfg.bots;i++)chars.push(makeChar(roster[i][0],roster[i][1],true));
   player=chars[0];
   props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];
-  spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');spawnDrop('rifle');spawnDrop('launcher');
+  spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');spawnDrop('launcher');spawnDrop('launcher');spawnDrop('launcher');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;
   Object.assign(world,{rotCD:2,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],arQ:[],lnQ:[],noises:[]});
