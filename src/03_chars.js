@@ -9,6 +9,9 @@ const STEALTH_ON=false; // cloaking is switched off for now (players and bots)
 const HARD_FALL=10*T,GETUP_DUR=.8,KICK_DUR=.6,KICK_HIT=.42,KICK_DMG=15,KICK_PUSH=560;
 const MAG=10,RELOAD=2,FIRE_CD=.42,BULLET_SPEED=1300,PISTOL_SPEED=3900,DMG=25,HEAD_DMG=45;
 const RMAG=3,RRELOAD=3.2,RFIRE_CD=.8;
+// everyone starts with a one-shot wrist launcher that recharges on its own; the big one (3 rockets) is found on the level
+const RMAG_S=1,RRELOAD_S=6;
+const rMag=e=>e.bigLauncher?RMAG:RMAG_S;
 const THIGH=14,SHIN=14,TORSO=17,UPPER=11,FORE=11;
 let chars=[],player=null;
 
@@ -16,16 +19,16 @@ let chars=[],player=null;
 const DODGE_STAM=.3;
 const DODGES={
   back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
-  right:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:false,fb:V(-83,0,-39),fix:93*Math.PI/180,fix0:56,fix1:96},
-  left:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:true,fb:V(83,0,-39),fix:-93*Math.PI/180,fix0:56,fix1:96},
+  right:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:false,scale:2,fb:V(-83,0,-39),fix:93*Math.PI/180,fix0:56,fix1:96},
+  left:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:true,scale:2,fb:V(83,0,-39),fix:-93*Math.PI/180,fix0:56,fix1:96},
 };
 for(const k in DODGES){const D=DODGES[k];D.dur=(D.f1-D.f0)/30/D.rate;}
 // travel so far (character space: +z forward, -x right)
 function dodgeDisp(D,t){
   const u=clamp(t/D.dur,0,1);
   if(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips[D.clip]){
-    const h=f=>sampleClip(D.clip,f/30,D.mirror).hip,a=h(D.f0),b=h(D.f0+u*(D.f1-D.f0));return V(b.x-a.x,0,b.z-a.z);}
-  return vscale(D.fb,smooth(u));
+    const h=f=>sampleClip(D.clip,f/30,D.mirror).hip,a=h(D.f0),b=h(D.f0+u*(D.f1-D.f0)),k=D.scale||1;return V((b.x-a.x)*k,0,(b.z-a.z)*k);}
+  return vscale(D.fb,smooth(u)*(D.scale||1));
 }
 function startDodge(e,kind){
   const D=DODGES[kind];e.state='dodge';e.st={kind,t:0,yaw:e.bodyYaw,prev:V(0,0,0)};
@@ -34,7 +37,7 @@ function startDodge(e,kind){
 function makeChar(name,color,isBot){
   return {name,color,col:hexRGB(color),isBot,x:0,y:0,z:0,w:BODY_W,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:false,respawn:.5,
     grounded:false,coyote:0,jumpBuf:0,cut:false,yaw:0,pitch:0,bodyYaw:0,legYaw:0,state:'normal',st:{},grabCD:0,
-    weapon:'pistol',hasShotgun:false,hasRifle:false,stash:{pistol:MAG,shotgun:0,rifle:0},fireCD:0,ammo:MAG,reload:0,rockets:RMAG,rreload:0,rfireCD:0,stam:1,stamDelay:0,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,
+    weapon:'pistol',hasShotgun:false,hasRifle:false,stash:{pistol:MAG,shotgun:0,rifle:0},fireCD:0,ammo:MAG,reload:0,rockets:RMAG_S,bigLauncher:false,rreload:0,rfireCD:0,stam:1,stamDelay:0,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,
     kickCD:0,stun:0,knocked:false,recoil:0,flinch:0,land:0,takeoff:0,phase:0,ba:0,bav:0,baAxis:0,tumbleHold:0,runW:0,accS:0,prevFwd:0,
     kills:0,deaths:0,invuln:0,lastHit:null,lastHitT:-99,poseBlend:1,pose:null,kickPrompt:false,rocketJump:false,airT:0,
     ctl:{mx:0,mz:0,jump:false,jumpHeld:false,sprint:false,crouch:false,crouchPressed:false,fire:false,alt:false,kick:false,reload:false,grab:false,aimYaw:0,aimPitch:0},ai:null};
@@ -53,7 +56,7 @@ function spawn(e){
     if(md>bs){bs=md;best=p;}
   }
   if(!best)best={x:L/2,y:T,z:L/2};
-  Object.assign(e,{x:best.x,y:best.y,z:best.z,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,hasRifle:false,stash:{pistol:MAG,shotgun:0,rifle:0},ammo:MAG,reload:0,rockets:RMAG,rreload:0,
+  Object.assign(e,{x:best.x,y:best.y,z:best.z,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,hasRifle:false,stash:{pistol:MAG,shotgun:0,rifle:0},ammo:MAG,reload:0,rockets:RMAG_S,bigLauncher:false,rreload:0,
     stam:1,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,ba:0,bav:0,tumbleHold:0,invuln:1.2,poseBlend:1,land:.6,lastHit:null,rocketJump:false});
   // face the middle of the arena
   e.yaw=e.bodyYaw=e.legYaw=yawOf(L/2-e.x,L/2-e.z);e.pitch=0;e.ctl.aimYaw=e.yaw;e.ctl.aimPitch=0;
@@ -174,6 +177,9 @@ function updateChar(e,dt){
   e.recoil=Math.max(0,e.recoil-dt*5);e.flinch=Math.max(0,e.flinch-dt*5);e.hitMarker=Math.max(0,(e.hitMarker||0)-dt);
   const ctrl=e.stun<=0&&e.state!=='down'&&e.state!=='getup';
   updateEmote(e,c,ctrl,dt);
+  // right mouse: aim — the gun comes up (or the launcher arm), tighter shots, walk only
+  e.aiming=ctrl&&!!c.aim&&(e.state==='normal'||e.state==='slide'||e.state==='kick')&&!e.runJump&&!e.emote;
+  if(e.aiming){e.aimT=Math.max(e.aimT||0,.35);if(e.weapon==='rocket')e.rArm=Math.max(e.rArm||0,.3);}
   let mx=ctrl?c.mx:0,mz=ctrl?c.mz:0;const mag=Math.hypot(mx,mz);if(mag>1){mx/=mag;mz/=mag;}
   if(ctrl&&c.jump)e.jumpBuf=.13;else e.jumpBuf-=dt;
   e.yaw=c.aimYaw;e.pitch=clamp(c.aimPitch,-1.35,1.35);
@@ -181,8 +187,8 @@ function updateChar(e,dt){
   const own=ownedWeapons(e);
   if(ctrl&&own.length>1&&(c.swap||(c.select&&c.select!==e.weapon&&own.includes(c.select)))){
     const to=c.select&&c.select!==e.weapon&&own.includes(c.select)?c.select:own[(own.indexOf(e.weapon)+1)%own.length];
-    e.stash[e.weapon]=e.ammo;e.weapon=to;e.ammo=e.stash[to];e.reload=0;e.fireCD=Math.max(e.fireCD,.35);e.recoil=.6;sfx('swap',e);
-    if(e.ammo<=0)e.reload=reloadOf(e);
+    if(e.weapon!=='rocket')e.stash[e.weapon]=e.ammo;e.weapon=to;e.ammo=to==='rocket'?0:e.stash[to];e.reload=0;e.fireCD=Math.max(e.fireCD,.35);e.rfireCD=Math.max(e.rfireCD,.3);e.recoil=.6;sfx('swap',e);
+    if(to!=='rocket'&&e.ammo<=0)e.reload=reloadOf(e);
   }
   // reloads
   if(e.reload>0){
@@ -191,14 +197,17 @@ function updateChar(e,dt){
     // shells go in one at a time
     if(e.weapon==='shotgun'){const p=clamp((1-e.reload/e.rl.dur-.12)/.8,0,1),k=Math.floor(p*e.rl.n+.12);const a=Math.min(magOf(e),e.rl.a0+k);if(a>e.ammo){e.ammo=a;sfx('reload',e);}}
     if(e.reload<=0){e.reload=0;e.ammo=magOf(e);sfx('reload',e);e.rl=null;}}
-  else if(c.reload&&e.ammo<magOf(e))e.reload=reloadOf(e);
+  else if(c.reload&&e.weapon!=='rocket'&&e.ammo<magOf(e))e.reload=reloadOf(e);
+  if(c.reload&&e.weapon==='rocket'&&e.bigLauncher&&e.rockets<RMAG&&e.rreload<=0)e.rreload=RRELOAD;
   if(e.reload<=0)e.rl=null;
   if(e.rreload>0){
-    if(!e.rrl)e.rrl={a0:e.rockets,n:Math.max(1,RMAG-e.rockets),dur:e.rreload};
+    // the big launcher is loaded by hand, one rocket at a time; the small one just recharges
+    if(e.bigLauncher){
+      if(!e.rrl)e.rrl={a0:e.rockets,n:Math.max(1,RMAG-e.rockets),dur:e.rreload};
+      const p=clamp((1-e.rreload/e.rrl.dur-.1)/.8,0,1),k=Math.floor(p*e.rrl.n+.12);const a=Math.min(RMAG,e.rrl.a0+k);if(a>e.rockets){e.rockets=a;sfx('reload',e);}}
     e.rreload-=dt;
-    {const p=clamp((1-e.rreload/e.rrl.dur-.1)/.8,0,1),k=Math.floor(p*e.rrl.n+.12);const a=Math.min(RMAG,e.rrl.a0+k);if(a>e.rockets){e.rockets=a;sfx('reload',e);}}
-    if(e.rreload<=0){e.rreload=0;e.rockets=RMAG;e.rrl=null;}}
-  else e.rrl=null;
+    if(e.rreload<=0){e.rreload=0;e.rockets=rMag(e);e.rrl=null;if(!e.bigLauncher)sfx('reload',e);}}
+  else{e.rrl=null;if(e.rockets<=0)e.rreload=e.bigLauncher?RRELOAD:RRELOAD_S;}
   // tumble spring
   if(e.tumbleHold>0)e.tumbleHold-=dt;
   else{const k=e.stun>0?18:55,d=e.stun>0?3:9;e.bav+=(-k*e.ba-d*e.bav)*dt;e.ba+=e.bav*dt;if(Math.abs(e.ba)<.002&&Math.abs(e.bav)<.01){e.ba=0;e.bav=0;}}
@@ -207,7 +216,8 @@ function updateChar(e,dt){
   const moving=Math.hypot(mx,mz)>.15;
   // stamina
   const sprintOK=ctrl&&c.sprint&&moving&&!e.crouch&&e.stam>.02&&e.state==='normal';
-  if(e.grounded)e.sprinting=sprintOK;else if(!sprintOK&&!e.runJump)e.sprinting=false;
+  if(e.grounded)e.sprinting=sprintOK&&!e.aiming;else if(!sprintOK&&!e.runJump)e.sprinting=false;
+  if(e.aiming&&e.sprinting&&!e.runJump)e.sprinting=false; // aiming: walk only
   if(e.sprinting&&e.grounded){e.stam=Math.max(0,e.stam-dt*STAM_DRAIN);e.stamDelay=.8;}
   else{e.stamDelay-=dt;if(e.stamDelay<=0)e.stam=Math.min(1,e.stam+dt*STAM_REGEN);}
   const hsp=Math.hypot(e.vx,e.vz);
@@ -431,10 +441,13 @@ function updateChar(e,dt){
   const canFire=(e.state==='normal'&&!e.runJump)||e.state==='kick'||e.state==='slide';
   if(ctrl&&canFire&&gameState!=='over'){
     if(c.fireClick)e.clickBuf=.12; // a click just before the gun is ready still counts
+    if(e.weapon==='rocket'){ // launcher selected: click to fire
+      if((e.clickBuf>0||c.fireClick)&&e.rfireCD<=0){e.clickBuf=0;if(e.rockets>0&&e.rreload<=0){fireRocket(e);e.lastShot=world.time;}else if(c.fireClick)sfx('empty',e);}
+    }else{
     const pistol=e.weapon==='pistol',held=c.fire&&world.time-(e.lastShot||-9)>=FIRE_CD;
     const wants=pistol?(e.clickBuf>0||held):c.fire;
     if(wants&&e.fireCD<=0&&e.reload<=0){e.clickBuf=0;if(e.ammo>0){fireRifle(e);e.lastShot=world.time;}else{e.reload=reloadOf(e);sfx('empty',e);}}
-    else if(c.alt&&e.rfireCD<=0&&e.rreload<=0){if(e.rockets>0)fireRocket(e);else{e.rreload=RRELOAD;sfx('empty',e);}}
+    }
   }
   // stealth
   e.airT=(e.grounded||e.wasBox)?0:(e.airT||0)+dt;
@@ -797,6 +810,7 @@ function drawPistolModel(F,acc,al,slideBack){
 }
 // wrist launcher: round tube, flared muzzle, rear cap, a three-round drum (lit per rocket left), straps round the forearm
 function drawLauncherModel(e,eb,hn,out,acc,al){
+  if(!e.bigLauncher)return drawSmallLauncher(e,eb,hn,out,acc,al);
   const fd=vnorm(vsub(hn,eb)),len=vlen(vsub(hn,eb));
   const up=vnorm(vsub(out,vscale(fd,vdot(out,fd)))),sd=vcross(fd,up);
   const ax=d=>vadd(vadd(eb,vscale(fd,d)),vscale(up,2.6));
@@ -812,6 +826,22 @@ function drawLauncherModel(e,eb,hn,out,acc,al){
   const n=e.rockets===undefined?3:e.rockets;
   for(let i=0;i<3;i++)wpart(F,(i-1)*len*.12,0,1.05,.8,.8,.3,i<n?hexRGB('#ff8a2a'):hexRGB('#2a1a14'),i<n?[.9,.4,.1]:null,null,al);
   wpart({o:ax(len*.8),u:fd,v:up,w:sd},0,1.7,0,1.4,.45,.45,acc,acc,null,al);                  // sight
+}
+// the default one-shot launcher: a slim tube on the forearm, one rocket, a light that fills as it recharges
+function drawSmallLauncher(e,eb,hn,out,acc,al){
+  const fd=vnorm(vsub(hn,eb)),len=vlen(vsub(hn,eb));
+  const up=vnorm(vsub(out,vscale(fd,vdot(out,fd)))),sd=vcross(fd,up);
+  const ax=d=>vadd(vadd(eb,vscale(fd,d)),vscale(up,2.2));
+  const a0=ax(len*.3),a1=ax(len+.6),ch=e.rreload>0?1-e.rreload/RRELOAD_S:1;
+  drawTube(a0,a1,1.1,hexRGB('#3a2c2c'),null,al);
+  drawTube(vsub(a1,vscale(fd,.6)),vadd(a1,vscale(fd,.7)),1.45,hexRGB('#222633'),null,al);
+  drawTube(vadd(a1,vscale(fd,.65)),vadd(a1,vscale(fd,.85)),.8,hexRGB('#ff8a2a'),ch>=1?[1,.5,.12]:[.15*ch,.06*ch,0],al);
+  drawTube(vsub(a0,vscale(fd,.6)),vadd(a0,vscale(fd,.4)),1.35,hexRGB('#222633'),null,al);
+  drawTube(vadd(eb,vscale(fd,len*.55-.3)),vadd(eb,vscale(fd,len*.55+.3)),2.1,hexRGB('#151821'),null,al);
+  // charge bar along the top
+  const F={o:ax(len*.62),u:fd,v:up,w:sd};
+  wpart(F,0,1.3,0,len*.4,.35,.45,hexRGB('#2a1a14'),null,null,al);
+  if(ch>0)wpart(F,-len*.2+len*.2*ch,1.38,0,len*.4*ch,.38,.5,ch>=1?hexRGB('#ff8a2a'):hexRGB('#a04a1a'),ch>=1?[.9,.4,.1]:[.25,.1,0],null,al);
 }
 // pump shotgun: stock and butt pad, receiver with ejection port and side shell carrier, barrel over the magazine tube,
 // sliding ribbed forend, perforated heat shield with glowing slots, bead sight. Origin = the gun hand on the grip.

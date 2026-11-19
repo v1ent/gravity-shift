@@ -7,17 +7,17 @@ const ARM_STRETCH=1.2; // the model's arms are shorter than the game skeleton's 
 const SKVS=`
 attribute vec3 aPos;attribute vec4 aNor;attribute vec4 aJ;attribute vec4 aW;
 uniform mat4 uVP;uniform mat4 uWorldFix;uniform mat4 uB[20];uniform float uQ;
-varying vec3 vNor;varying float vMat;varying float vD;
+varying vec3 vNor;varying float vMat;varying float vD;varying vec3 vW;
 void main(){
   vec4 p=vec4(aPos/uQ,1.0);
   mat4 m=uB[int(aJ.x)]*aW.x+uB[int(aJ.y)]*aW.y+uB[int(aJ.z)]*aW.z+uB[int(aJ.w)]*aW.w;
-  vec4 w=uWorldFix*(m*p);
+  vec4 w=uWorldFix*(m*p);vW=(m*p).xyz;
   vNor=normalize((uWorldFix*(m*vec4(aNor.xyz,0.0))).xyz);vMat=aNor.w;
   gl_Position=uVP*w;vD=gl_Position.w;
 }`;
 const SKFS=`
 precision mediump float;
-varying vec3 vNor;varying float vMat;varying float vD;
+varying vec3 vNor;varying float vMat;varying float vD;varying vec3 vW;uniform vec4 uLP;uniform vec3 uLC;
 uniform vec3 uBody;uniform vec3 uJoint;uniform vec3 uGlow;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uAlpha;
 void main(){
   vec3 n=normalize(vNor);
@@ -27,6 +27,7 @@ void main(){
   vec3 col=base*(0.34+0.30*hemi+0.62*dif);
   float rim=pow(1.0-abs(n.z*0.3+n.x*0.0),3.0)*0.0;
   col+=uGlow*(1.0-body)*0.55+uGlow*body*0.06;
+  {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=base*uLC*la*la*1.1;}
   float f=exp(-pow(vD*uFogD,2.0));
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
 }`;
@@ -46,7 +47,7 @@ async function loadModel(){
       if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));gl.attachShader(p,s);}
     gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
     const loc={};for(const a of ['aPos','aNor','aJ','aW'])loc[a]=gl.getAttribLocation(p,a);
-    for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha'])loc[u]=gl.getUniformLocation(p,u);
+    for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC'])loc[u]=gl.getUniformLocation(p,u);
     SKN.vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(buf,vOff,vLen),gl.STATIC_DRAW);
     SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(buf.slice(iOff,iOff+meta.ni*2)),gl.STATIC_DRAW);
     SKN.p=p;SKN.loc=loc;SKN.meta=meta;SKN.ni=meta.ni;
@@ -592,6 +593,7 @@ function drawPose(P,col,alpha,flash){
   gl.uniformMatrix4fv(L.uVP,false,FR.vp);gl.uniformMatrix4fv(L.uWorldFix,false,FR.fix);
   gl.uniformMatrix4fv(L.uB,false,SKN.mats);gl.uniform1f(L.uQ,SKN.meta.q);
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
+  {const li=FR.light;if(li){gl.uniform4f(L.uLP,li.p.x,li.p.y,li.p.z,li.r);gl.uniform3f(L.uLC,li.c[0],li.c[1],li.c[2]);}else{gl.uniform4f(L.uLP,0,-1e5,0,1);gl.uniform3f(L.uLC,0,0,0);}}
   const fl=flash||0;
   gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);gl.uniform3f(L.uJoint,.1+col[0]*fl*.3,.11+col[1]*fl*.3,.15+col[2]*fl*.3);
   gl.uniform3f(L.uGlow,col[0]*(.35+fl),col[1]*(.35+fl),col[2]*(.35+fl));

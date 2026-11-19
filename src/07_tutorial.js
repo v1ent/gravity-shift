@@ -216,7 +216,7 @@ TUT_BUILD.rj=()=>{
   TUT.rjCount=0;TUT.rjLaunch=null;TUT.reached=[false,false,false,false];
   return {
     name:'ROCKET JUMPING',spawn:{x:20*T,y:fy,z:8*T},yaw:-Math.PI/2,infRockets:true,damage:true,noDeath:true,
-    card:['ROCKET JUMPING',`<p>Look down at your feet and fire a rocket (<b>right mouse</b>). The blast <b>always</b> launches you — but standing on the ground it costs about <b>60% of your health</b>.</p>
+    card:['ROCKET JUMPING',`<p>Switch to the launcher (<b>2</b> or the <b>wheel</b>), look down at your feet and click to fire a rocket. The blast <b>always</b> launches you — but standing on the ground it costs about <b>60% of your health</b>.</p>
       <p>The trick: <b>JUMP just before the rocket hits the floor</b>. Caught in the air, you fly higher and lose only <b>15–20%</b>. You have about half a second.</p>
       <p>Near the top of the jump you <b>float</b> for a moment — use it to steer onto a ledge. Each platform needs a rocket jump. You can't die in this room, and your health refills when you stand still.</p>`],
     obj:[{text:'Fire at your feet WITHOUT jumping — see what it costs',short:'NO-JUMP BLAST'},
@@ -315,7 +315,7 @@ function startTutorial(id){
   if(cfg.spawn)setCp(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z,cfg.yaw);
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   Object.assign(world,{rotCD:0,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,
-    medT:cfg.medkits?12:1e9,barrelQ:[],sgQ:[],arQ:[],noises:[],spiderT:1e9,fragLimit:cfg.frags||FRAG_LIMIT});
+    medT:cfg.medkits?12:1e9,barrelQ:[],sgQ:[],arQ:[],lnQ:[],noises:[],spiderT:1e9,fragLimit:cfg.frags||FRAG_LIMIT});
   TUT.turns0=0;TUT.cpSec=0;
   if(cfg.spawn)player.yaw=cfg.yaw;
   if(cfg.snap)tutSnap(V(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z),cfg.yaw);
@@ -354,7 +354,7 @@ function tutStep(dt){
   const p=player,cfg=TUT.cfg;if(!cfg)return;
   TUT.t+=dt;
   if(!cfg.damage&&p.alive){p.hp=100;p.fallStart=Math.max(p.fallStart||0,p.y-HARD_FALL*.5);}
-  if(cfg.infRockets){p.rockets=RMAG;p.rreload=0;}
+  if(cfg.infRockets){p.rockets=rMag(p);p.rreload=0;}
   if(p.ammo<TUT.lastAmmo&&p.reload<=0)TUT.shots+=TUT.lastAmmo-p.ammo;TUT.lastAmmo=p.ammo;
   if(p.state!==TUT.prevState){if(cfg.onState)cfg.onState(TUT.prevState,p.state,p);TUT.prevState=p.state;}
   if(cfg.update)cfg.update(dt,p);

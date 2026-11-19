@@ -49,6 +49,7 @@ vCol=aCol;vUV=aUV;vEm=aEm;gl_Position=uVP*w;vD=gl_Position.w;}`;
 const FS=`
 precision mediump float;
 varying vec3 vNor;varying vec3 vCol;varying vec4 vUV;varying float vEm;varying vec3 vW;varying float vD;
+uniform vec4 uLP;uniform vec3 uLC;
 uniform vec3 uTint;uniform float uUseTint;uniform vec3 uEmis;uniform float uAlpha;uniform float uTime;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uEdge;uniform vec3 uEdgeCol;
 void main(){
   vec3 base=mix(vCol,uTint,uUseTint);
@@ -84,6 +85,7 @@ void main(){
   if(vEm>6.5&&vEm<7.5){ // blinking LED
     float bl=step(0.45,fract(uTime*1.3+dot(vW,vec3(0.031,0.017,0.023))));col=mix(vCol*0.25,vCol*1.8,bl);
   }
+  {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=base*uLC*la*la*1.1+uLC*la*la*la*0.1;}
   col+=uEmis;
   float f=exp(-pow(vD*uFogD,2.0));
   col=mix(uFog,col,f);
@@ -140,6 +142,7 @@ function beginMain(){
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);
   gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
   gl.uniform1f(L.uAlpha,1);gl.uniform3f(L.uEmis,0,0,0);gl.uniform1f(L.uUseTint,0);
+  const li=FR.light;if(li){gl.uniform4f(L.uLP,li.p.x,li.p.y,li.p.z,li.r);gl.uniform3f(L.uLC,li.c[0],li.c[1],li.c[2]);}else{gl.uniform4f(L.uLP,0,-1e5,0,1);gl.uniform3f(L.uLC,0,0,0);}
 }
 function drawLevelMesh(){
   if(!R.levelN)return;const gl=R.gl,L=R.main.loc;

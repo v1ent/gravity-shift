@@ -19,6 +19,9 @@ function qlerp(a,b,t){const d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3],sg=d<0?-1:
 const RB_ALL=(()=>{const s=[];for(const x of [-1,0,1])for(const y of [-1,0,1])for(const z of [-1,0,1])if(x||y||z)s.push([x,y,z]);return s;})(); // corners, edges, faces
 const RB_LIGHT=RB_ALL.filter(([x,y,z])=>(x&&y&&z)||(Math.abs(x)+Math.abs(y)+Math.abs(z)===1));                          // corners + face centres
 const qIdent=()=>[0,0,0,1];
+// barrels: contact points on three rings (rims and middle) and the two lids, so they stand on a lid or roll on their side
+const RB_CYL=(()=>{const s=[[0,1,0],[0,-1,0]];for(const y of [-1,0,1])for(let i=0;i<12;i++){const a=i/12*Math.PI*2;s.push([Math.cos(a),y,Math.sin(a)]);}return s;})();
+function qFromTo(u,v){const d=clamp(vdot(u,v),-1,1),ax=vcross(u,v),l=vlen(ax);if(l<1e-6)return d>0?qIdent():qaxis(Math.abs(u.x)<.9?vnorm(vcross(u,V(1,0,0))):vnorm(vcross(u,V(0,0,1))),Math.PI);return qaxis(vscale(ax,1/l),Math.acos(d));}
 function rbCols(q){return [qrot(q,V(1,0,0)),qrot(q,V(0,1,0)),qrot(q,V(0,0,1))];}
 // world inverse inertia applied to a vector
 function rbInvI(b,C,v){
@@ -89,14 +92,23 @@ function rbStep(b,dt,samples,o){
   }
   for(const key in corr){const [x,y,z]=key.split(',').map(Number);c=vadd(c,vscale(V(x,y,z),corr[key]*.8));}
   // a little air drag on the spin; more while scraping along the floor
-  av=vscale(av,Math.pow(ground?.25:.85,dt));{const l=vlen(av);if(l>11)av=vscale(av,11/l);}
+  if(b.cyl&&ground){ // a barrel on its side keeps rolling along its axis; other spin dies quickly
+    const ax=C[1],along=vscale(ax,vdot(av,ax)),rest=vsub(av,along),lying=Math.abs(ax.y)<.5;
+    av=vadd(vscale(along,Math.pow(lying?.75:.25,dt)),vscale(rest,Math.pow(lying?.5:.25,dt)));
+  }else av=vscale(av,Math.pow(ground?.25:.85,dt));{const l=vlen(av);if(l>11)av=vscale(av,11/l);}
   b.vx=v.x;b.vy=v.y;b.vz=v.z;b.av=av;
   b.x=c.x;b.z=c.z;b.y=c.y-b.h/2;rbBounds(b);
   // settle: slow and resting → square it up onto the face it lies on and sleep
   if((ground||b.propSupport)&&Math.hypot(b.vx,b.vy,b.vz)<14&&vlen(b.av)<.7){
     b.sleep+=dt;
-    const sq=rbSnapQ(b.q),ang=rbAngleTo(b.q,sq);
-    if(ang<.1){ // a face is flat on the ground (within ~6°): square it up and sleep
+    let sq=rbSnapQ(b.q),ang=rbAngleTo(b.q,sq);
+    if(b.cyl){ // barrels rest standing on a lid, or lying on their side at any roll
+      const ax=rbCols(b.q)[1];
+      if(Math.abs(ax.y)<.6){const h=vnorm(V(ax.x,0,ax.z)),dq=qFromTo(ax,h);sq=qn(qmul(dq,b.q));ang=Math.asin(Math.min(1,Math.abs(ax.y)));
+        if(ang<.1){if(b.sleep>.3){b.q=sq;rbBounds(b);b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;}sq=null;}}
+    }
+    if(!sq){}
+    else if(ang<.1){ // a face is flat on the ground (within ~6°): square it up and sleep
       if(b.sleep>.25){b.q=qlerp(b.q,sq,Math.min(1,dt*10));if(rbAngleTo(b.q,sq)<.01){b.q=sq;rbBounds(b);b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;}}
     }else if(b.sleep<4){ // balanced on an edge or corner: stay awake and tip over onto the nearest face
       let d=qmul(sq,qconj(b.q));if(d[3]<0)d=d.map(x=>-x);const l=Math.hypot(d[0],d[1],d[2]);

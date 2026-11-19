@@ -13,8 +13,8 @@ const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.11,SG_DMG=10,SG_R
 const AR_MAG=30,AR_RELOAD=2.3,AR_CD=.095,AR_DMG=13,AR_HEAD=24;
 const magOf=e=>e.weapon==='shotgun'?SG_MAG:e.weapon==='rifle'?AR_MAG:MAG,reloadOf=e=>e.weapon==='shotgun'?SG_RELOAD:e.weapon==='rifle'?AR_RELOAD:RELOAD;
 const twoHanded=e=>e.weapon==='shotgun'||e.weapon==='rifle';
-const WEAPON_NAME={pistol:'PISTOL',shotgun:'SHOTGUN',rifle:'RIFLE'},WEAPON_COL={pistol:'#ffcc33',shotgun:'#ff8a2a',rifle:'#7cf0ff'};
-function ownedWeapons(e){const w=['pistol'];if(e.hasShotgun)w.push('shotgun');if(e.hasRifle)w.push('rifle');return w;}
+const WEAPON_NAME={pistol:'PISTOL',rocket:'LAUNCHER',shotgun:'SHOTGUN',rifle:'RIFLE'},WEAPON_COL={pistol:'#ffcc33',rocket:'#ff5a3c',shotgun:'#ff8a2a',rifle:'#7cf0ff'};
+function ownedWeapons(e){const w=['pistol','rocket'];if(e.hasShotgun)w.push('shotgun');if(e.hasRifle)w.push('rifle');return w;}
 function noise(at,r,src){(world.noises||(world.noises=[])).push({x:at.x,y:at.y,z:at.z,r,src,t:world.time});}
 let bullets=[],rockets=[],props=[],parts=[],feed=[];
 
@@ -41,13 +41,14 @@ function updateParts(dt){
   for(let i=parts.length-1;i>=0;i--){
     const p=parts[i];p.life-=dt;if(p.life<=0){parts.splice(i,1);continue;}
     const nx=p.x+p.vx*dt,ny=p.y+p.vy*dt,nz=p.z+p.vz*dt;
-    if(p.type!=='glow'&&p.type!=='splat'&&solid(tileAt(nx,ny,nz))){ // particles don't drift into walls: they skim along them
+    if(p.type!=='glow'&&p.type!=='splat'&&p.type!=='scorch'&&solid(tileAt(nx,ny,nz))){ // particles don't drift into walls: they skim along them
       if(p.type==='drop'){for(const s of [.75,.5,.25])if(!solid(tileAt(p.x+p.vx*dt*s,p.y+p.vy*dt*s,p.z+p.vz*dt*s))){p.x+=p.vx*dt*s;p.y+=p.vy*dt*s;p.z+=p.vz*dt*s;break;}
         p.type='splat';p.vx=p.vy=p.vz=0;p.life=Math.min(p.life,3+rnd()*2);p.max=p.life;continue;}
       if(solid(tileAt(nx,p.y,p.z)))p.vx*=-.25;if(solid(tileAt(p.x,ny,p.z)))p.vy*=-.25;if(solid(tileAt(p.x,p.y,nz)))p.vz*=-.25;
     }else{p.x=nx;p.y=ny;p.z=nz;}
     if(p.type==='spark')p.vy-=G*.5*dt;
     else if(p.type==='drop')p.vy-=G*.9*dt;
+    else if(p.type==='ember'){p.vy-=120*dt;p.vx*=1-dt*1.5;p.vz*=1-dt*1.5;}
     else if(p.type==='dust'||p.type==='smoke'){const k=Math.pow(.15,dt);p.vx*=k;p.vz*=k;p.vy*=k;if(p.type==='smoke')p.vy+=30*dt;}
     else if(p.type==='flame'){p.vy+=60*dt;}
     else if(p.type==='glow'){const k=Math.pow(.05,dt);p.vx*=k;p.vy*=k;p.vz*=k;}
@@ -119,7 +120,7 @@ function fireRifle(e){
   reveal(e);noise(e,900,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
-  const spread=.01+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0);
+  const spread=(.01+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0))*(e.aiming?.5:1);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:DMG,head:HEAD_DMG,fall:0,col:e.col});
@@ -133,7 +134,7 @@ function fireAR(e){
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
   // tight first shots, the spray opens up the longer you hold the trigger
-  const spread=.008+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.018:0)+(e.grounded?0:.03)+(e.isBot?.016:0)+(e.crouch?-.005:0);
+  const spread=(.008+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.018:0)+(e.grounded?0:.03)+(e.isBot?.016:0)+(e.crouch?-.005:0))*(e.aiming?.5:1);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:AR_DMG,head:AR_HEAD,fall:0,col:[.5,.95,1]});
@@ -207,9 +208,46 @@ function fireRocket(e){
   const midAir=!e.grounded&&e.state==='normal'; // fired in mid-air (jump first, then shoot): no slow lob, the motor fires at once
   rockets.push({x:start.x,y:start.y,z:start.z,d,sp:midAir?ROCKET_VMAX*.8:ROCKET_V0,owner:e,life:5,age:midAir?ROCKET_LOB:0,born:world.time});noise(e,800,e);
   e.rfireCD=RFIRE_CD;e.rockets--;e.recoil=1.4;
-  if(e.rockets<=0)e.rreload=RRELOAD;
+  if(e.rockets<=0)e.rreload=e.bigLauncher?RRELOAD:RRELOAD_S;
   sfx('rocket',e);if(e===player)world.shake=Math.max(world.shake,3);
   for(let i=0;i<8;i++)addPart(start.x,start.y,start.z,-d.x*120+(rnd()-.5)*80,-d.y*120+(rnd()-.5)*80,-d.z*120+(rnd()-.5)*80,.5,[.6,.55,.6],8,'smoke');
+}
+// layered blast: light flash, white core, orange fireball, dark billows, sparks, slow embers, rising smoke,
+// a dust ring along the surface, debris (barrel shards that burn / chunks of the wall), a scorch mark, and fire left burning after a barrel
+function explosionFX(c,RAD,o){
+  const vc=offSurface(c,26),n=vlen(vsub(vc,c))>1?vnorm(vsub(vc,c)):V(0,1,0),barrel=!!o.barrel;
+  world.xflash={p:vc,r:RAD*3.4,col:barrel?[1,.55,.2]:[1,.66,.32],t:world.time,dur:barrel?.7:.5};
+  const free=p=>solid(tileAt(p.x,p.y,p.z))?vc:p,sph=k=>{const a=rnd()*Math.PI*2,b=Math.asin(rnd()*2-1);return V(Math.cos(a)*Math.cos(b)*k,Math.sin(b)*k,Math.sin(a)*Math.cos(b)*k);};
+  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.12,max:.12,col:[1,1,.9],size:RAD*1.1,type:'glow'});
+  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.3,max:.3,col:[1,.7,.3],size:RAD*1.9,type:'glow'});
+  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.55,max:.55,col:[.7,.2,.05],size:RAD*1.4,type:'glow'});
+  addPart(vc.x,vc.y,vc.z,0,0,0,.45,[1,.55,.15],RAD/6,'ring');
+  // fireball puffs pushed out of the centre
+  for(let i=0;i<18;i++){const v=sph(90+rnd()*220),p=free(vadd(vc,vscale(v,.08)));addPart(p.x,p.y,p.z,v.x+n.x*60,v.y+n.y*60+40,v.z+n.z*60,.35+rnd()*.35,rnd()<.4?[1,.85,.4]:rnd()<.5?[1,.5,.12]:[.9,.25,.05],20+rnd()*18,'flame');}
+  for(let i=0;i<50;i++){const v=sph(140+rnd()*560);addPart(vc.x,vc.y,vc.z,v.x+n.x*120,v.y+n.y*120+100,v.z+n.z*120,.35+rnd()*.5,rnd()<.5?[1,.8,.2]:[1,.35,.1],3,'spark');}
+  for(let i=0;i<24;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,1.4+rnd()*1.6,rnd()<.5?[1,.6,.15]:[1,.35,.08],2.2+rnd()*1.5,'ember');}
+  // smoke: dark billows that roll up and spread
+  for(let i=0;i<30;i++){const p=free(vadd(vc,sph(10+rnd()*40)));const v=sph(40+rnd()*110);
+    addPart(p.x,p.y,p.z,v.x+n.x*50,Math.abs(v.y)*.5+50+rnd()*70,v.z+n.z*50,1.6+rnd()*2.2,barrel?[.1,.08,.09]:[.2,.17,.22],18+rnd()*20,'smoke');}
+  // dust ring along the surface it hit
+  {const t1=vlen(vcross(n,V(0,1,0)))>.1?vnorm(vcross(n,V(0,1,0))):V(1,0,0),t2=vcross(n,t1);
+   for(let i=0;i<26;i++){const a=i/26*Math.PI*2,d=vadd(vscale(t1,Math.cos(a)),vscale(t2,Math.sin(a))),sp=260+rnd()*160,p=vadd(c,vscale(n,4));
+     addPart(p.x,p.y,p.z,d.x*sp,d.y*sp+20,d.z*sp,.6+rnd()*.4,[.5,.52,.6],10+rnd()*8,'dust');}}
+  // scorch on the surface
+  {const p=offSurface(c,1.5);if(vlen(vsub(p,c))>.5)parts.push({x:p.x,y:p.y,z:p.z,vx:0,vy:0,vz:0,life:10,max:10,col:[.02,.015,.02],size:RAD*.55,type:'scorch'});}
+  // debris: torn barrel shell that burns, or chips of the wall/floor
+  const dc=barrel?o.barrel.col:[.3,.32,.4];
+  for(let i=0;i<(barrel?9:6);i++){const v=vadd(sph(160+rnd()*280),vscale(n,220)),p=free(vadd(vc,sph(8)));
+    const g={x:p.x,y:p.y,z:p.z,vx:v.x,vy:v.y+120,vz:v.z,m:.4,col:barrel&&rnd()<.3?[1,.8,.2]:dc,dark:dc.map(x=>x*.5),glow:[1,.5,.15],kind:'shard',life:3+rnd()*2.5,bleed:0,burn:barrel&&rnd()<.5?1.2+rnd()*1.5:0};
+    rbSetup(g,barrel?3+rnd()*5:2+rnd()*3,barrel?.7+rnd()*.6:1.5+rnd()*2,barrel?2+rnd()*4:2+rnd()*3,qaxis(vnorm(sph(1)),rnd()*6));g.y=p.y;g.av=sph(10+rnd()*14);gibs.push(g);}
+  if(gibs.length>90)gibs.splice(0,gibs.length-90);
+  if(barrel){const f=world.fires||(world.fires=[]);const p=offSurface(c,2);f.push({x:p.x,y:p.y,z:p.z,t:0,dur:3+rnd()*1.5,n});}
+}
+function updateFires(dt){
+  const f=world.fires;if(!f)return;
+  for(let i=f.length-1;i>=0;i--){const q=f[i];q.t+=dt;if(q.t>q.dur){f.splice(i,1);continue;}const k=1-q.t/q.dur;
+    if(rnd()<dt*45*k)addPart(q.x+(rnd()-.5)*26,q.y+(rnd()-.5)*6,q.z+(rnd()-.5)*26,(rnd()-.5)*30+q.n.x*60,40+rnd()*70+q.n.y*40,(rnd()-.5)*30+q.n.z*60,.5,rnd()<.5?[1,.75,.2]:[1,.35,.08],9+rnd()*8,'flame');
+    if(rnd()<dt*8*k)addPart(q.x,q.y+10,q.z,(rnd()-.5)*30,50+rnd()*50,(rnd()-.5)*30,1.8,[.1,.08,.09],14,'smoke');}
 }
 function updateRockets(dt){
   for(let n=rockets.length-1;n>=0;n--){
@@ -274,14 +312,7 @@ function explode(c,o){
     const pk=o.push*f*.6/Math.pow(Math.max(p.m,1),.6);p.vx+=dir.x*pk;p.vy+=dir.y*pk;p.vz+=dir.z*pk;{const s=Math.hypot(p.vx,p.vy,p.vz);if(s>560){p.vx*=560/s;p.vy*=560/s;p.vz*=560/s;}}p.grounded=false;p.kickedBy=src;p.kickT=world.time;
     if(p.rb){const hp=V(clamp(c.x,p.x-p.w/2,p.x+p.w/2),clamp(c.y,p.y,p.y+p.h),clamp(c.z,p.z-p.d/2,p.z+p.d/2));rbSpin(p,hp,vscale(dir,pk*p.m),.45);p.av=vadd(p.av,V((rnd()-.5)*f,(rnd()-.5)*f,(rnd()-.5)*f));}
   }
-  // visuals: centred a little off the surface it hit, so walls and floors don't swallow half of the fire and smoke
-  const vc=offSurface(c,26);
-  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.22,max:.22,col:[1,.95,.7],size:RAD*1.6,type:'glow'});
-  addPart(vc.x,vc.y,vc.z,0,0,0,.45,[1,.55,.15],RAD/6,'ring');
-  const free=p=>solid(tileAt(p.x,p.y,p.z))?vc:p;
-  for(let i=0;i<46;i++){const a=rnd()*Math.PI*2,b=rnd()*Math.PI-Math.PI/2,sp=120+rnd()*520;addPart(vc.x,vc.y,vc.z,Math.cos(a)*Math.cos(b)*sp,Math.sin(b)*sp+100,Math.sin(a)*Math.cos(b)*sp,.4+rnd()*.5,rnd()<.5?[1,.8,.2]:[1,.35,.1],3,'spark');}
-  for(let i=0;i<22;i++){const p=free(V(vc.x+(rnd()-.5)*40,vc.y+(rnd()-.5)*30,vc.z+(rnd()-.5)*40));addPart(p.x,p.y,p.z,(rnd()-.5)*140,40+rnd()*100,(rnd()-.5)*140,1+rnd()*.9,[.2,.17,.22],16+rnd()*14,'smoke');}
-  for(let i=0;i<14;i++)addPart(vc.x+(rnd()-.5)*30,vc.y+(rnd()-.5)*30,vc.z+(rnd()-.5)*30,(rnd()-.5)*200,rnd()*200,(rnd()-.5)*200,.35,[1,.55,.15],14,'flame');
+  explosionFX(c,RAD,o);
   sfx('boom',c);noise(c,1300,src);
   if(player){const d=Math.hypot(player.x-c.x,player.y-c.y,player.z-c.z);if(d<900)world.shake=Math.max(world.shake,14*(1-d/900)+2);}
 }
@@ -293,6 +324,7 @@ const KINDS={
   container:{w:72,h:34,d:34,m:5,col:'#16424d',edge:'#29f0ff'},medkit:{w:24,h:18,d:24,m:.5,col:'#e9f1ff',edge:'#1fd16b'},
   shotgun:{w:26,h:14,d:26,m:.5,col:'#1b2030',edge:'#ff8a2a'},
   rifle:{w:26,h:14,d:26,m:.5,col:'#1b2030',edge:'#7cf0ff'},
+  launcher:{w:26,h:14,d:26,m:.5,col:'#1b2030',edge:'#ff5a3c'},
   // taller pieces that break up long sight lines
   locker:{w:22,h:62,d:18,m:1.8,col:'#2c3550',edge:'#29f0ff'},
   stack:{w:40,h:66,d:40,m:3.5,col:'#4a3418',edge:'#ffb020'},
@@ -305,7 +337,8 @@ const KINDS={
 function makeProp(x,y,z,kind,rot){
   const k=KINDS[kind];let w=k.w,d=k.d;if(rot){const t=w;w=d;d=t;}
   const b={kind,x,y,z,w,h:k.h,d,m:k.m,vx:0,vy:0,vz:0,grounded:false,dead:false,col:hexRGB(k.col),edge:hexRGB(k.edge),kickedBy:null,kickT:-99};
-  if(kind!=='shotgun'&&kind!=='rifle')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
+  if(kind!=='shotgun'&&kind!=='rifle'&&kind!=='launcher')rbSetup(b,k.w,k.h,k.d,rot?qaxis(V(0,1,0),Math.PI/2):qIdent());
+  if(kind==='barrel'){b.cyl=true;b.col=hexRGB(rnd()<.5?'#b4381f':'#d8641c');}
   return b;
 }
 function hurtBarrel(b,src,n){
@@ -316,14 +349,14 @@ function hurtBarrel(b,src,n){
 function updateProps(dt){
   for(const b of props){
     if(b.dead)continue;
-    if(b.fuse!==undefined){b.fuse-=dt;if(b.fuse<=0){b.dead=true;explode(V(b.x,b.y+b.h/2,b.z),{radius:125,dmg:80,push:520,src:b.lastHitBy});world.barrelQ.push(world.time+22+rnd()*10);continue;}}
+    if(b.fuse!==undefined){b.fuse-=dt;if(b.fuse<=0){b.dead=true;explode(V(b.x,b.y+b.h/2,b.z),{radius:125,dmg:80,push:520,src:b.lastHitBy,barrel:b});world.barrelQ.push(world.time+22+rnd()*10);continue;}}
     if(b.kind==='barrel'&&b.hits){
       if(rnd()<dt*(b.hits>=2?10:7))addPart(b.x+(rnd()-.5)*10,b.y+b.h,b.z+(rnd()-.5)*10,(rnd()-.5)*30,50+rnd()*60,(rnd()-.5)*30,1.2,b.hits>=2?[.16,.14,.16]:[.35,.35,.4],10,'smoke');
       if(b.hits>=2&&rnd()<dt*50)addPart(b.x+(rnd()-.5)*b.w*.8,b.y+b.h,b.z+(rnd()-.5)*b.w*.8,(rnd()-.5)*40,90+rnd()*90,(rnd()-.5)*40,.45,rnd()<.5?[1,.8,.2]:[1,.35,.1],9,'flame');
     }
     if(b.rb){ // tumbling box
       let imp=0,gr=false;const many=b.W>40||b.H>40||b.D>40;
-      for(let s=0;s<2;s++){const r=rbStep(b,dt/2,many?RB_ALL:RB_LIGHT);imp=Math.max(imp,r.imp);gr=gr||r.ground;}
+      for(let s=0;s<2;s++){const r=rbStep(b,dt/2,b.cyl?RB_CYL:many?RB_ALL:RB_LIGHT);imp=Math.max(imp,r.imp);gr=gr||r.ground;}
       b.propSupport=false;b.grounded=gr;
       if(imp>320){sfx('crate',b);for(let i=0;i<5;i++)addPart(b.x+(rnd()-.5)*b.w,b.y,b.z+(rnd()-.5)*b.d,(rnd()-.5)*150,rnd()*80,(rnd()-.5)*150,.35,[.48,.52,.63],6,'dust');
         if(b.kind==='barrel'&&imp>700)hurtBarrel(b,(world.time-b.kickT<4&&b.kickedBy)||(world.time-world.lastKickT<6?world.lastKicker:null),1);}
@@ -363,7 +396,14 @@ function charProps(e){
     const oz=Math.min(e.z+e.w/2,b.z+b.d/2)-Math.max(e.z-e.w/2,b.z-b.d/2);
     const oy=Math.min(e.y+e.h,b.y+b.h)-Math.max(e.y,b.y);
     if(ox<=0||oy<=0||oz<=0)continue;
-    if(b.kind==='rifle'){
+    if(b.kind==='launcher'){
+      if(e.state!=='down'){
+        e.bigLauncher=true;e.rockets=RMAG;e.rreload=0;e.rrl=null;
+        b.dead=true;sfx('pickup',b);world.lnQ.push(world.time+32);
+        if(e===player)feed.unshift({t:3,text:'YOU PICKED UP THE BIG LAUNCHER — 3 ROCKETS',color:'#ff5a3c'});
+        for(let i=0;i<14;i++)addPart(b.x,b.y+8,b.z,(rnd()-.5)*160,rnd()*200,(rnd()-.5)*160,.5,[1,.4,.2],3,'spark');
+      }
+    }else if(b.kind==='rifle'){
       if(e.state!=='down'){
         const had=e.hasRifle;
         if(!had){e.hasRifle=true;e.stash[e.weapon]=e.ammo;e.weapon='rifle';e.ammo=AR_MAG;e.reload=0;}
@@ -447,6 +487,7 @@ function spawnDrop(kind){
   }
 }
 function drawProp(b){
+  if(b.dead)return;
   if(!b.rb){ // pickups stay upright
     const c=V(b.x,b.y+b.h/2,b.z);
     if(b.kind==='shotgun'){
@@ -454,6 +495,11 @@ function drawProp(b){
       drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.25*pl,.1*pl,0],b.edge);
       const yaw=world.time*1.6,hy=b.y+16+Math.sin(world.time*2.5)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0);
       drawShotgunModel({o:vsub(V(b.x,hy,b.z),vscale(u,5)),u,v,w:vcross(u,v)},[1,.55,.2],1,0);
+    }else if(b.kind==='launcher'){
+      const pl=.6+.4*Math.sin(world.time*4);
+      drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.3*pl,.06*pl,.03*pl],b.edge);
+      const yaw=world.time*1.6+2,hy=b.y+17+Math.sin(world.time*2.5+2)*2.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),c=V(b.x,hy,b.z);
+      drawLauncherModel({bigLauncher:true,rockets:RMAG,rreload:0,bodyYaw:yaw},vsub(c,vscale(u,7)),vadd(c,vscale(u,7)),V(0,1,0),[1,.4,.2],1);
     }else if(b.kind==='rifle'){
       const pl=.6+.4*Math.sin(world.time*4);
       drawBox(V(b.x,b.y+1.5,b.z),26,3,26,b.col,[.05*pl,.2*pl,.25*pl],b.edge);
@@ -469,9 +515,24 @@ function drawProp(b){
   if(b.kind==='barrel'){if(b.hits>=2)em=[.4*(.6+.4*Math.sin(world.time*25)),.12,0];if(b.fuse!==undefined&&b.fuse<1.5&&Math.sin(world.time*(b.fuse<.6?22:10))>0)em=[.8,.75,.5];}
   if(b.kind==='pallet')em=[.02,.03,.05];
   if(b.kind==='medkit'){const pl=.6+.4*Math.sin(world.time*6);em=[.1*pl,.25*pl,.12*pl];}
+  if(b.kind==='barrel'){drawBarrel(b,em);gl.disable(gl.POLYGON_OFFSET_FILL);return;}
   rbDraw(b,V(0,0,0),V(W,H,D),b.kind==='spool'?hexRGB('#2a1c0e'):b.col,em,b.kind==='spool'?null:b.edge);
   gl.disable(gl.POLYGON_OFFSET_FILL);
   drawPropDetail(b,W,H,D);
+}
+// a round barrel: a 12-sided drum (three boxes turned 30° apart), rolling hoops, hazard bands, lid rim and a hazard plate
+function rbDrawRotY(b,lc,ls,ry,col,em,al){const q=qmul(b.q,qaxis(V(0,1,0),ry)),C=rbCols(q),c=vadd(V(b.x,b.y+b.h/2,b.z),vadd(vadd(vscale(C[0],lc.x),vscale(C[1],lc.y)),vscale(C[2],lc.z)));
+  drawCubeM(M4.basis(c,vscale(C[0],ls.x),vscale(C[1],ls.y),vscale(C[2],ls.z)),col,em,null,al);}
+function drumAt(b,y,h,r,col,em){for(const a of [0,Math.PI/6,Math.PI/3])rbDrawRotY(b,V(0,y,0),V(r*1.93,h,r*1.93),a,col,em);}
+function drawBarrel(b,em){
+  const gl=R.gl,H=b.H,r=b.W/2,dark=b.col.map(v=>v*.55);
+  drumAt(b,0,H,r,b.col,em);
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  for(const y of [-.22,.22])drumAt(b,y*H,1.6,r+.55,dark,null);                    // rolling hoops
+  const yel=hexRGB('#ffcc33');for(const y of [-.36,.36])drumAt(b,y*H,3,r+.3,yel,[.3,.22,0]); // hazard bands
+  drumAt(b,H/2-.5,1.1,r+.35,hexRGB('#2a2a30'),null);drumAt(b,-H/2+.5,1.1,r+.35,hexRGB('#2a2a30'),null); // rims
+  rbDraw(b,V(r*.35,H/2+.35,0),V(3,1,3),hexRGB('#2a2a30'),null,null);              // bung
+  rbDraw(b,V(0,0,r+.15),V(7,7,.5),yel,[.25,.18,0],null);rbDraw(b,V(0,0,r+.45),V(3.4,3.4,.3),hexRGB('#151515'),null,null); // hazard plate
 }
 // details: bands across the long axis (in the box's own frame)
 function drawPropDetail(b,W,H,D){
@@ -549,6 +610,7 @@ function updateGibs(dt){
   for(const g of gibs){
     g.life-=dt;
     rbStep(g,dt,RB_LIGHT,{rest:.3,mu:.5});
+    if(g.burn>0){g.burn-=dt;if(rnd()<dt*30)addPart(g.x,g.y+g.h/2,g.z,(rnd()-.5)*20,30+rnd()*40,(rnd()-.5)*20,.35,rnd()<.5?[1,.7,.2]:[1,.35,.1],6+rnd()*4,'flame');}
     if(g.bleed>0&&!g.asleep){g.bleed-=dt;if(rnd()<dt*28)addPart(g.x,g.y+g.h/2,g.z,g.vx*.3+(rnd()-.5)*50,g.vy*.3+(rnd()-.5)*50,g.vz*.3+(rnd()-.5)*50,6,g.fluid,1.4+rnd()*1.6,'drop');}
   }
   gibs=gibs.filter(g=>g.life>0);
