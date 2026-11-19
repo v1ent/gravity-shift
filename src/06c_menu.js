@@ -131,15 +131,15 @@ function pollPad(dt){
   const S=SETTINGS.assist?SETTINGS.assistStr/100:0;
   const A=S>0?assistTarget(down(5)?2.6:1):null;
   // snap: pressing RB (aim) swings the crosshair onto the nearest enemy in a wide cone
-  if(A&&down(5)){const sn=(.35+.6*S)*.5;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
+  if(A&&down(5)){const sn=(.35+.6*S)*.25;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
   // friction: the look slows down a lot while the crosshair is over a target
-  const fr=A?1-(.45+.45*S)*.5*(1-A.e*.6):1;
+  const fr=A?1-(.45+.45*S)*.25*(1-A.e*.6):1;
   cam.yaw-=rx*Math.abs(rx)*k*fr;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75*fr,-1.35,1.25);
   if(A){
     // tracking: follow the target as it (or you) moves
-    if(padTrk&&padTrk.t===A.t){const ddy=angDiff(A.ay,padTrk.ay),ddp=A.ap-padTrk.ap;if(Math.abs(ddy)<.3){const tk=(.5+.5*S)*.5;cam.yaw+=ddy*tk;cam.pitch=clamp(cam.pitch+ddp*tk,-1.35,1.25);}}
+    if(padTrk&&padTrk.t===A.t){const ddy=angDiff(A.ay,padTrk.ay),ddp=A.ap-padTrk.ap;if(Math.abs(ddy)<.3){const tk=(.5+.5*S)*.25;cam.yaw+=ddy*tk;cam.pitch=clamp(cam.pitch+ddp*tk,-1.35,1.25);}}
     // magnetism: pull onto the target while you move, look or shoot
-    if(rx||ry||lx||ly||now[6]||now[5]){const pull=Math.min(.6,(now[5]?7:4.5)*S*dt*(1.3-A.e*.6));
+    if(rx||ry||lx||ly||now[6]||now[5]){const pull=Math.min(.6,(now[5]?3.5:2.25)*S*dt*(1.3-A.e*.6));
       cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
     padTrk={t:A.t,ay:A.ay,ap:A.ap};
   }else padTrk=null;
