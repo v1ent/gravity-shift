@@ -366,7 +366,7 @@ function buildNav(){
   }
   nav={adj,kickCells,ver:(nav?nav.ver:0)+1};
 }
-function findPath(si,sj,sk,gi_,gj,gk){
+function findPath(si,sj,sk,gi_,gj,gk,skip){ // skip(edge): optional filter for moves the caller wants to avoid
   if(!nav)buildNav();
   const start=ni(si,sj,sk);if(!nav.adj.has(start))return null;
   const prev=new Map(),via=new Map();prev.set(start,-1);
@@ -375,7 +375,7 @@ function findPath(si,sj,sk,gi_,gj,gk){
     const n=q[h],x=n%N,y=Math.floor(n/N)%N,z=Math.floor(n/(N*N));
     const d=Math.abs(x-gi_)+Math.abs(z-gk)+Math.abs(y-gj)*1.3;
     if(d<bd){bd=d;best=n;if(d===0)break;}
-    for(const e of nav.adj.get(n)){const m=ni(e.i,e.j,e.k);if(prev.has(m)||!nav.adj.has(m))continue;prev.set(m,n);via.set(m,e);q.push(m);}
+    for(const e of nav.adj.get(n)){const m=ni(e.i,e.j,e.k);if(prev.has(m)||!nav.adj.has(m)||(skip&&skip(e,x,y,z)))continue;prev.set(m,n);via.set(m,e);q.push(m);}
   }
   const path=[];let n=best;
   while(prev.get(n)!==-1){const e=via.get(n),p=prev.get(n);path.unshift({i:e.i,j:e.j,k:e.k,type:e.type,dy:e.dy||0,fi:p%N,fj:Math.floor(p/N)%N,fk:Math.floor(p/(N*N))});n=p;}

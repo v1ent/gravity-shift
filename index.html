@@ -173,9 +173,10 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <table>
 <tr><td>MOUSE</td><td>Look / aim (click the game to capture the mouse)</td></tr>
 <tr><td>W A S D</td><td>Walk · <b>double-tap S / A / D</b> to dodge back / left / right (costs stamina)</td></tr>
-<tr><td>SHIFT</td><td>Sprint (stamina) · vaults low obstacles · you can shoot on the run (but not while aiming)</td></tr>
+<tr><td>SHIFT</td><td>Sprint (stamina) · vaults low walls and boxes (or climbs onto long ones) · you can shoot on the run (but not while aiming)</td></tr>
 <tr><td>SPACE</td><td>Jump · from a sprint it's a hands-first dive · hold to reach for ledges</td></tr>
-<tr><td>C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them)</td></tr>
+<tr><td>C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them; slide over pickups to grab them)</td></tr>
+<tr><td>C at low cover</td><td>Facing a low wall or box: take cover — you stay down until you press C again or walk away · hold right mouse to rise and shoot, let go to duck</td></tr>
 <tr><td>LMB</td><td>Fire the selected weapon</td></tr>
 <tr><td>RMB (hold)</td><td>Aim: the view zooms, shots are tighter, you walk instead of running</td></tr>
 <tr><td>MMB</td><td>Fire a rocket from the wrist <b style="color:#ff5a3c">launcher</b>, whatever is in your hands (the standard one holds one rocket and recharges by itself)</td></tr>
@@ -774,7 +775,7 @@ function buildNav(){
   }
   nav={adj,kickCells,ver:(nav?nav.ver:0)+1};
 }
-function findPath(si,sj,sk,gi_,gj,gk){
+function findPath(si,sj,sk,gi_,gj,gk,skip){ // skip(edge): optional filter for moves the caller wants to avoid
   if(!nav)buildNav();
   const start=ni(si,sj,sk);if(!nav.adj.has(start))return null;
   const prev=new Map(),via=new Map();prev.set(start,-1);
@@ -783,7 +784,7 @@ function findPath(si,sj,sk,gi_,gj,gk){
     const n=q[h],x=n%N,y=Math.floor(n/N)%N,z=Math.floor(n/(N*N));
     const d=Math.abs(x-gi_)+Math.abs(z-gk)+Math.abs(y-gj)*1.3;
     if(d<bd){bd=d;best=n;if(d===0)break;}
-    for(const e of nav.adj.get(n)){const m=ni(e.i,e.j,e.k);if(prev.has(m)||!nav.adj.has(m))continue;prev.set(m,n);via.set(m,e);q.push(m);}
+    for(const e of nav.adj.get(n)){const m=ni(e.i,e.j,e.k);if(prev.has(m)||!nav.adj.has(m)||(skip&&skip(e,x,y,z)))continue;prev.set(m,n);via.set(m,e);q.push(m);}
   }
   const path=[];let n=best;
   while(prev.get(n)!==-1){const e=via.get(n),p=prev.get(n);path.unshift({i:e.i,j:e.j,k:e.k,type:e.type,dy:e.dy||0,fi:p%N,fj:Math.floor(p/N)%N,fk:Math.floor(p/(N*N))});n=p;}
@@ -1095,6 +1096,51 @@ function lowObstacle(e,d,over){
   if(overlapSolid(sp.x,sp.y,sp.z,e.w,e.h))return null;
   return {h,ly,stand:sp,over:beyond,face:d[0]>0?ci*T:d[0]<0?(ci+1)*T:d[1]>0?ck*T:(ck+1)*T};
 }
+// a resting box right in front (along cardinal d), low enough to get over: vault across it if it's thin
+// and there's floor beyond, otherwise climb on top of it
+function propObstacle(e,d,maxGap){
+  let best=null;
+  for(const b of props){
+    if(b.dead||!b.grounded||PICKUP_GLOW[b.kind]||b.kind==='medkit'||b.fuse!==undefined&&b.fuse<1)continue;
+    const top=b.y+b.h-e.y;if(top<20||top>54||b.y>e.y+8||b.y+b.h<e.y+8)continue;
+    const half=d[0]?b.w/2:b.d/2,latHalf=d[0]?b.d/2:b.w/2;
+    const along=d[0]?(b.x-e.x)*d[0]:(b.z-e.z)*d[1],lat=d[0]?Math.abs(b.z-e.z):Math.abs(b.x-e.x);
+    const gap=along-half-e.w/2;if(gap<-6||gap>(maxGap||8)||lat>latHalf+e.w/2-6)continue;
+    if(!best||gap<best.gap)best={b,gap,along,half,top};
+  }
+  if(!best)return null;
+  const b=best.b,ly=b.y+b.h;
+  if(overlapSolid(e.x,ly,e.z,e.w,e.h))return null; // no room above it
+  const clear=(x,y,z)=>!overlapSolid(x,y,z,e.w,e.h)&&!props.some(o=>o!==b&&!o.dead&&Math.abs(o.x-x)<(o.w+e.w)/2&&Math.abs(o.z-z)<(o.d+e.w)/2&&o.y<y+e.h&&o.y+o.h>y);
+  const face=d[0]>0?b.x-b.w/2:d[0]<0?b.x+b.w/2:d[1]>0?b.z-b.d/2:b.z+b.d/2;
+  // over: thin box, floor and room on the far side
+  if(best.half*2<=50){const far=best.along+best.half+e.w/2+5,x=e.x+d[0]*far,z=e.z+d[1]*far;
+    if(clear(x,e.y,z)&&solid(tileAt(x,e.y-4,z)))return {h:2,ly,stand:V(x,e.y,z),over:true,face,prop:b};}
+  // on top
+  const into=Math.min(best.along,best.along-best.half+e.w/2+3),x=e.x+d[0]*into,z=e.z+d[1]*into;
+  if(clear(x,ly+1,z))return {h:2,ly,stand:V(x,ly,z),over:false,face,prop:b};
+  return null;
+}
+// low cover along cardinal d within maxGap of the body: a one-block wall, or a box 24-54 px tall
+// (hides you crouched, lets you shoot over it standing)
+function coverIn(e,d,maxGap){
+  const r0=Math.floor((e.y+1)/T),own=[Math.floor(e.x/T),Math.floor(e.z/T)];
+  const lat=[-d[1],d[0]];
+  for(const o of [0,-e.w/2+3,e.w/2-3]){
+    const x=e.x+d[0]*(e.w/2+maxGap)+lat[0]*o,z=e.z+d[1]*(e.w/2+maxGap)+lat[1]*o,ci=Math.floor(x/T),ck=Math.floor(z/T);
+    if(ci===own[0]&&ck===own[1])continue;
+    if(solid(tile(ci,r0,ck))&&!solid(tile(ci,r0+1,ck))&&!solid(tile(ci,r0+2,ck)))return {d,kind:'wall'};
+  }
+  for(const b of props){
+    if(b.dead||PICKUP_GLOW[b.kind]||b.kind==='medkit')continue;
+    const top=b.y+b.h-e.y;if(top<24||top>54||b.y>e.y+8)continue;
+    const half=d[0]?b.w/2:b.d/2,latHalf=d[0]?b.d/2:b.w/2;
+    const along=d[0]?(b.x-e.x)*d[0]:(b.z-e.z)*d[1],lt=d[0]?Math.abs(b.z-e.z):Math.abs(b.x-e.x);
+    const gap=along-half-e.w/2;if(gap<-8||gap>maxGap||lt>latHalf+e.w/2-4)continue;
+    return {d,kind:'box',b};
+  }
+  return null;
+}
 // a live gravity panel within kicking reach in cardinal direction d (also through furniture)
 function kickableSide(e,d){
   const axis=d[0]?'x':'z',s=d[0]||d[1];
@@ -1182,9 +1228,23 @@ function updateChar(e,dt){
   else{e.stamDelay-=dt;if(e.stamDelay<=0)e.stam=Math.min(1,e.stam+dt*STAM_REGEN);}
   const hsp=Math.hypot(e.vx,e.vz);
 
+  // cover (players): crouch facing low cover and you stay down until you press crouch again or leave it;
+  // aiming rises over the cover, letting go of aim ducks back
+  if(e.cover&&(e.state!=='normal'||!e.alive||!ctrl))e.cover=null;
+  if(e.state==='normal'&&ctrl&&!e.isBot){
+    if(e.cover){
+      const ok=e.grounded&&!e.sprinting&&coverIn(e,e.cover.d,18);
+      e.cover.lost=ok?0:e.cover.lost+dt;
+      if(c.crouchPressed||c.jump||e.cover.lost>.25)e.cover=null;
+    }else if(c.crouchPressed&&e.grounded&&!e.sprinting){
+      const cv=coverIn(e,cardOf(Math.sin(e.yaw),Math.cos(e.yaw)),14);
+      if(cv)e.cover={d:cv.d,lost:0,t:world.time};
+    }
+  }
+  const wantCrouch=e.cover?!c.aim:c.crouch;
   if(e.state==='normal'){
-    if(ctrl&&e.grounded&&c.crouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
-    else if(e.crouch&&(!c.crouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}}
+    if(ctrl&&e.grounded&&wantCrouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
+    else if(e.crouch&&(!wantCrouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}}
     // body faces aim, except sprinting/diving where it faces travel
     // sprinting away from the aim is a backwards run: keep facing the aim instead of turning round to face the camera
     const backIn=moving&&Math.abs(angDiff(yawOf(mx,mz),e.yaw))>1.95;
@@ -1247,15 +1307,24 @@ function updateChar(e,dt){
     }
     // step up single blocks while walking; vault 2-block obstacles while sprinting
     if(e.state==='normal'&&e.grounded&&moving&&(e.hitX||e.hitZ||Math.hypot(e.vx,e.vz)<30)){
-      const d=cardOf(mx,mz),ob=lowObstacle(e,d,e.sprinting);
+      const d=cardOf(mx,mz);let ob=ctrl&&c.noVault?null:lowObstacle(e,d,e.sprinting);
       if(ob&&(ob.h===1||e.sprinting)){
         const speed=ob.h===2||ob.over;
         e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,dur:ob.over?(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips.vault?.66:.44):ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};
         e.vx=e.vy=e.vz=0;e.poseBlend=.5;if(speed)sfx('whoosh',e);
       }
     }
+    // sprinting into a box low enough to get over: vault it (thin) or climb onto it
+    if(e.state==='normal'&&e.grounded&&moving&&e.sprinting&&!e.isBot&&!(ctrl&&c.noVault)){ // (bots path round boxes)
+      const d=cardOf(mx,mz),ob=propObstacle(e,d);
+      if(ob&&(mx*d[0]+mz*d[1])>.7*Math.hypot(mx,mz)){
+        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,
+          dur:ob.over?(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips.vault?.66:.44):.34,exitV:RUN,prop:ob.prop.kind};
+        e.vx=e.vy=e.vz=0;e.poseBlend=.5;sfx('whoosh',e);
+      }
+    }
     // ledge grab: diving hands-first grabs automatically; moving toward a ledge or holding SPACE reaches for it
-    if(e.state==='normal'&&!e.grounded&&e.grabCD<=0&&ctrl){
+    if(e.state==='normal'&&!e.grounded&&e.grabCD<=0&&ctrl&&!c.noGrab){
       const dirs=[];
       if(e.runJump)dirs.push(cardOf(e.vx,e.vz));
       if(moving)dirs.push(cardOf(mx,mz));
@@ -3039,10 +3108,20 @@ function applyBotSkill(key){
 function botThink(b,dt){
   const c=b.ctl;
   if(b.skill&&BOT_CFG!==BOT_SKILLS[b.skill])applyBotSkill(b.skill); // each bot can have its own skill (demo)
-  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;
+  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;c.noVault=false;c.noGrab=false;
   if(!b.alive){b.ai=null;return;}
   if(b.script){c.mx=0;c.mz=0;b.script(b,c,dt);return;} // tutorial actors
   const ai=b.ai||(b.ai={known:null,acquire:0,lostT:0,lastSeen:null,alert:null,alertT:0,yaw:b.yaw,pitch:0,errT:0,ex:0,ey:0,ez:0,burst:0,pause:0,path:null,replan:0,stuckT:0,last:V(b.x,b.y,b.z),flip:0,hold:0,strafe:1,strafeT:0,skill:BOT_CFG.skill[0]+rnd()*(BOT_CFG.skill[1]-BOT_CFG.skill[0]),rocketT:(2+rnd()*3)/BOT_CFG.rocket,jumpWait:0,scanT:0});
+  // loop breaker: the same grab / vault / climb three times in one spot within 14 s means the bot is going round in circles:
+  // pick a goal somewhere else and stop grabbing / vaulting for a few seconds
+  if(b.state!==ai.lastState){if(b.state==='hang'||b.state==='climbup'){(ai.ev||(ai.ev=[])).push({t:world.time,x:b.x,y:b.y,z:b.z});
+    ai.ev=ai.ev.filter(q=>world.time-q.t<14);
+    if(ai.ev.filter(q=>Math.hypot(q.x-b.x,q.z-b.z)<3*T&&Math.abs(q.y-b.y)<3*T).length>=3){
+      ai.ev=[];ai.loopT=6;ai.roam=6;ai.newRoam=true;ai.loopAt=V(b.x,b.y,b.z);ai.path=null;ai.replan=0;ai.kickGoal=null;ai.medGoal=null;ai.goalPt=null;}}
+    ai.lastState=b.state;}
+  ai.loopT=(ai.loopT||0)-dt;if(ai.loopT>0){c.noVault=true;c.noGrab=true;}
+  // remember every change of level (route, strafe or knock-back alike), so the next routes don't undo it at once
+  if(b.grounded&&b.state==='normal'){const cc=cellOf(b);if(ai.gc&&cc[1]!==ai.gc[1])(ai.left||(ai.left=[])).push({i:ai.gc[0],j:ai.gc[1],k:ai.gc[2],t:world.time});ai.gc=cc;}
   const eye=headPos(b);
   // decisions happen at a human rhythm (~4 times a second), not every frame; in between the bot commits
   ai.tick=(ai.tick||0)-dt;const think=ai.tick<=0;if(think)ai.tick=.2+rnd()*.15;
@@ -3133,9 +3212,17 @@ function botThink(b,dt){
     if(!g){if(!ai.wander||rnd()<.03||ai.newRoam){ai.newRoam=false;
       // hunt: half the time head for somewhere near a living rival (you can hear a fight through the walls), else wander
       const rivals=chars.filter(o=>o!==b&&o.alive);
-      if(rivals.length&&rnd()<.5){const o=rivals[rnd()*rivals.length|0],sp=spawnPoints().filter(q=>Math.hypot(q.x-o.x,q.y-o.y,q.z-o.z)<260);ai.wander=sp.length?sp[rnd()*sp.length|0]:{x:o.x,y:o.y,z:o.z};}
-      else{const sp=spawnPoints();ai.wander=sp[rnd()*sp.length|0];}}g=[Math.floor(ai.wander.x/T),Math.floor((ai.wander.y+1)/T),Math.floor(ai.wander.z/T)];}
-    ai.goalPt=null;ai.path=findPath(ci,cj,ck,g[0],g[1],g[2]);ai.navVer=nav.ver;ai.replan=.6+rnd()*.3;
+      if(rivals.length&&rnd()<.5&&!(ai.loopT>0)){const o=rivals[rnd()*rivals.length|0],sp=spawnPoints().filter(q=>Math.hypot(q.x-o.x,q.y-o.y,q.z-o.z)<260);ai.wander=sp.length?sp[rnd()*sp.length|0]:{x:o.x,y:o.y,z:o.z};}
+      else{let sp=spawnPoints();if(ai.loopAt&&ai.loopT>0){const far=sp.filter(q=>Math.hypot(q.x-ai.loopAt.x,q.z-ai.loopAt.z)>9*T);if(far.length)sp=far;}ai.wander=sp[rnd()*sp.length|0];}}g=[Math.floor(ai.wander.x/T),Math.floor((ai.wander.y+1)/T),Math.floor(ai.wander.z/T)];}
+    // don't undo a climb or a drop straight away: for 12 s, jumps / drops back to (near) the cells just left are off the route
+    ai.left=(ai.left||[]).filter(q=>world.time-q.t<12);
+    const skip=ai.left.length?(e,x,y,z)=>e.type!=='walk'&&e.type!=='step'&&e.j!==y&&ai.left.some(q=>q.j===e.j&&Math.abs(q.i-e.i)+Math.abs(q.k-e.k)<=3):null;
+    ai.goalPt=null;ai.path=findPath(ci,cj,ck,g[0],g[1],g[2],skip);
+    // like a person: walk round rather than climb over, unless going round is much longer
+    if(window.AI_DETOUR!==false&&ai.path&&ai.path.length&&ai.path.some(n=>n.type==='jump'||n.type==='gap')){
+      const alt=findPath(ci,cj,ck,g[0],g[1],g[2],(e,x,y,z)=>e.type==='jump'||e.type==='gap'||e.type==='fall'||(skip?skip(e,x,y,z):false));
+      const end=q=>q[q.length-1],a1=end(ai.path),a2=alt&&alt.length&&end(alt);
+      if(a2&&a2.i===a1.i&&a2.j===a1.j&&a2.k===a1.k&&alt.length<=ai.path.length*1.6+5)ai.path=alt;}ai.navVer=nav.ver;ai.replan=.6+rnd()*.3;
     if(ai.path&&ai.path.length===0){ai.kickGoal=null;ai.medGoal=null;ai.roam=4+rnd()*3;ai.newRoam=true;ai.replan=0;}
   }
   let mvx=0,mvz=0;
@@ -3153,9 +3240,11 @@ function botThink(b,dt){
     const l=Math.hypot(mvx,mvz)||1,px=b.x+mvx/l*26,pz=b.z+mvz/l*26;
     if((mvx||mvz)&&!solid(tileAt(px,b.y-4,pz))&&!solid(tileAt(px,b.y-36,pz))){ai.strafe=ai.strafe?-ai.strafe:1;ai.fwdW=0;ai.strafeT=Math.max(ai.strafeT,1);mvx=-tz*ai.strafe;mvz=tx*ai.strafe;}
     if(think&&ai.strafe&&rnd()<.03&&b.grounded)c.jump=true;
+    c.noVault=true;
+    if(think&&ai.strafe&&(b.hitX||b.hitZ)){ai.strafe=-ai.strafe;ai.strafeT=Math.max(ai.strafeT,1);}
   }else if(ai.path&&ai.path.length){
     const p=ai.path;
-    if(onNode)while(p.length&&p[0].i===ci&&p[0].j===cj&&p[0].k===ck)p.shift();
+    if(onNode)while(p.length&&p[0].i===ci&&p[0].j===cj&&p[0].k===ck){const q=p.shift();if(q.type!=='walk'&&q.type!=='step'&&q.fj!==q.j)(ai.left||(ai.left=[])).push({i:q.fi,j:q.fj,k:q.fk,t:world.time});}
     if(onNode&&p.length&&Math.abs(p[0].fi-ci)+Math.abs(p[0].fj-cj)+Math.abs(p[0].fk-ck)>1)ai.replan=0;
     const n=p[0];
     if(n){
@@ -3176,7 +3265,7 @@ function botThink(b,dt){
       }
       const far=p.length>4;
       if(n.type!=='jump'&&far&&b.stam>.3)ai.sprintT=1;
-      if(ai.sprintT>0&&b.stam>.05&&n.type!=='jump')c.sprint=true;
+      if(ai.sprintT>0&&b.stam>.05&&n.type!=='jump'&&n.type!=='step'&&!(p[1]&&p[1].type==='step'&&Math.hypot(nx-b.x,nz-b.z)<T*1.5))c.sprint=true; // no sprint into a step: it would vault over instead of up
     }else if(t){mvx=t.x-b.x;mvz=t.z-b.z;}
   }
   ai.jumpWait-=dt;ai.roam=(ai.roam||0)-dt;ai.sprintT=(ai.sprintT||0)-dt;
@@ -3197,6 +3286,7 @@ function botThink(b,dt){
   if(t&&see&&b.state==='normal'&&b.kickCD<=0&&Math.hypot(t.x-b.x,t.z-b.z)<44&&Math.abs(t.y-b.y)<40&&rnd()<dt*4){c.kick=true;}
   if((b.grounded||b.wasBox)&&world.rotCD<=0&&!world.rot&&b.kickPrompt&&(ai.kickGoal||rnd()<dt*.9)){c.kick=true;ai.kickGoal=null;}
   if(ai.hold>0){ai.hold-=dt;c.jumpHeld=true;}else c.jumpHeld=false;
+  if(!c.grab)c.noGrab=true; // bots only reach for a ledge when their route jumps to one
 }
 
 // straight walk from b to (x,z) on b's level: floor under every step, nothing in the way at body height
@@ -3228,7 +3318,7 @@ function doRotate(key,kicker,stop){
     const c=P(e.x,e.y+e.h/2,e.z),v=Vv(e.vx,e.vy,e.vz);
     if(e===kicker){
       if(e.state!=='kick'){e.state='normal';}
-      e.h=STAND_H;e.crouch=false;
+      e.h=STAND_H;e.crouch=false;e.cover=null;
       e.x=c.x;e.z=c.z;e.y=key[0]==='+'?L-stop:stop;e.vx=e.vy=e.vz=0;e.grounded=true;e.coyote=.1;
       e.visX=c.x-e.x;e.visY=c.y-(e.y+e.h/2);e.visZ=c.z-e.z;e.visX=e.visZ=0;e.visY=clamp(e.visY,-30,30);
       e.ba=0;e.bav=0;e.kickerSpin=1;e.trail=[];pushOut(e);
@@ -3526,6 +3616,13 @@ function drawHUD(){
   if(world.demo){c.font='bold 13px "Courier New",monospace';c.textAlign='center';c.fillStyle='rgba(5,6,14,.65)';c.fillRect(W/2-300,52,600,24);
     c.fillStyle=p.color;c.fillText(`DEMO · following ${p.name} · A / D or click to switch · ESC for the menu`,W/2,69);
     if(gameState==='over'){world.demoT=(world.demoT||0)+1/60;if(world.demoT>7)newMatch((SETTINGS.seed||'').trim()||undefined,{demo:true});}}
+  // cover
+  if(p.alive&&gameState==='play'&&!world.demo&&p.state==='normal'){
+    const pad=SETTINGS.input==='gamepad';let tip=null,col='#9fe8ff';
+    if(p.cover){tip=p.aiming?'IN COVER — firing over it':(pad?'IN COVER · hold RB to rise and shoot · B or walk away to leave':'IN COVER · hold right mouse to rise and shoot · C or walk away to leave');col=p.aiming?'#ffcc33':'#3dff7a';}
+    else if(p.grounded&&!p.sprinting&&!p.crouch&&coverIn(p,cardOf(Math.sin(p.yaw),Math.cos(p.yaw)),14))tip=pad?'B — take cover':'C — take cover';
+    if(tip){c.font='bold 12px "Courier New",monospace';c.textAlign='center';c.fillStyle='rgba(5,6,14,.55)';const tw=c.measureText(tip).width+18;c.fillRect(W/2-tw/2,H*.74-14,tw,20);c.fillStyle=col;c.fillText(tip,W/2,H*.74);c.textAlign='left';}
+  }
   // alliance prompts
   if(p.alive&&gameState==='play'&&!world.demo&&(!TUT.on||(TUT.cfg&&TUT.cfg.allyHud))){
     c.font='bold 14px "Courier New",monospace';c.textAlign='center';

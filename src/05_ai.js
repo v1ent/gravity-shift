@@ -17,10 +17,20 @@ function applyBotSkill(key){
 function botThink(b,dt){
   const c=b.ctl;
   if(b.skill&&BOT_CFG!==BOT_SKILLS[b.skill])applyBotSkill(b.skill); // each bot can have its own skill (demo)
-  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;
+  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;c.noVault=false;c.noGrab=false;
   if(!b.alive){b.ai=null;return;}
   if(b.script){c.mx=0;c.mz=0;b.script(b,c,dt);return;} // tutorial actors
   const ai=b.ai||(b.ai={known:null,acquire:0,lostT:0,lastSeen:null,alert:null,alertT:0,yaw:b.yaw,pitch:0,errT:0,ex:0,ey:0,ez:0,burst:0,pause:0,path:null,replan:0,stuckT:0,last:V(b.x,b.y,b.z),flip:0,hold:0,strafe:1,strafeT:0,skill:BOT_CFG.skill[0]+rnd()*(BOT_CFG.skill[1]-BOT_CFG.skill[0]),rocketT:(2+rnd()*3)/BOT_CFG.rocket,jumpWait:0,scanT:0});
+  // loop breaker: the same grab / vault / climb three times in one spot within 14 s means the bot is going round in circles:
+  // pick a goal somewhere else and stop grabbing / vaulting for a few seconds
+  if(b.state!==ai.lastState){if(b.state==='hang'||b.state==='climbup'){(ai.ev||(ai.ev=[])).push({t:world.time,x:b.x,y:b.y,z:b.z});
+    ai.ev=ai.ev.filter(q=>world.time-q.t<14);
+    if(ai.ev.filter(q=>Math.hypot(q.x-b.x,q.z-b.z)<3*T&&Math.abs(q.y-b.y)<3*T).length>=3){
+      ai.ev=[];ai.loopT=6;ai.roam=6;ai.newRoam=true;ai.loopAt=V(b.x,b.y,b.z);ai.path=null;ai.replan=0;ai.kickGoal=null;ai.medGoal=null;ai.goalPt=null;}}
+    ai.lastState=b.state;}
+  ai.loopT=(ai.loopT||0)-dt;if(ai.loopT>0){c.noVault=true;c.noGrab=true;}
+  // remember every change of level (route, strafe or knock-back alike), so the next routes don't undo it at once
+  if(b.grounded&&b.state==='normal'){const cc=cellOf(b);if(ai.gc&&cc[1]!==ai.gc[1])(ai.left||(ai.left=[])).push({i:ai.gc[0],j:ai.gc[1],k:ai.gc[2],t:world.time});ai.gc=cc;}
   const eye=headPos(b);
   // decisions happen at a human rhythm (~4 times a second), not every frame; in between the bot commits
   ai.tick=(ai.tick||0)-dt;const think=ai.tick<=0;if(think)ai.tick=.2+rnd()*.15;
@@ -111,9 +121,17 @@ function botThink(b,dt){
     if(!g){if(!ai.wander||rnd()<.03||ai.newRoam){ai.newRoam=false;
       // hunt: half the time head for somewhere near a living rival (you can hear a fight through the walls), else wander
       const rivals=chars.filter(o=>o!==b&&o.alive);
-      if(rivals.length&&rnd()<.5){const o=rivals[rnd()*rivals.length|0],sp=spawnPoints().filter(q=>Math.hypot(q.x-o.x,q.y-o.y,q.z-o.z)<260);ai.wander=sp.length?sp[rnd()*sp.length|0]:{x:o.x,y:o.y,z:o.z};}
-      else{const sp=spawnPoints();ai.wander=sp[rnd()*sp.length|0];}}g=[Math.floor(ai.wander.x/T),Math.floor((ai.wander.y+1)/T),Math.floor(ai.wander.z/T)];}
-    ai.goalPt=null;ai.path=findPath(ci,cj,ck,g[0],g[1],g[2]);ai.navVer=nav.ver;ai.replan=.6+rnd()*.3;
+      if(rivals.length&&rnd()<.5&&!(ai.loopT>0)){const o=rivals[rnd()*rivals.length|0],sp=spawnPoints().filter(q=>Math.hypot(q.x-o.x,q.y-o.y,q.z-o.z)<260);ai.wander=sp.length?sp[rnd()*sp.length|0]:{x:o.x,y:o.y,z:o.z};}
+      else{let sp=spawnPoints();if(ai.loopAt&&ai.loopT>0){const far=sp.filter(q=>Math.hypot(q.x-ai.loopAt.x,q.z-ai.loopAt.z)>9*T);if(far.length)sp=far;}ai.wander=sp[rnd()*sp.length|0];}}g=[Math.floor(ai.wander.x/T),Math.floor((ai.wander.y+1)/T),Math.floor(ai.wander.z/T)];}
+    // don't undo a climb or a drop straight away: for 12 s, jumps / drops back to (near) the cells just left are off the route
+    ai.left=(ai.left||[]).filter(q=>world.time-q.t<12);
+    const skip=ai.left.length?(e,x,y,z)=>e.type!=='walk'&&e.type!=='step'&&e.j!==y&&ai.left.some(q=>q.j===e.j&&Math.abs(q.i-e.i)+Math.abs(q.k-e.k)<=3):null;
+    ai.goalPt=null;ai.path=findPath(ci,cj,ck,g[0],g[1],g[2],skip);
+    // like a person: walk round rather than climb over, unless going round is much longer
+    if(window.AI_DETOUR!==false&&ai.path&&ai.path.length&&ai.path.some(n=>n.type==='jump'||n.type==='gap')){
+      const alt=findPath(ci,cj,ck,g[0],g[1],g[2],(e,x,y,z)=>e.type==='jump'||e.type==='gap'||e.type==='fall'||(skip?skip(e,x,y,z):false));
+      const end=q=>q[q.length-1],a1=end(ai.path),a2=alt&&alt.length&&end(alt);
+      if(a2&&a2.i===a1.i&&a2.j===a1.j&&a2.k===a1.k&&alt.length<=ai.path.length*1.6+5)ai.path=alt;}ai.navVer=nav.ver;ai.replan=.6+rnd()*.3;
     if(ai.path&&ai.path.length===0){ai.kickGoal=null;ai.medGoal=null;ai.roam=4+rnd()*3;ai.newRoam=true;ai.replan=0;}
   }
   let mvx=0,mvz=0;
@@ -131,9 +149,11 @@ function botThink(b,dt){
     const l=Math.hypot(mvx,mvz)||1,px=b.x+mvx/l*26,pz=b.z+mvz/l*26;
     if((mvx||mvz)&&!solid(tileAt(px,b.y-4,pz))&&!solid(tileAt(px,b.y-36,pz))){ai.strafe=ai.strafe?-ai.strafe:1;ai.fwdW=0;ai.strafeT=Math.max(ai.strafeT,1);mvx=-tz*ai.strafe;mvz=tx*ai.strafe;}
     if(think&&ai.strafe&&rnd()<.03&&b.grounded)c.jump=true;
+    c.noVault=true;
+    if(think&&ai.strafe&&(b.hitX||b.hitZ)){ai.strafe=-ai.strafe;ai.strafeT=Math.max(ai.strafeT,1);}
   }else if(ai.path&&ai.path.length){
     const p=ai.path;
-    if(onNode)while(p.length&&p[0].i===ci&&p[0].j===cj&&p[0].k===ck)p.shift();
+    if(onNode)while(p.length&&p[0].i===ci&&p[0].j===cj&&p[0].k===ck){const q=p.shift();if(q.type!=='walk'&&q.type!=='step'&&q.fj!==q.j)(ai.left||(ai.left=[])).push({i:q.fi,j:q.fj,k:q.fk,t:world.time});}
     if(onNode&&p.length&&Math.abs(p[0].fi-ci)+Math.abs(p[0].fj-cj)+Math.abs(p[0].fk-ck)>1)ai.replan=0;
     const n=p[0];
     if(n){
@@ -154,7 +174,7 @@ function botThink(b,dt){
       }
       const far=p.length>4;
       if(n.type!=='jump'&&far&&b.stam>.3)ai.sprintT=1;
-      if(ai.sprintT>0&&b.stam>.05&&n.type!=='jump')c.sprint=true;
+      if(ai.sprintT>0&&b.stam>.05&&n.type!=='jump'&&n.type!=='step'&&!(p[1]&&p[1].type==='step'&&Math.hypot(nx-b.x,nz-b.z)<T*1.5))c.sprint=true; // no sprint into a step: it would vault over instead of up
     }else if(t){mvx=t.x-b.x;mvz=t.z-b.z;}
   }
   ai.jumpWait-=dt;ai.roam=(ai.roam||0)-dt;ai.sprintT=(ai.sprintT||0)-dt;
@@ -175,6 +195,7 @@ function botThink(b,dt){
   if(t&&see&&b.state==='normal'&&b.kickCD<=0&&Math.hypot(t.x-b.x,t.z-b.z)<44&&Math.abs(t.y-b.y)<40&&rnd()<dt*4){c.kick=true;}
   if((b.grounded||b.wasBox)&&world.rotCD<=0&&!world.rot&&b.kickPrompt&&(ai.kickGoal||rnd()<dt*.9)){c.kick=true;ai.kickGoal=null;}
   if(ai.hold>0){ai.hold-=dt;c.jumpHeld=true;}else c.jumpHeld=false;
+  if(!c.grab)c.noGrab=true; // bots only reach for a ledge when their route jumps to one
 }
 
 // straight walk from b to (x,z) on b's level: floor under every step, nothing in the way at body height

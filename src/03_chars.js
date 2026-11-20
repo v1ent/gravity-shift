@@ -135,6 +135,51 @@ function lowObstacle(e,d,over){
   if(overlapSolid(sp.x,sp.y,sp.z,e.w,e.h))return null;
   return {h,ly,stand:sp,over:beyond,face:d[0]>0?ci*T:d[0]<0?(ci+1)*T:d[1]>0?ck*T:(ck+1)*T};
 }
+// a resting box right in front (along cardinal d), low enough to get over: vault across it if it's thin
+// and there's floor beyond, otherwise climb on top of it
+function propObstacle(e,d,maxGap){
+  let best=null;
+  for(const b of props){
+    if(b.dead||!b.grounded||PICKUP_GLOW[b.kind]||b.kind==='medkit'||b.fuse!==undefined&&b.fuse<1)continue;
+    const top=b.y+b.h-e.y;if(top<20||top>54||b.y>e.y+8||b.y+b.h<e.y+8)continue;
+    const half=d[0]?b.w/2:b.d/2,latHalf=d[0]?b.d/2:b.w/2;
+    const along=d[0]?(b.x-e.x)*d[0]:(b.z-e.z)*d[1],lat=d[0]?Math.abs(b.z-e.z):Math.abs(b.x-e.x);
+    const gap=along-half-e.w/2;if(gap<-6||gap>(maxGap||8)||lat>latHalf+e.w/2-6)continue;
+    if(!best||gap<best.gap)best={b,gap,along,half,top};
+  }
+  if(!best)return null;
+  const b=best.b,ly=b.y+b.h;
+  if(overlapSolid(e.x,ly,e.z,e.w,e.h))return null; // no room above it
+  const clear=(x,y,z)=>!overlapSolid(x,y,z,e.w,e.h)&&!props.some(o=>o!==b&&!o.dead&&Math.abs(o.x-x)<(o.w+e.w)/2&&Math.abs(o.z-z)<(o.d+e.w)/2&&o.y<y+e.h&&o.y+o.h>y);
+  const face=d[0]>0?b.x-b.w/2:d[0]<0?b.x+b.w/2:d[1]>0?b.z-b.d/2:b.z+b.d/2;
+  // over: thin box, floor and room on the far side
+  if(best.half*2<=50){const far=best.along+best.half+e.w/2+5,x=e.x+d[0]*far,z=e.z+d[1]*far;
+    if(clear(x,e.y,z)&&solid(tileAt(x,e.y-4,z)))return {h:2,ly,stand:V(x,e.y,z),over:true,face,prop:b};}
+  // on top
+  const into=Math.min(best.along,best.along-best.half+e.w/2+3),x=e.x+d[0]*into,z=e.z+d[1]*into;
+  if(clear(x,ly+1,z))return {h:2,ly,stand:V(x,ly,z),over:false,face,prop:b};
+  return null;
+}
+// low cover along cardinal d within maxGap of the body: a one-block wall, or a box 24-54 px tall
+// (hides you crouched, lets you shoot over it standing)
+function coverIn(e,d,maxGap){
+  const r0=Math.floor((e.y+1)/T),own=[Math.floor(e.x/T),Math.floor(e.z/T)];
+  const lat=[-d[1],d[0]];
+  for(const o of [0,-e.w/2+3,e.w/2-3]){
+    const x=e.x+d[0]*(e.w/2+maxGap)+lat[0]*o,z=e.z+d[1]*(e.w/2+maxGap)+lat[1]*o,ci=Math.floor(x/T),ck=Math.floor(z/T);
+    if(ci===own[0]&&ck===own[1])continue;
+    if(solid(tile(ci,r0,ck))&&!solid(tile(ci,r0+1,ck))&&!solid(tile(ci,r0+2,ck)))return {d,kind:'wall'};
+  }
+  for(const b of props){
+    if(b.dead||PICKUP_GLOW[b.kind]||b.kind==='medkit')continue;
+    const top=b.y+b.h-e.y;if(top<24||top>54||b.y>e.y+8)continue;
+    const half=d[0]?b.w/2:b.d/2,latHalf=d[0]?b.d/2:b.w/2;
+    const along=d[0]?(b.x-e.x)*d[0]:(b.z-e.z)*d[1],lt=d[0]?Math.abs(b.z-e.z):Math.abs(b.x-e.x);
+    const gap=along-half-e.w/2;if(gap<-8||gap>maxGap||lt>latHalf+e.w/2-4)continue;
+    return {d,kind:'box',b};
+  }
+  return null;
+}
 // a live gravity panel within kicking reach in cardinal direction d (also through furniture)
 function kickableSide(e,d){
   const axis=d[0]?'x':'z',s=d[0]||d[1];
@@ -222,9 +267,23 @@ function updateChar(e,dt){
   else{e.stamDelay-=dt;if(e.stamDelay<=0)e.stam=Math.min(1,e.stam+dt*STAM_REGEN);}
   const hsp=Math.hypot(e.vx,e.vz);
 
+  // cover (players): crouch facing low cover and you stay down until you press crouch again or leave it;
+  // aiming rises over the cover, letting go of aim ducks back
+  if(e.cover&&(e.state!=='normal'||!e.alive||!ctrl))e.cover=null;
+  if(e.state==='normal'&&ctrl&&!e.isBot){
+    if(e.cover){
+      const ok=e.grounded&&!e.sprinting&&coverIn(e,e.cover.d,18);
+      e.cover.lost=ok?0:e.cover.lost+dt;
+      if(c.crouchPressed||c.jump||e.cover.lost>.25)e.cover=null;
+    }else if(c.crouchPressed&&e.grounded&&!e.sprinting){
+      const cv=coverIn(e,cardOf(Math.sin(e.yaw),Math.cos(e.yaw)),14);
+      if(cv)e.cover={d:cv.d,lost:0,t:world.time};
+    }
+  }
+  const wantCrouch=e.cover?!c.aim:c.crouch;
   if(e.state==='normal'){
-    if(ctrl&&e.grounded&&c.crouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
-    else if(e.crouch&&(!c.crouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}}
+    if(ctrl&&e.grounded&&wantCrouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
+    else if(e.crouch&&(!wantCrouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}}
     // body faces aim, except sprinting/diving where it faces travel
     // sprinting away from the aim is a backwards run: keep facing the aim instead of turning round to face the camera
     const backIn=moving&&Math.abs(angDiff(yawOf(mx,mz),e.yaw))>1.95;
@@ -287,15 +346,24 @@ function updateChar(e,dt){
     }
     // step up single blocks while walking; vault 2-block obstacles while sprinting
     if(e.state==='normal'&&e.grounded&&moving&&(e.hitX||e.hitZ||Math.hypot(e.vx,e.vz)<30)){
-      const d=cardOf(mx,mz),ob=lowObstacle(e,d,e.sprinting);
+      const d=cardOf(mx,mz);let ob=ctrl&&c.noVault?null:lowObstacle(e,d,e.sprinting);
       if(ob&&(ob.h===1||e.sprinting)){
         const speed=ob.h===2||ob.over;
         e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,dur:ob.over?(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips.vault?.66:.44):ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};
         e.vx=e.vy=e.vz=0;e.poseBlend=.5;if(speed)sfx('whoosh',e);
       }
     }
+    // sprinting into a box low enough to get over: vault it (thin) or climb onto it
+    if(e.state==='normal'&&e.grounded&&moving&&e.sprinting&&!e.isBot&&!(ctrl&&c.noVault)){ // (bots path round boxes)
+      const d=cardOf(mx,mz),ob=propObstacle(e,d);
+      if(ob&&(mx*d[0]+mz*d[1])>.7*Math.hypot(mx,mz)){
+        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,
+          dur:ob.over?(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips.vault?.66:.44):.34,exitV:RUN,prop:ob.prop.kind};
+        e.vx=e.vy=e.vz=0;e.poseBlend=.5;sfx('whoosh',e);
+      }
+    }
     // ledge grab: diving hands-first grabs automatically; moving toward a ledge or holding SPACE reaches for it
-    if(e.state==='normal'&&!e.grounded&&e.grabCD<=0&&ctrl){
+    if(e.state==='normal'&&!e.grounded&&e.grabCD<=0&&ctrl&&!c.noGrab){
       const dirs=[];
       if(e.runJump)dirs.push(cardOf(e.vx,e.vz));
       if(moving)dirs.push(cardOf(mx,mz));

@@ -16,7 +16,7 @@ function doRotate(key,kicker,stop){
     const c=P(e.x,e.y+e.h/2,e.z),v=Vv(e.vx,e.vy,e.vz);
     if(e===kicker){
       if(e.state!=='kick'){e.state='normal';}
-      e.h=STAND_H;e.crouch=false;
+      e.h=STAND_H;e.crouch=false;e.cover=null;
       e.x=c.x;e.z=c.z;e.y=key[0]==='+'?L-stop:stop;e.vx=e.vy=e.vz=0;e.grounded=true;e.coyote=.1;
       e.visX=c.x-e.x;e.visY=c.y-(e.y+e.h/2);e.visZ=c.z-e.z;e.visX=e.visZ=0;e.visY=clamp(e.visY,-30,30);
       e.ba=0;e.bav=0;e.kickerSpin=1;e.trail=[];pushOut(e);
@@ -314,6 +314,13 @@ function drawHUD(){
   if(world.demo){c.font='bold 13px "Courier New",monospace';c.textAlign='center';c.fillStyle='rgba(5,6,14,.65)';c.fillRect(W/2-300,52,600,24);
     c.fillStyle=p.color;c.fillText(`DEMO · following ${p.name} · A / D or click to switch · ESC for the menu`,W/2,69);
     if(gameState==='over'){world.demoT=(world.demoT||0)+1/60;if(world.demoT>7)newMatch((SETTINGS.seed||'').trim()||undefined,{demo:true});}}
+  // cover
+  if(p.alive&&gameState==='play'&&!world.demo&&p.state==='normal'){
+    const pad=SETTINGS.input==='gamepad';let tip=null,col='#9fe8ff';
+    if(p.cover){tip=p.aiming?'IN COVER — firing over it':(pad?'IN COVER · hold RB to rise and shoot · B or walk away to leave':'IN COVER · hold right mouse to rise and shoot · C or walk away to leave');col=p.aiming?'#ffcc33':'#3dff7a';}
+    else if(p.grounded&&!p.sprinting&&!p.crouch&&coverIn(p,cardOf(Math.sin(p.yaw),Math.cos(p.yaw)),14))tip=pad?'B — take cover':'C — take cover';
+    if(tip){c.font='bold 12px "Courier New",monospace';c.textAlign='center';c.fillStyle='rgba(5,6,14,.55)';const tw=c.measureText(tip).width+18;c.fillRect(W/2-tw/2,H*.74-14,tw,20);c.fillStyle=col;c.fillText(tip,W/2,H*.74);c.textAlign='left';}
+  }
   // alliance prompts
   if(p.alive&&gameState==='play'&&!world.demo&&(!TUT.on||(TUT.cfg&&TUT.cfg.allyHud))){
     c.font='bold 14px "Courier New",monospace';c.textAlign='center';
