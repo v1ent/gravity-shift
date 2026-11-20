@@ -1114,7 +1114,7 @@ function kickableSide(e,d){
     if(gap<=14)return {stop:face};
     // furniture wedged in between transmits the kick
     const iv=[];
-    for(const b of props){if(b.dead||b.y>e.y+52||b.y+b.h<e.y+6)continue;
+    for(const b of props){if(b.dead||PICKUP_GLOW[b.kind]||b.y>e.y+52||b.y+b.h<e.y+6)continue;
       const bl=axis==='x'?b.z:b.x;if(Math.abs(bl-lat)>b.w/2+e.w/2)continue;
       const bc=axis==='x'?b.x:b.z;const n=(bc-b.w/2-edge)*s,f=(bc+b.w/2-edge)*s;iv.push(s>0?[n,f]:[(bc+b.w/2-edge)*s,(bc-b.w/2-edge)*s]);}
     let cur=0,tol=14,first=null;
@@ -1458,6 +1458,7 @@ function meleeHit(e,fw,reach,height,already){
   }
   for(const b of props){
     if(b.dead||(already&&already.has(b)))continue;
+    if(PICKUP_GLOW[b.kind]||(b.kind==='medkit'&&e.state==='slide'))continue; // weapons aren't kicked away, and a slide collects a medkit
     if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
       if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
       if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),.5);
@@ -3540,7 +3541,7 @@ function drawHUD(){
 }
 
 // ---------- settings (start screen) ----------
-const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50};
+const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50,padSeen:false};
 const playerName=()=>(SETTINGS.name||'').trim().toUpperCase().slice(0,12)||'YOU';
 const PLAYER_COLORS=['#29f0ff','#ff3fa4','#ffb020','#9dff3a','#b06bff','#ff5a3c','#ffffff','#3c8cff','#ffe23c','#00e0a0'];
 // a bot (or tutorial actor) that would share your colour gets the colour you gave up
@@ -3548,7 +3549,7 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;}}catch(e){}
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';}}catch(e){}
 function getSettings(){return SETTINGS;}
 function saveSettings(){try{localStorage.setItem('gravityShiftSettings',JSON.stringify(SETTINGS));}catch(e){}}
 function setupMenu(){
@@ -3664,13 +3665,22 @@ function wireMenu(){
   $('exitbtn').onclick=()=>{musicStop();showMenu('pgBye');try{window.close();}catch(e){}};
   // options
   const opts=(el,list,get,set)=>{const draw=()=>{el.innerHTML='';for(const [v,label] of list){const b=document.createElement('button');b.className='opt'+(get()===v?' on':'');b.textContent=label;b.onclick=()=>{set(v);saveSettings();draw();};el.appendChild(b);}};draw();};
-  opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{SETTINGS.input=v;});
-  opts($('assistopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.assist,v=>{SETTINGS.assist=v;$('asSl').disabled=!v;});$('asSl').disabled=!SETTINGS.assist;
+  // aim assist is a gamepad thing: with mouse + keyboard it shows OFF and can't be changed;
+  // the first switch to the gamepad turns it on at 50%, after that your last gamepad choice is kept
+  const drawAssist=()=>{const pad=SETTINGS.input==='gamepad',el=$('assistopt');el.innerHTML='';
+    for(const [v,label] of [[false,'OFF'],[true,'ON']]){const b=document.createElement('button');const on=pad?SETTINGS.assist===v:!v;
+      b.className='opt'+(on?' on':'');b.textContent=label;b.disabled=!pad;b.style.opacity=pad?'':'.45';
+      b.onclick=()=>{SETTINGS.assist=v;saveSettings();drawAssist();};el.appendChild(b);}
+    const sl=$('asSl');sl.disabled=!pad||!SETTINGS.assist;sl.style.opacity=sl.disabled?'.4':'';
+    $('asV').textContent=pad&&SETTINGS.assist?SETTINGS.assistStr+'%':'—';
+    $('asdesc').textContent=pad?'slows the look on a target, tracks and pulls toward it · RB snaps on':'gamepad only — switch Controls to Gamepad to use it';};
+  opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{
+    SETTINGS.input=v;if(v==='gamepad'&&!SETTINGS.padSeen){SETTINGS.padSeen=true;SETTINGS.assist=true;SETTINGS.assistStr=50;$('asSl').value=50;}drawAssist();});
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
   slider('sensSl','sensV','sens',v=>(v/100).toFixed(2)+'×');
-  slider('asSl','asV','assistStr',v=>v+'%');
+  slider('asSl','asV','assistStr',v=>v+'%');drawAssist();
   slider('musSl','musV','music',v=>v+'%',()=>{wakeAudio();applyVolumes();});
   slider('fxSl','fxV','fx',v=>v+'%',()=>{wakeAudio();applyVolumes();sfx('hit');});
   showMenu('pgMain');

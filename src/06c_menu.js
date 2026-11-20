@@ -38,13 +38,22 @@ function wireMenu(){
   $('exitbtn').onclick=()=>{musicStop();showMenu('pgBye');try{window.close();}catch(e){}};
   // options
   const opts=(el,list,get,set)=>{const draw=()=>{el.innerHTML='';for(const [v,label] of list){const b=document.createElement('button');b.className='opt'+(get()===v?' on':'');b.textContent=label;b.onclick=()=>{set(v);saveSettings();draw();};el.appendChild(b);}};draw();};
-  opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{SETTINGS.input=v;});
-  opts($('assistopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.assist,v=>{SETTINGS.assist=v;$('asSl').disabled=!v;});$('asSl').disabled=!SETTINGS.assist;
+  // aim assist is a gamepad thing: with mouse + keyboard it shows OFF and can't be changed;
+  // the first switch to the gamepad turns it on at 50%, after that your last gamepad choice is kept
+  const drawAssist=()=>{const pad=SETTINGS.input==='gamepad',el=$('assistopt');el.innerHTML='';
+    for(const [v,label] of [[false,'OFF'],[true,'ON']]){const b=document.createElement('button');const on=pad?SETTINGS.assist===v:!v;
+      b.className='opt'+(on?' on':'');b.textContent=label;b.disabled=!pad;b.style.opacity=pad?'':'.45';
+      b.onclick=()=>{SETTINGS.assist=v;saveSettings();drawAssist();};el.appendChild(b);}
+    const sl=$('asSl');sl.disabled=!pad||!SETTINGS.assist;sl.style.opacity=sl.disabled?'.4':'';
+    $('asV').textContent=pad&&SETTINGS.assist?SETTINGS.assistStr+'%':'—';
+    $('asdesc').textContent=pad?'slows the look on a target, tracks and pulls toward it · RB snaps on':'gamepad only — switch Controls to Gamepad to use it';};
+  opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{
+    SETTINGS.input=v;if(v==='gamepad'&&!SETTINGS.padSeen){SETTINGS.padSeen=true;SETTINGS.assist=true;SETTINGS.assistStr=50;$('asSl').value=50;}drawAssist();});
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
   slider('sensSl','sensV','sens',v=>(v/100).toFixed(2)+'×');
-  slider('asSl','asV','assistStr',v=>v+'%');
+  slider('asSl','asV','assistStr',v=>v+'%');drawAssist();
   slider('musSl','musV','music',v=>v+'%',()=>{wakeAudio();applyVolumes();});
   slider('fxSl','fxV','fx',v=>v+'%',()=>{wakeAudio();applyVolumes();sfx('hit');});
   showMenu('pgMain');

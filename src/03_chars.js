@@ -154,7 +154,7 @@ function kickableSide(e,d){
     if(gap<=14)return {stop:face};
     // furniture wedged in between transmits the kick
     const iv=[];
-    for(const b of props){if(b.dead||b.y>e.y+52||b.y+b.h<e.y+6)continue;
+    for(const b of props){if(b.dead||PICKUP_GLOW[b.kind]||b.y>e.y+52||b.y+b.h<e.y+6)continue;
       const bl=axis==='x'?b.z:b.x;if(Math.abs(bl-lat)>b.w/2+e.w/2)continue;
       const bc=axis==='x'?b.x:b.z;const n=(bc-b.w/2-edge)*s,f=(bc+b.w/2-edge)*s;iv.push(s>0?[n,f]:[(bc+b.w/2-edge)*s,(bc-b.w/2-edge)*s]);}
     let cur=0,tol=14,first=null;
@@ -498,6 +498,7 @@ function meleeHit(e,fw,reach,height,already){
   }
   for(const b of props){
     if(b.dead||(already&&already.has(b)))continue;
+    if(PICKUP_GLOW[b.kind]||(b.kind==='medkit'&&e.state==='slide'))continue; // weapons aren't kicked away, and a slide collects a medkit
     if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
       if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
       if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),.5);
