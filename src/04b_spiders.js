@@ -4,6 +4,7 @@
 //  don't shake them off: they turn with the surface they hold on to.
 // =====================================================================
 const SPIDER_HP=30,SPIDER_SPD=125,SPIDER_BITE=14,SPIDER_MAX=3,SPIDER_LEAP=430;
+let SPIDER_LAG=.35,SPIDER_WINDUP=.3; // it reacts to where you were a moment ago, and crouches before it pounces
 let spiders=[];
 const SPIDER_SRC={name:'SPIDER',isSpider:true,color:'#e8ecf2',x:0,y:0,z:0};
 const gA=(v,a)=>a===0?v.x:a===1?v.y:v.z;
@@ -93,7 +94,14 @@ function updateSpider(s,dt){
   s.biteCD-=dt;s.leapCD-=dt;
   if(s.spawnT>0){s.spawnT-=dt;syncSpider(s);return;}
   const [tgt,bd]=spiderTarget(s);
-  const goal=tgt?V(tgt.x,tgt.y+tgt.h*.45,tgt.z):null;
+  // remember where the target has been: the spider acts on that, not on where they are right now
+  if(tgt){if(s.histOf!==tgt){s.hist=[];s.histOf=tgt;}s.hist.push({t:world.time,p:V(tgt.x,tgt.y+tgt.h*.45,tgt.z)});while(s.hist.length>2&&world.time-s.hist[1].t>SPIDER_LAG)s.hist.shift();}
+  const goal=tgt?s.hist[0].p:null; // (the oldest entry: about SPIDER_LAG ago)
+  if(s.state==='windup'){ // crouched, about to spring at where you were
+    s.windT-=dt;if(s.leapGoal){const f=vsub(s.leapGoal,s.p),ff=vsub(f,vscale(s.n,vdot(f,s.n)));if(vlen(ff)>1)s.dir=vnorm(ff);}
+    if(s.windT<=0){const d=vnorm(vsub(s.leapGoal,s.p));s.v=vadd(vscale(d,SPIDER_LEAP),V(0,90,0));s.p=vadd(s.p,vscale(s.n,4));s.state='leap';s.leapT=0;sfx('spider',s.p);}
+    syncSpider(s);return;
+  }
   if(s.state==='leap'){
     // pounce: straight-ish flight with a slight drop, re-grabs whatever it hits
     s.v.y-=G*.45*dt;
@@ -119,7 +127,7 @@ function updateSpider(s,dt){
   if(tgt&&bd<30&&s.biteCD<=0)spiderBite(s,tgt);
   // leap when close and clear
   if(tgt&&bd<200&&bd>45&&s.leapCD<=0&&losClear(vadd(s.p,vscale(s.n,4)),goal)){
-    const d=vnorm(vsub(goal,s.p));s.v=vadd(vscale(d,SPIDER_LEAP),V(0,90,0));s.p=vadd(s.p,vscale(s.n,4));s.state='leap';s.leapT=0;sfx('spider',s.p);syncSpider(s);return;
+    s.state='windup';s.windT=s.windT0=SPIDER_WINDUP;s.leapGoal=V(goal.x,goal.y,goal.z);s.leapCD=2.2;syncSpider(s);return;
   }
   // crawl: follow a path over the surface graph (floors, walls, ceilings, round edges)
   s.repath-=dt;
@@ -141,30 +149,81 @@ function updateSpiders(dt){
   spiders=spiders.filter(s=>s.alive);
 }
 const SPIDER_COL=hexRGB('#e8ecf2'),SPIDER_DARK=hexRGB('#9aa3b2');
+// ---------- the spider model (spider_new.glb): static shell + eyes, 16 rigid leg segments posed by a 2-bone solve ----------
+const SPIDER_K=29; // model units -> world px
+let SPM=null;
+function spiderMeshes(){
+  if(SPM||!R.gl||typeof SPIDER_MODEL==='undefined')return SPM;
+  const gl=R.gl,raw=atob(SPIDER_MODEL.b64),u8=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)u8[i]=raw.charCodeAt(i);
+  const dv=new DataView(u8.buffer);SPM={};
+  for(const [name,[off,n]] of Object.entries(SPIDER_MODEL.meshes)){
+    const v=new Float32Array(n*STRIDE);
+    for(let k=0;k<n;k++){const o=off+k*12,w=k*STRIDE;
+      for(let a=0;a<3;a++)v[w+a]=dv.getInt16(o+a*2,true)/30000;
+      for(let a=0;a<3;a++)v[w+3+a]=dv.getInt8(o+6+a)/127;
+      for(let a=0;a<3;a++)v[w+6+a]=u8[o+9+a]/255;
+      v[w+9]=.5;v[w+10]=.5;v[w+11]=1;v[w+12]=1;v[w+13]=0;}
+    const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,v,gl.STATIC_DRAW);SPM[name]={b,n};
+  }
+  SPM.legs=SPIDER_MODEL.legs.map(l=>({up:l.up,lo:l.lo,hip:V(...l.hip),knee:V(...l.knee),foot:V(...l.foot)}));
+  for(const l of SPM.legs){l.l1=vlen(vsub(l.knee,l.hip));l.l2=vlen(vsub(l.foot,l.knee));}
+  return SPM;
+}
+const xf=(M,p)=>V(M[0]*p.x+M[4]*p.y+M[8]*p.z+M[12],M[1]*p.x+M[5]*p.y+M[9]*p.z+M[13],M[2]*p.x+M[6]*p.y+M[10]*p.z+M[14]);
+// rigid move that takes the rest segment a0->b0 onto a->b (rotation about a, minimal arc)
+function segMatrix(a0,b0,a,b){
+  const u=vnorm(vsub(b0,a0)),v=vnorm(vsub(b,a)),c=clamp(vdot(u,v),-1,1),ax=vcross(u,v),s=vlen(ax);
+  let r;if(s<1e-6)r=[1,0,0,0,1,0,0,0,1];
+  else{const k=vscale(ax,1/s),C=1-c,x=k.x,y=k.y,z=k.z;
+    r=[c+x*x*C,y*x*C+z*s,z*x*C-y*s, x*y*C-z*s,c+y*y*C,z*y*C+x*s, x*z*C+y*s,y*z*C-x*s,c+z*z*C];} // column-major
+  const ra=V(r[0]*a0.x+r[3]*a0.y+r[6]*a0.z,r[1]*a0.x+r[4]*a0.y+r[7]*a0.z,r[2]*a0.x+r[5]*a0.y+r[8]*a0.z);
+  const t=vsub(a,ra);
+  return [r[0],r[1],r[2],0,r[3],r[4],r[5],0,r[6],r[7],r[8],0,t.x,t.y,t.z,1];
+}
+function drawSpiderMesh(m,M,em){
+  const gl=R.gl,L=R.main.loc;bindMain(m.b);
+  gl.uniformMatrix4fv(L.uModel,false,M);gl.uniform1f(L.uUseTint,0);gl.uniform1f(L.uEdge,0);
+  if(em)gl.uniform3f(L.uEmis,em[0],em[1],em[2]);else gl.uniform3f(L.uEmis,0,0,0);gl.uniform1f(L.uAlpha,1);
+  gl.drawArrays(gl.TRIANGLES,0,m.n);
+}
 function drawSpider(s){
   const up=vnorm(s.n);
   let fw=s.dir&&vlen(s.dir)>.5?s.dir:null;
   if(!fw){fw=Math.abs(up.y)<.9?vnorm(vcross(up,V(0,1,0))):V(1,0,0);}
   s.look=s.look?vnorm(vlerp(s.look,fw,.25)):fw;
   fw=vnorm(vsub(s.look,vscale(up,vdot(s.look,up))));if(vlen(fw)<.5)fw=Math.abs(up.y)<.9?vnorm(vcross(up,V(0,1,0))):V(1,0,0);
+  const pop=s.spawnT>0?1-s.spawnT/.8:1;if(pop<=.05)return;
+  const S=spiderMeshes();if(!S){drawSpiderBoxes(s,up,fw,pop);return;}
+  const k=SPIDER_K*pop,crouch=s.state==='windup'?Math.min(1,(s.windT0-s.windT)/s.windT0*3):0;
+  const lx=vcross(up,fw),o=vsub(s.p,vscale(up,2+crouch*3));
+  const M=M4.basis(o,vscale(lx,k),vscale(up,k),vscale(fw,k));
+  drawSpiderMesh(S.shell,M);drawSpiderMesh(S.eyes,M,[.9,.06,.06]);
+  // legs: feet step in an alternating gait (or tuck in mid-leap); knees bend the way the model's do
+  const air=s.state==='leap';
+  S.legs.forEach((l,i)=>{
+    const row=i>>1,side=l.hip.x>0?1:-1;
+    const ph=s.phase*Math.PI*2+(row%2?Math.PI:0)+(side>0?0:Math.PI);
+    let f;
+    if(air)f=V(l.hip.x+(l.foot.x-l.hip.x)*.62,l.hip.y-.12,l.hip.z+(l.foot.z-l.hip.z)*.5+.12);
+    else{const sw=Math.sin(ph)*.13,lift=Math.max(0,Math.cos(ph))*.12;f=V(l.foot.x*(1-crouch*.08),lift,l.foot.z+sw);}
+    const hipW=xf(M,l.hip),footW=xf(M,f),kneeR=xf(M,l.knee);
+    const L1=l.l1*k,L2=l.l2*k;let dv=vsub(footW,hipW),d=vlen(dv)||1e-3;
+    const dd=Math.min(d,(L1+L2)*.999),dir=vscale(dv,1/d);
+    const a=(L1*L1-L2*L2+dd*dd)/(2*dd),h=Math.sqrt(Math.max(0,L1*L1-a*a));
+    let pole=vsub(kneeR,hipW);pole=vsub(pole,vscale(dir,vdot(pole,dir)));pole=vlen(pole)>1e-4?vnorm(pole):up;
+    const knee=vadd(hipW,vadd(vscale(dir,a),vscale(pole,h))),foot=vadd(hipW,vscale(dir,dd));
+    const kneeW0=kneeR,footW0=xf(M,l.foot);
+    drawSpiderMesh(S[l.up],M4.mul(segMatrix(hipW,kneeW0,hipW,knee),M));
+    drawSpiderMesh(S[l.lo],M4.mul(segMatrix(kneeW0,footW0,knee,foot),M));
+  });
+  bindMain(R.cube);const gl=R.gl,L=R.main.loc;gl.uniform1f(L.uUseTint,1);gl.uniform1f(L.uEdge,.06);gl.uniform3f(L.uEmis,0,0,0);
+}
+// the old box spider (only if the model can't be used)
+function drawSpiderBoxes(s,up,fw,pop){
   const rt=vcross(fw,up);
   const at=(f,u,r)=>vadd(s.p,vadd(vscale(fw,f),vadd(vscale(up,u),vscale(rt,r))));
   const box=(c,lf,lu,lr,col,em,edge)=>drawCubeM(M4.basis(c,vscale(rt,lr),vscale(up,lu),vscale(fw,lf)),col,em,edge,1);
-  const pop=s.spawnT>0?1-s.spawnT/.8:1;if(pop<=.05)return;
   const sc=pop;
-  box(at(-7*sc,7*sc,0),16*sc,11*sc,14*sc,SPIDER_COL,[.05,.05,.06],[.35,.4,.5]);   // abdomen
-  box(at(-9*sc,12.5*sc,0),8*sc,1.5*sc,6*sc,hexRGB('#ff3b3b'),[.6,.05,.05],null);    // red mark on the back
-  box(at(5*sc,5.5*sc,0),10*sc,7*sc,10*sc,SPIDER_COL,null,[.35,.4,.5]);            // head
-  for(const r of [-2.2,2.2])box(at(10.4*sc,7*sc,r*sc),1.6,2,2,hexRGB('#ff2a2a'),[1,.1,.1],null); // eyes
-  // 8 legs: hip on the body side, knee high, foot planted on the surface; alternating gait
-  const air=s.state==='leap';
-  for(let i=0;i<4;i++)for(const side of [-1,1]){
-    const off=[7,2.5,-2.5,-7][i];
-    const ph=s.phase*Math.PI*2+(i%2?Math.PI:0)+(side>0?0:Math.PI);
-    const swing=air?0:Math.sin(ph)*4,lift=air?0:Math.max(0,Math.cos(ph))*4;
-    const hip=at(off*.6*sc+1,6*sc,side*5*sc);
-    const foot=air?at(off*1.4*sc-4,-2*sc,side*16*sc):at((off*1.6+swing)*sc,lift*sc,side*18*sc);
-    const knee=vadd(vlerp(hip,foot,.5),vadd(vscale(up,(air?6:11)*sc),vscale(rt,side*2*sc)));
-    drawSeg(hip,knee,2.4*sc,SPIDER_COL,null,[.3,.35,.45],1);drawSeg(knee,foot,2*sc,SPIDER_DARK,null,[.3,.35,.45],1);
-  }
+  box(at(-7*sc,7*sc,0),16*sc,11*sc,14*sc,SPIDER_COL,[.05,.05,.06],[.35,.4,.5]);
+  box(at(5*sc,5.5*sc,0),10*sc,7*sc,10*sc,SPIDER_COL,null,[.35,.4,.5]);
 }
