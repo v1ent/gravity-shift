@@ -66,7 +66,7 @@ function botCover(b,ai,c,t,see,dt,think){
   if(!ai.cov&&th&&ai.covCD<=0&&think&&b.grounded&&b.state==='normal'&&!ai.dip){
     const mag=magOf(b);
     const want=(see||hurt)&&(b.hp<75||b.reload>0||(see&&b.ammo<mag*.3)||(hurt&&b.hp<95));
-    if(want&&rnd()<.4+.5*ai.skill){
+    if(want&&rnd()<.85){ // every skill level tries to stay alive
       const sp=findCoverSpot(b,th,b.hp<45?9:6);
       if(sp){ai.cov=Object.assign(sp,{th,t0:world.time,peek:false,pt:.7,px:sp.prop?sp.prop.x:0,pz:sp.prop?sp.prop.z:0});ai.replan=0;}
       ai.covCD=sp?0:1.5;

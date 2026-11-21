@@ -348,7 +348,35 @@ function hurtBarrel(b,src,n){
   b.hits=(b.hits||0)+n;const cur=b.fuse===undefined?99:b.fuse;
   if(b.hits>=3)b.fuse=Math.min(cur,.05);else if(b.hits===2){b.fuse=Math.min(cur,3);sfx('ignite',b);}else b.fuse=Math.min(cur,8);
 }
+// boxes end up piled in corners after a few arena turns: now and then, quietly put a few back out on open floor
+// (only ones you can't see, moved to spots you can't see)
+function tidyProps(dt){
+  world.tidyT=(world.tidyT===undefined?12:world.tidyT)-dt;if(world.tidyT>0||world.rot||TUT.on)return;world.tidyT=12;
+  const viewers=chars.filter(c=>c.alive&&(!c.isBot||c===player)).map(c=>headPos(c));
+  const unseen=p=>viewers.every(h=>!losClear(h,p));
+  const near=(b,r)=>props.filter(o=>o!==b&&!o.dead&&o.rb&&Math.hypot(o.x-b.x,o.y-b.y,o.z-b.z)<r).length;
+  const wallAt=(b,dx,dz)=>solid(tileAt(b.x+dx*(b.w/2+10),b.y+Math.min(b.h/2,14),b.z+dz*(b.d/2+10)));
+  const stuck=props.filter(b=>{if(b.dead||!b.rb||b.kind==='medkit'||b.fuse!==undefined||!b.grounded)return false;
+    const walls=[wallAt(b,1,0)||wallAt(b,-1,0),wallAt(b,0,1)||wallAt(b,0,-1)];
+    const cornered=walls[0]&&walls[1],stacked=!solid(tileAt(b.x,b.y-3,b.z))&&b.y>1;
+    return (cornered&&near(b,80)>=1)||stacked&&near(b,70)>=2;});
+  let moved=0;const sp=stuck.length?spawnPoints():[];
+  for(const b of stuck){if(moved>=3)break;if(!unseen(V(b.x,b.y+b.h/2,b.z)))continue;
+    for(let tries=0;tries<30;tries++){
+      const q=sp[rnd()*sp.length|0];if(!q)break;
+      const x=q.x+(rnd()-.5)*T*2,z=q.z+(rnd()-.5)*T*2,y=Math.floor((q.y+1)/T)*T;
+      const flat=[[0,0],[1,0],[-1,0],[0,1],[0,-1]].every(([dx,dz])=>{const xx=x+dx*T,zz=z+dz*T;return solid(tileAt(xx,y-4,zz))&&!solid(tileAt(xx,y+4,zz))&&!solid(tileAt(xx,y+36,zz));});
+      if(!flat||overlapSolid(x,y+1,z,b.w,b.h))continue;
+      if(props.some(o=>o!==b&&!o.dead&&Math.hypot(o.x-x,o.z-z)<70&&Math.abs(o.y-y)<40))continue;
+      if(chars.some(c=>c.alive&&Math.hypot(c.x-x,c.z-z)<110))continue;
+      if(!unseen(V(x,y+b.h/2,z)))continue;
+      b.x=x;b.y=y+1;b.z=z;b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.q=qaxis(V(0,1,0),(rnd()*4|0)*Math.PI/2);b.grounded=false;b.asleep=false;b.sleep=0;rbBounds(b);
+      moved++;break;
+    }
+  }
+}
 function updateProps(dt){
+  tidyProps(dt);
   for(const b of props){
     if(b.dead)continue;
     if(b.ttl!==undefined){b.ttl-=dt;if(b.ttl<=0){b.dead=true;continue;}} // dropped weapons vanish after a while

@@ -147,6 +147,22 @@ function genLevel(seed){
       for(let u=u0-1;u<=u0+5;u++)for(let v=v0-1;v<=v0+5;v++)if(u===u0-1||u===u0+5||v===v0-1||v===v0+5)setT(u,y,v,1);
     }
   }
+  // ---- half-covers: low walls (one block high) on the walkable floors, straight or L-shaped,
+  //      only where there's head room and a free margin all round so they never seal a passage
+  const lowOk=(x,y,z)=>x>1&&z>1&&x<N-2&&z<N-2&&solid(tile(x,y-1,z))&&tile(x,y-1,z)!==2&&!solid(tile(x,y,z))&&!solid(tile(x,y+1,z))&&!solid(tile(x,y+2,z));
+  for(const yf of [1,13,25])for(let a=0;a<MC;a++)for(let c=0;c<MC;c++){
+    const n=R()<.35?2:R()<.6?1:0;
+    for(let q=0;q<n;q++)for(let tries=0;tries<8;tries++){
+      const len=3+(R()*3|0),ax=R()<.5?0:1,x0=a*M+2+(R()*(9-len)|0),z0=c*M+2+(R()*(9-len)|0),ell=R()<.3,ed=R()<.5?1:-1;
+      const cells=[];for(let u=0;u<len;u++)cells.push(ax===0?[x0+u,z0]:[x0,z0+u]);
+      if(ell){const e=cells[R()<.5?0:len-1];cells.push(ax===0?[e[0],e[1]+ed]:[e[0]+ed,e[1]]);cells.push(ax===0?[e[0],e[1]+2*ed]:[e[0]+2*ed,e[1]]);}
+      let ok=true;
+      for(const [x,z] of cells){for(let dx=-1;dx<=1&&ok;dx++)for(let dz=-1;dz<=1&&ok;dz++)if(!lowOk(x+dx,yf,z+dz))ok=false;if(!ok)break;}
+      if(!ok)continue;
+      for(const [x,z] of cells)setT(x,yf,z,1);
+      break;
+    }
+  }
   // ---- hazard rims on main floors
   const rim=[];
   for(const y of [6,12,18,24,30])for(let x=1;x<N-1;x++)for(let z=1;z<N-1;z++){

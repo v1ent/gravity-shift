@@ -139,7 +139,7 @@ function updateSpider(s,dt){
     if(d<=remain){s.p=V(w.p.x,w.p.y,w.p.z);remain-=d;if(w.n)s.n=V(w.n.x,w.n.y,w.n.z);s.path.shift();s.atWp=!!w.n;if(s.atWp&&s.repath<=0)break;}
     else{const u=vscale(to,1/d);s.p=vadd(s.p,vscale(u,remain));remain=0;s.atWp=false;const f=vsub(u,vscale(s.n,vdot(u,s.n)));if(vlen(f)>.2)s.dir=vnorm(f);}
   }
-  s.phase+=SPIDER_SPD*dt/14;
+  s.phase+=SPIDER_SPD*dt/24; // stride rate: slower, longer steps
   syncSpider(s);
 }
 function updateSpiders(dt){
@@ -205,7 +205,7 @@ function drawSpider(s){
     const ph=s.phase*Math.PI*2+(row%2?Math.PI:0)+(side>0?0:Math.PI);
     let f;
     if(air)f=V(l.hip.x+(l.foot.x-l.hip.x)*.62,l.hip.y-.12,l.hip.z+(l.foot.z-l.hip.z)*.5+.12);
-    else{const sw=Math.sin(ph)*.13,lift=Math.max(0,Math.cos(ph))*.12;f=V(l.foot.x*(1-crouch*.08),lift,l.foot.z+sw);}
+    else{const sw=Math.sin(ph)*.17,lift=Math.max(0,Math.cos(ph))*.13;f=V(l.foot.x*(1-crouch*.08),lift,l.foot.z+sw);}
     const hipW=xf(M,l.hip),footW=xf(M,f),kneeR=xf(M,l.knee);
     const L1=l.l1*k,L2=l.l2*k;let dv=vsub(footW,hipW),d=vlen(dv)||1e-3;
     const dd=Math.min(d,(L1+L2)*.999),dir=vscale(dv,1/d);
