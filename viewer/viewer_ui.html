@@ -1,0 +1,36 @@
+<style>
+#ov,#tut,#pause,#card,#hud{display:none!important}
+#c{cursor:grab}
+#vpanel{position:fixed;left:0;top:0;bottom:0;width:300px;background:rgba(6,8,18,.92);border-right:1px solid #29f0ff44;color:#cfe8ff;font:13px "Courier New",monospace;display:flex;flex-direction:column;z-index:20}
+#vpanel h1{font-size:18px;letter-spacing:4px;margin:12px 14px 2px;color:#29f0ff}#vpanel h1 span{color:#ff3fa4}
+#vpanel .sub{margin:0 14px 10px;color:#7f8fa8;font-size:11px;letter-spacing:2px}
+#vpanel .row{display:flex;gap:6px;margin:0 14px 8px;flex-wrap:wrap}
+#vpanel button{font:inherit;background:#0e1424;color:#cfe8ff;border:1px solid #29f0ff44;padding:5px 9px;cursor:pointer}
+#vpanel button.on{background:#29f0ff;color:#05060c}
+#vpanel button:hover{border-color:#29f0ff}
+#vlist{flex:1;overflow:auto;margin:4px 8px 8px;border-top:1px solid #ffffff14;padding-top:6px}
+#vlist .vh{color:#ff3fa4;letter-spacing:3px;font-size:11px;margin:10px 6px 4px}
+#vlist .vi{display:block;width:100%;text-align:left;margin:2px 0;border-color:transparent;background:transparent}
+#vlist .vi small{display:block;color:#7f8fa8;font-size:10px}
+#vlist .vi.on{background:#29f0ff22;border-color:#29f0ff;color:#fff}
+#vlist .vi.on small{color:#9fe8ff}
+#vbar{position:fixed;left:300px;right:0;bottom:0;background:rgba(6,8,18,.88);border-top:1px solid #29f0ff44;padding:10px 16px;display:flex;align-items:center;gap:10px;z-index:20;color:#cfe8ff;font:13px "Courier New",monospace}
+#vbar button{font:inherit;background:#0e1424;color:#cfe8ff;border:1px solid #29f0ff55;padding:6px 12px;cursor:pointer}
+#vbar #vplay{min-width:96px;background:#29f0ff;color:#05060c}
+#vbar input{flex:1;accent-color:#29f0ff}
+#vtl{min-width:250px;color:#9fe8ff;white-space:pre}
+#vhelp{position:fixed;right:12px;top:10px;color:#7f8fa8;font:11px "Courier New",monospace;text-align:right;z-index:20;line-height:1.5}
+</style>
+<div id="vpanel">
+<h1>GRAVITY<span>SHIFT</span></h1><div class="sub">MOTION &amp; POSE VIEWER</div>
+<div class="row" id="vmodel"><button data-m="char">CHARACTER</button><button data-m="spider">SPIDER</button></div>
+<div id="vclipopts">
+<div class="row" id="vroot"><button data-r="none">IN PLACE</button><button data-r="feet">FEET CENTRED</button><button data-r="clip">ROOT MOTION</button></div>
+<div class="row"><button id="vmirror">MIRROR (LEFT/RIGHT)</button></div>
+</div>
+<div class="row" id="vspeed"><button data-s="0.1">0.1×</button><button data-s="0.25">¼×</button><button data-s="0.5">½×</button><button data-s="1">1×</button><button data-s="2">2×</button></div>
+<div id="vlist"></div>
+</div>
+<div id="vbar"><button id="vprev" title="previous frame (← or ,)">◀▮</button><button id="vplay">❚❚ PAUSE</button><button id="vnext" title="next frame (→ or .)">▮▶</button>
+<input type="range" id="vtime" min="0" max="1000" value="0"><span id="vtl"></span><button id="vreset">RESET VIEW</button></div>
+<div id="vhelp">drag: orbit · right-drag / shift-drag: pan · wheel: zoom<br>space: play / pause · ← →: step a frame</div>
