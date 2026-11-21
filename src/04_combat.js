@@ -494,7 +494,13 @@ const PICKUP_S=2.5,PICKUP_GLOW={shotgun:[1,.55,.2],launcher:[1,.35,.15],rifle:[.
 function drawPickupModel(b){
   const yaw=world.time*.7+b.x*.01,bob=Math.sin(world.time*1.8+b.z*.01)*1.5,u=V(Math.sin(yaw),0,Math.cos(yaw)),v=V(0,1,0),gc=PICKUP_GLOW[b.kind];
   if(b.kind==='shotgun')drawShotgunModel({o:vsub(V(b.x,b.y+9+bob,b.z),vscale(u,5)),u,v,w:vcross(u,v)},gc,1,0);
-  else if(b.kind==='launcher'){const c=V(b.x,b.y+10+bob,b.z);drawLauncherModel({bigLauncher:true,rockets:RMAG,rreload:0,bodyYaw:yaw},vsub(c,vscale(u,7)),vadd(c,vscale(u,7)),V(0,1,0),gc,1);}
+  else if(b.kind==='launcher'){ // the same wrist launcher you wear, on its gauntlet sleeve (the arm it straps to is missing)
+    const c=V(b.x,b.y+8+bob,b.z),eb=vsub(c,vscale(u,7)),hn=vadd(c,vscale(u,7)),SL=hexRGB('#1b1f2b');
+    drawTube(vadd(eb,vscale(u,1.2)),vadd(eb,vscale(u,11.4)),1.55,SL,null,1);                   // sleeve
+    drawTube(vadd(eb,vscale(u,.4)),vadd(eb,vscale(u,1.4)),1.85,hexRGB('#262b3a'),null,1);       // cuff rim
+    drawTube(vadd(eb,vscale(u,10.9)),vadd(eb,vscale(u,12.1)),1.75,hexRGB('#262b3a'),null,1);
+    drawTube(vadd(eb,vscale(u,5.6)),vadd(eb,vscale(u,6.4)),1.62,gc,gc,1);                        // lit band in the pickup colour
+    drawLauncherModel({bigLauncher:true,rockets:RMAG,rreload:0,bodyYaw:yaw},eb,hn,V(0,1,0),gc,1);}
   else drawRifleModel({o:vsub(V(b.x,b.y+9+bob,b.z),vscale(u,4)),u,v,w:vcross(u,v)},gc,1,0);
 }
 function pickupGlows(add){

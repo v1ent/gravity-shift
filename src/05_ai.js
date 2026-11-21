@@ -14,10 +14,86 @@ function applyBotSkill(key){
   BOT_CFG=BOT_SKILLS[key]||BOT_SKILLS.normal;
   BOT_FOV_COS=Math.cos(BOT_CFG.fov/2*Math.PI/180);BOT_REACT_MIN=BOT_CFG.react[0];BOT_REACT_MAX=BOT_CFG.react[1];BOT_TURN=BOT_CFG.turn;
 }
+// ---------- cover ----------
+// the best low-cover spot near the bot against a threat: beside a one-block wall or a waist-high box that faces the threat,
+// where crouching hides you (and standing lets you shoot over, preferably)
+function findCoverSpot(b,th,R){
+  const j=Math.floor((b.y+1)/T),bi=Math.floor(b.x/T),bk=Math.floor(b.z/T),tc=chestPos(th),y=j*T;let best=null;
+  const consider=(x,z,d,kind,prop)=>{
+    const dx=th.x-x,dz=th.z-z,dl=Math.hypot(dx,dz)||1,al=(d[0]*dx+d[1]*dz)/dl;
+    if(al<.55||dl<130)return;
+    if(overlapSolid(x,y,z,BODY_W,COVER_H)||!solid(tileAt(x,y-4,z)))return;
+    if(chars.some(o=>o!==b&&o.alive&&Math.hypot(o.x-x,o.z-z)<BODY_W+4))return;
+    if(kind==='wall'&&losClear(V(x,y+COVER_H-3,z),tc))return;          // must actually hide you
+    const peek=losClear(V(x,y+56,z),tc)?0:70;                           // ...and ideally let you shoot over it
+    const dist=Math.hypot(x-b.x,z-b.z);
+    const sc=dist+peek+(1-al)*90+Math.max(0,240-dl)*.5;
+    if(!best||sc<best.sc)best={x,y,z,d,kind,prop,sc};
+  };
+  for(let i=bi-R;i<=bi+R;i++)for(let k=bk-R;k<=bk+R;k++){
+    if(!nav.adj.has(ni(i,j,k)))continue;
+    for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){const wi=i+d[0],wk=k+d[1];
+      if(solid(tile(wi,j,wk))&&!solid(tile(wi,j+1,wk))&&!solid(tile(wi,j+2,wk)))
+        consider((i+.5)*T+d[0]*(T/2-BODY_W/2-2),(k+.5)*T+d[1]*(T/2-BODY_W/2-2),d,'wall');}
+  }
+  for(const p of props){
+    if(p.dead||!p.grounded||PICKUP_GLOW[p.kind]||p.kind==='medkit'||p.fuse!==undefined)continue;
+    const top=p.y+p.h-y;if(top<28||top>54||Math.abs(p.y-y)>6||Math.hypot(p.x-b.x,p.z-b.z)>R*T)continue;
+    const d=cardOf(th.x-p.x,th.z-p.z),half=d[0]?p.w/2:p.d/2;
+    consider(p.x-d[0]*(half+BODY_W/2+3),p.z-d[1]*(half+BODY_W/2+3),d,'box',p);
+  }
+  return best;
+}
+// survival first: hurt, reloading, out of ammo or under fire with an enemy about -> get behind cover,
+// reload and wait hidden, pop up for short bursts, duck as soon as you're hit; leave when flanked, rushed or alone
+function botCover(b,ai,c,t,see,dt,think){
+  if(window.AI_COVER===false)return null;
+  ai.covCD=(ai.covCD||0)-dt;
+  const hurt=b.lastHitT&&world.time-b.lastHitT<2.2;
+  // the threat: whoever we're fighting, or (while hiding from them) the one we took cover from
+  let th=t&&t.alive&&!t.isSpider?t:null;if(!th&&ai.cov&&ai.cov.th&&ai.cov.th.alive)th=ai.cov.th;
+  if(ai.cov){const cv=ai.cov;cv.lostT=see?0:(cv.lostT||0)+dt;let drop=!th||world.rot||(cv.lostT>4&&b.hp>45);
+    if(th){const dx=th.x-cv.x,dz=th.z-cv.z,dl=Math.hypot(dx,dz)||1,al=(cv.d[0]*dx+cv.d[1]*dz)/dl;
+      if(dl<100)drop=true;
+      else if(al<(cv.inT?.25:.5)&&think){ // the threat moved round: find a better spot rather than give up
+        const sp=findCoverSpot(b,th,b.hp<45?9:6);
+        if(sp){Object.assign(cv,sp,{t0:cv.inT?cv.t0:world.time,inT:0,px:sp.prop?sp.prop.x:0,pz:sp.prop?sp.prop.z:0});if(b.cover)c.leaveCover=true;ai.replan=0;}else drop=true;}}
+    if(world.time-cv.t0>(cv.inT?13:5))drop=true;
+    if(cv.prop&&(cv.prop.dead||Math.hypot(cv.prop.x-cv.px,cv.prop.z-cv.pz)>16))drop=true; // the box got knocked away
+    if(drop){if(window.COVDBG){const why=!th?'nothreat':world.rot?'rot':cv.lostT>4&&b.hp>45?'lost':world.time-cv.t0>(cv.inT?13:5)?(cv.inT?'sat':'slow'):cv.prop&&(cv.prop.dead||!cv.prop.grounded)?'prop':'flank/close';
+      const k=(cv.inT?'in:':'go:')+why;const D=window.COVDBG;D[k]=(D[k]||0)+1;if(!cv.inT){const dd=Math.hypot(cv.x-b.x,cv.z-b.z);D.dist=(D.dist||[]);D.dist.push(Math.round(dd/T*10)/10+(Math.abs(b.y-cv.y)>8?'^':''));}}
+      ai.cov=null;c.leaveCover=true;ai.covCD=1+rnd();return null;}}
+  if(!ai.cov&&th&&ai.covCD<=0&&think&&b.grounded&&b.state==='normal'&&!ai.dip){
+    const mag=magOf(b);
+    const want=(see||hurt)&&(b.hp<75||b.reload>0||(see&&b.ammo<mag*.3)||(hurt&&b.hp<95));
+    if(want&&rnd()<.4+.5*ai.skill){
+      const sp=findCoverSpot(b,th,b.hp<45?9:6);
+      if(sp){ai.cov=Object.assign(sp,{th,t0:world.time,peek:false,pt:.7,px:sp.prop?sp.prop.x:0,pz:sp.prop?sp.prop.z:0});ai.replan=0;}
+      ai.covCD=sp?0:1.5;
+    }else if(want)ai.covCD=1;
+  }
+  if(!ai.cov)return null;
+  const cv=ai.cov;
+  if(t&&t.alive&&t!==cv.th&&see)cv.th=t;
+  if(b.cover){
+    if(!cv.inT){cv.inT=world.time;cv.t0=world.time;}
+    cv.pt-=dt;
+    if(cv.peek&&b.lastHitT>cv.peekAt+.05){cv.peek=false;cv.pt=1.1+rnd()*.8;}       // hit while up: duck
+    if(cv.pt<=0){if(cv.peek||b.reload>0){cv.peek=false;cv.pt=(b.hp<45?1.5:.8)+rnd()*.9;}else{cv.peek=true;cv.peekAt=world.time;cv.pt=.9+rnd()*.9;}}
+    if(b.reload>0)cv.peek=false;
+    c.aim=cv.peek;c.coverDir=cv.d;
+    if(!cv.peek&&b.ammo<magOf(b)*.6&&b.reload<=0)c.reload=true;
+    return {mv:[0,0]};
+  }
+  const dx=cv.x-b.x,dz=cv.z-b.z,dl=Math.hypot(dx,dz);
+  if(dl<4){c.coverDir=cv.d;return {mv:[0,0]};}
+  if(dl<1.6*T&&Math.abs(b.y-cv.y)<8){c.sprint=dl>40&&b.stam>.1;if(dl<16)c.coverDir=cv.d;return {mv:[dx,dz]};}
+  return {path:[Math.floor(cv.x/T),Math.floor((cv.y+1)/T),Math.floor(cv.z/T)]};
+}
 function botThink(b,dt){
   const c=b.ctl;
   if(b.skill&&BOT_CFG!==BOT_SKILLS[b.skill])applyBotSkill(b.skill); // each bot can have its own skill (demo)
-  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;c.noVault=false;c.noGrab=false;
+  c.swap=false;c.select=null;c.mx=0;c.mz=0;c.jump=false;c.fire=false;c.fireClick=false;c.rocketClick=false;c.aim=false;c.alt=false;c.kick=false;c.reload=false;c.crouch=false;c.crouchPressed=false;c.sprint=false;c.grab=false;c.dodge=null;c.wave=false;c.sprint=false;c.noVault=false;c.noGrab=false;c.coverDir=null;c.leaveCover=false;
   if(!b.alive){b.ai=null;return;}
   if(b.script){c.mx=0;c.mz=0;b.script(b,c,dt);return;} // tutorial actors
   const ai=b.ai||(b.ai={known:null,acquire:0,lostT:0,lastSeen:null,alert:null,alertT:0,yaw:b.yaw,pitch:0,errT:0,ex:0,ey:0,ez:0,burst:0,pause:0,path:null,replan:0,stuckT:0,last:V(b.x,b.y,b.z),flip:0,hold:0,strafe:1,strafeT:0,skill:BOT_CFG.skill[0]+rnd()*(BOT_CFG.skill[1]-BOT_CFG.skill[0]),rocketT:(2+rnd()*3)/BOT_CFG.rocket,jumpWait:0,scanT:0});
@@ -100,6 +176,7 @@ function botThink(b,dt){
   // weapon choice: the launcher only for the moment of a rocket shot, otherwise the best gun for the range
   {const want=b.hasShotgun&&dist<420?'shotgun':b.hasRifle?'rifle':'pistol';if(b.weapon!==want&&(b.weapon==='rocket'||(t&&see&&b.fireCD<=0)))c.select=want;}
   if(b.ammo<4&&!see)c.reload=true;
+  const cov=b.state==='normal'?botCover(b,ai,c,t,see,dt,think):null;
   if(b.state==='hang'){c.grab=true;c.jump=rnd()<dt*4;return;}
   if(b.state!=='normal')return;
   // ---- path planning ----
@@ -108,10 +185,11 @@ function botThink(b,dt){
   const onNode=b.grounded&&nav&&nav.adj.has(ni(ci,cj,ck));
   if(onNode&&(ai.replan<=0||!ai.path||ai.navVer!==nav.ver)){
     let g=null;ai.medGoal=null;
-    if(b.hp<55){let bd=1e9;for(const m of props){if(m.kind!=='medkit'||!m.grounded||m.dead)continue;const q=[Math.floor(m.x/T),Math.floor((m.y+1)/T),Math.floor(m.z/T)];const dd=Math.abs(q[0]-ci)+Math.abs(q[1]-cj)+Math.abs(q[2]-ck);if(dd<bd){bd=dd;g=q;}}if(g&&bd<30)ai.medGoal=g;else g=null;}
+    if(b.hp<65&&!(cov&&!cov.path&&see)){let bd=1e9;for(const m of props){if(m.kind!=='medkit'||!m.grounded||m.dead)continue;const q=[Math.floor(m.x/T),Math.floor((m.y+1)/T),Math.floor(m.z/T)];const dd=Math.abs(q[0]-ci)+Math.abs(q[1]-cj)+Math.abs(q[2]-ck);if(dd<bd){bd=dd;g=q;}}if(g&&bd<30)ai.medGoal=g;else g=null;}
     if(!g&&!see&&(!b.hasShotgun||!b.hasRifle||!b.bigLauncher)){let bd=1e9,bq=null;for(const m of props){if(m.dead||!((m.kind==='shotgun'&&!b.hasShotgun)||(m.kind==='rifle'&&!b.hasRifle)||(m.kind==='launcher'&&!b.bigLauncher)))continue;const q=[Math.floor(m.x/T),Math.floor((m.y+1)/T),Math.floor(m.z/T)];const dd=Math.abs(q[0]-ci)+Math.abs(q[1]-cj)+Math.abs(q[2]-ck);if(dd<bd){bd=dd;bq=q;}}if(bq&&bd<22){g=bq;ai.medGoal=bq;}}
     if(!g&&world.rotCD<=0&&!world.rot&&!ai.kickGoal&&nav.kickCells.length&&rnd()<.25){let bd=1e9,bk=null;for(const q of nav.kickCells){const dd=Math.abs(q.i-ci)+Math.abs(q.j-cj)+Math.abs(q.k-ck);if(dd<bd){bd=dd;bk=q;}}if(bd<26)ai.kickGoal=bk;}
     if(ai.kickGoal&&(world.rotCD>0||world.rot))ai.kickGoal=null;
+    if(!g&&cov&&cov.path){g=cov.path;ai.kickGoal=null;}
     if(!g&&ai.kickGoal)g=[ai.kickGoal.i,ai.kickGoal.j,ai.kickGoal.k];
     if(!g&&ai.dip&&!see)g=cellOf(ai.dip.target); // heading over to offer / accept an alliance
     if(ai.roam>0)g=null; // target unreachable recently: roam somewhere else for a bit
@@ -137,12 +215,15 @@ function botThink(b,dt){
   let mvx=0,mvz=0;
   let fight=see&&t&&ai.acquire<=0&&Math.abs(dy)<70&&!ai.kickGoal&&!ai.medGoal;
   if(fight)ai.fightHold=.6;else if(t&&t.alive&&ai.fightHold>0&&!ai.kickGoal&&!ai.medGoal){ai.fightHold-=dt;fight=true;} // don't flip modes on a one-frame glimpse
-  if(fight){
+  if(cov)fight=false; // heading for / sitting in cover: still aiming and shooting, but not strafing in the open
+  if(cov&&cov.mv){mvx=cov.mv[0];mvz=cov.mv[1];}
+  else if(fight){
     b.aimT=Math.max(b.aimT||0,.5); // weapon up with both hands while fighting
     ai.strafeT-=dt;if(ai.strafeT<=0){ai.strafeT=1.1+rnd()*1.8;const r=rnd();ai.strafe=r<.18?0:r<.59?-1:1;}
     const tx=(t.x-b.x)/(dist||1),tz=(t.z-b.z)/(dist||1);
     const pref=b.weapon==='shotgun'?[110,260]:b.weapon==='rifle'?[180,520]:[200,500];
     if(dist>pref[1]+40)ai.fwdW=1;else if(dist<pref[0]-30)ai.fwdW=-1;else if(dist>pref[0]+30&&dist<pref[1]-40)ai.fwdW=0;
+    if(b.hp<35)ai.fwdW=-1; // badly hurt and no cover: back off rather than push
     const fwdW=(ai.fwdW||0)*.8;
     mvx=-tz*ai.strafe+tx*fwdW;mvz=tx*ai.strafe+tz*fwdW;
     // don't walk off ledges while strafing: pick the other side and stick with it for a while

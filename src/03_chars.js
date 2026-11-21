@@ -43,6 +43,7 @@ function makeChar(name,color,isBot){
     ctl:{mx:0,mz:0,jump:false,jumpHeld:false,sprint:false,crouch:false,crouchPressed:false,fire:false,alt:false,kick:false,reload:false,grab:false,aimYaw:0,aimPitch:0},ai:null};
 }
 const headPos=e=>V(e.x,e.y+e.h-3.5,e.z);
+const COVER_H=30; // the deep squat behind cover: below a one-block wall (32)
 const chestPos=e=>V(e.x,e.y+e.h*.62,e.z);
 
 function spawn(e){
@@ -270,6 +271,10 @@ function updateChar(e,dt){
   // cover (players): crouch facing low cover and you stay down until you press crouch again or leave it;
   // aiming rises over the cover, letting go of aim ducks back
   if(e.cover&&(e.state!=='normal'||!e.alive||!ctrl))e.cover=null;
+  if(e.state==='normal'&&ctrl&&e.isBot){ // bots: their AI says when to get into / out of cover
+    if(e.cover){if(c.leaveCover||!e.grounded||e.sprinting||!coverIn(e,e.cover.d,18))e.cover=null;}
+    else if(c.coverDir&&e.grounded&&!e.sprinting&&coverIn(e,c.coverDir,14))e.cover={d:c.coverDir,lost:0,t:world.time};
+  }
   if(e.state==='normal'&&ctrl&&!e.isBot){
     if(e.cover){
       const ok=e.grounded&&!e.sprinting&&coverIn(e,e.cover.d,18);
@@ -282,7 +287,7 @@ function updateChar(e,dt){
   }
   const wantCrouch=e.cover?!c.aim:c.crouch;
   if(e.state==='normal'){
-    if(ctrl&&e.grounded&&wantCrouch&&!e.sprinting){if(!e.crouch){e.crouch=true;e.h=CROUCH_H;}}
+    if(ctrl&&e.grounded&&wantCrouch&&!e.sprinting){if(!e.crouch)e.crouch=true;const hh=e.cover?COVER_H:CROUCH_H;if(e.h!==hh&&!(hh>e.h&&overlapSolid(e.x,e.y,e.z,e.w,hh)))e.h=hh;}
     else if(e.crouch&&(!wantCrouch||!e.grounded||!ctrl)){if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.crouch=false;e.h=STAND_H;}}
     // body faces aim, except sprinting/diving where it faces travel
     // sprinting away from the aim is a backwards run: keep facing the aim instead of turning round to face the camera
@@ -641,12 +646,14 @@ function updatePose(e,dt){
     e.phase+=lvx*dt/cyc;
     const pa=legPhase(e.phase,s,A,lift),pb=legPhase(e.phase+.5,s,A,lift);e.armPh={a:pa.x/A,b:pb.x/A};
     const bob=lerp(.8,3.2,speedN)*(.5+.5*Math.cos(4*Math.PI*(e.phase-s/2)));
-    const breath=Math.sin(world.time*2.2)*.6,w=e.runW,crouch=e.crouch?11:0;
+    e.cdeep=lerp(e.cdeep||0,e.crouch?(e.cover?23:11):0,1-Math.exp(-14*dt)); // cover: a deep squat, head tucked
+    const breath=Math.sin(world.time*2.2)*.6,w=e.runW,crouch=e.cdeep,deep=clamp((crouch-11)/12,0,1);
+    if(deep>0)headTilt=(headTilt||0)+.25*deep;
     hipX=lerp(-1,2.5*Math.sign(lvx),w);
     hipY=lerp(-25.5+breath*(crouch?.5:1)+crouch,-25.5+bob+crouch*.9,w)+e.land*11;
     fa={x:lerp(6+crouch*.4,pa.x+hipX,w),y:lerp(0,pa.y,w)};
     fb={x:lerp(-5-crouch*.3,pb.x+hipX,w),y:lerp(0,pb.y,w)};
-    lean=w*speedN*.2*Math.sign(lvx)+clamp(e.accS/5000,-.18,.18)+e.land*.25+crouch*.025+(e.sprinting?.12:0);
+    lean=w*speedN*.2*Math.sign(lvx)+clamp(e.accS/5000,-.18,.18)+e.land*.25+crouch*.025+deep*.32+(e.sprinting?.12:0);
   }else if(st==='normal'){
     const r=clamp(-pvy/JUMPV,-1,1);
     const flail=pvy>650?Math.sin(world.time*18)*4*clamp((pvy-650)/400,0,1):0;
@@ -929,6 +936,7 @@ function drawShotgunModel(F,acc,al,pump){
   wpart(F,-7,-.05,0,6.2,2.7,1.6,POLY,null,null,al);                     // stock
   wpart(F,-6.4,1.5,0,4.8,.6,1.3,POLY,null,null,al);                     // comb
   wpart(F,-4.2,-1.25,0,1.4,.25,1.65,OR,[.25,.1,0],null,al);             // stock stripe
+  wpart(F,-2.05,.55,0,4.1,2.1,1.45,POLY,null,null,al);                  // wrist: joins the stock to the receiver
   const gF={o:vadd(F.o,vadd(vscale(F.u,-.3),vscale(F.v,-1.8))),u:vnorm(vadd(F.u,vscale(F.v,.3))),v:vnorm(vsub(F.v,vscale(F.u,.3))),w:F.w};
   wpart(gF,0,0,0,1.6,3.6,1.4,POLY,null,null,al);                        // pistol grip
   wpart(F,3,1.3,0,6.6,2.6,1.9,MET,null,null,al);                        // receiver
@@ -953,6 +961,7 @@ function drawRifleModel(F,acc,al,recoil,magOut){
   const P=(cu,cv,cw,su,sv,sw,col,em)=>wpart(F,cu-k,cv,cw,su,sv,sw,col,em||null,null,al);
   P(-9.6,-.6,0,.8,3.6,1.6,DK);                     // butt pad
   P(-7.2,-.1,0,4.4,2.2,1.4,POLY);P(-6.6,1.1,0,3.4,.5,1.2,POLY);P(-4.6,.4,0,1.4,1.4,1.1,DK); // stock, comb, tube
+  P(-2.55,.95,0,2.7,1.5,1.15,DK);                    // buffer tube into the receiver
   const gF={o:vadd(F.o,vadd(vscale(F.u,-.2-k),vscale(F.v,-1.7))),u:vnorm(vadd(F.u,vscale(F.v,.3))),v:vnorm(vsub(F.v,vscale(F.u,.3))),w:F.w};
   wpart(gF,0,0,0,1.5,3.4,1.3,POLY,null,null,al);     // pistol grip
   P(2.2,1.2,0,7,2.4,1.8,MET);                        // receiver
