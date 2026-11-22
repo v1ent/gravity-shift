@@ -196,8 +196,17 @@ function drawSpider(s){
   const S=spiderMeshes();if(!S){drawSpiderBoxes(s,up,fw,pop);return;}
   const k=SPIDER_K*pop,crouch=s.state==='windup'?Math.min(1,(s.windT0-s.windT)/s.windT0*3):0;
   const lx=vcross(up,fw),o=vsub(s.p,vscale(up,2+crouch*3));
-  const M=M4.basis(o,vscale(lx,k),vscale(up,k),vscale(fw,k));
-  drawSpiderMesh(S.shell,M);drawSpiderMesh(S.eyes,M,[.9,.06,.06]);
+  const M=M4.basis(o,vscale(lx,k),vscale(up,k),vscale(fw,k)); // the ground frame: feet are planted in this
+  // body motion while walking: bob twice a gait cycle, sway side to side, a little pitch and yaw wiggle.
+  // How much follows how fast the legs are actually cycling.
+  const now=performance.now()/1000,dtw=s._pt!==undefined?Math.min(.1,now-s._pt):0,rate=dtw>0?(s.phase-s._ph)/dtw:0;s._ph=s.phase;s._pt=now;
+  s.walkAmt=lerp(s.walkAmt||0,s.state==='crawl'?clamp(rate/(SPIDER_SPD/24),0,1.3):0,1-Math.exp(-6*dtw));
+  const wa=s.walkAmt,G=s.phase*Math.PI*2;
+  const bob=Math.sin(G*2)*1.1*wa*pop,roll=Math.sin(G)*.085*wa,pitch=Math.sin(G*2+1)*.045*wa,wig=Math.sin(G+.6)*.06*wa;
+  const q=qmul(qaxis(up,wig),qmul(qaxis(lx,pitch),qaxis(fw,roll))),cb=vadd(o,vscale(up,.3*k));
+  const ob=vadd(vadd(cb,qrot(q,vsub(o,cb))),vscale(up,bob));
+  const Mb=M4.basis(ob,vscale(qrot(q,lx),k),vscale(qrot(q,up),k),vscale(qrot(q,fw),k)); // the body frame
+  drawSpiderMesh(S.shell,Mb);drawSpiderMesh(S.eyes,Mb,[.9,.06,.06]);
   // legs: feet step in an alternating gait (or tuck in mid-leap); knees bend the way the model's do
   const air=s.state==='leap';
   S.legs.forEach((l,i)=>{
@@ -206,15 +215,15 @@ function drawSpider(s){
     let f;
     if(air)f=V(l.hip.x+(l.foot.x-l.hip.x)*.62,l.hip.y-.12,l.hip.z+(l.foot.z-l.hip.z)*.5+.12);
     else{const sw=Math.sin(ph)*.17,lift=Math.max(0,Math.cos(ph))*.13;f=V(l.foot.x*(1-crouch*.08),lift,l.foot.z+sw);}
-    const hipW=xf(M,l.hip),footW=xf(M,f),kneeR=xf(M,l.knee);
+    const hipW=xf(Mb,l.hip),footW=xf(air?Mb:M,f),kneeR=xf(Mb,l.knee); // hips ride the body, feet stay planted
     const L1=l.l1*k,L2=l.l2*k;let dv=vsub(footW,hipW),d=vlen(dv)||1e-3;
     const dd=Math.min(d,(L1+L2)*.999),dir=vscale(dv,1/d);
     const a=(L1*L1-L2*L2+dd*dd)/(2*dd),h=Math.sqrt(Math.max(0,L1*L1-a*a));
     let pole=vsub(kneeR,hipW);pole=vsub(pole,vscale(dir,vdot(pole,dir)));pole=vlen(pole)>1e-4?vnorm(pole):up;
     const knee=vadd(hipW,vadd(vscale(dir,a),vscale(pole,h))),foot=vadd(hipW,vscale(dir,dd));
-    const kneeW0=kneeR,footW0=xf(M,l.foot);
-    drawSpiderMesh(S[l.up],M4.mul(segMatrix(hipW,kneeW0,hipW,knee),M));
-    drawSpiderMesh(S[l.lo],M4.mul(segMatrix(kneeW0,footW0,knee,foot),M));
+    const kneeW0=kneeR,footW0=xf(Mb,l.foot);
+    drawSpiderMesh(S[l.up],M4.mul(segMatrix(hipW,kneeW0,hipW,knee),Mb));
+    drawSpiderMesh(S[l.lo],M4.mul(segMatrix(kneeW0,footW0,knee,foot),Mb));
   });
   bindMain(R.cube);const gl=R.gl,L=R.main.loc;gl.uniform1f(L.uUseTint,1);gl.uniform1f(L.uEdge,.06);gl.uniform3f(L.uEmis,0,0,0);
 }

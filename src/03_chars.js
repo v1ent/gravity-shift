@@ -19,8 +19,8 @@ let chars=[],player=null;
 const DODGE_STAM=.3;
 const DODGES={
   back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
-  right:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:false,scale:2.6,fb:V(-83,0,-39),fix:93*Math.PI/180,fix0:56,fix1:96},
-  left:{clip:'dodge_right',f0:14,f1:100,rate:2,mirror:true,scale:2.6,fb:V(83,0,-39),fix:-93*Math.PI/180,fix0:56,fix1:96},
+  right:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:false,scale:2.6,fb:V(-82,0,-5)}, // ends facing forward: no turn-back needed
+  left:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:true,scale:2.6,fb:V(82,0,-5)},
 };
 for(const k in DODGES){const D=DODGES[k];D.dur=(D.f1-D.f0)/30/D.rate;}
 // travel so far (character space: +z forward, -x right)
@@ -354,7 +354,7 @@ function updateChar(e,dt){
       const d=cardOf(mx,mz);let ob=ctrl&&c.noVault?null:lowObstacle(e,d,e.sprinting);
       if(ob&&(ob.h===1||e.sprinting)){
         const speed=ob.h===2||ob.over;
-        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,dur:ob.over?(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips.vault?.66:.44):ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};
+        e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,vclip:ob.over?pickVault():null,dur:ob.over?.44:ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};if(e.st.vclip)e.st.dur=VAULT_CLIPS[e.st.vclip].dur;
         e.vx=e.vy=e.vz=0;e.poseBlend=.5;if(speed)sfx('whoosh',e);
       }
     }
@@ -363,7 +363,8 @@ function updateChar(e,dt){
       const d=cardOf(mx,mz),ob=propObstacle(e,d);
       if(ob&&(mx*d[0]+mz*d[1])>.7*Math.hypot(mx,mz)){
         e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,
-          dur:ob.over?(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips.vault?.66:.44):.34,exitV:RUN,prop:ob.prop.kind};
+          vclip:ob.over?pickVault():null,dur:ob.over?.44:.34,exitV:RUN,prop:ob.prop.kind};
+        if(e.st.vclip)e.st.dur=VAULT_CLIPS[e.st.vclip].dur;
         e.vx=e.vy=e.vz=0;e.poseBlend=.5;sfx('whoosh',e);
       }
     }
@@ -976,6 +977,9 @@ function drawRifleModel(F,acc,al,recoil,magOut){
   P(17.6,1.5,0,1.4,1,1,DK);P(18.35,1.5,0,.15,.6,.6,CY,[.3,.8,1]); // muzzle brake
 }
 // the muzzle of the gun model as last drawn, kept relative to the fighter so it follows them between frames
+// dive vaults: mostly vault_02 (lands on its feet), now and then the old one (rolls through)
+const VAULT_CLIPS={vault_02:{f0:4,f1:44,dur:.6},vault:{f0:4,f1:54,dur:.66}};
+function pickVault(){const ok=n=>typeof SKN!=='undefined'&&SKN.clips&&SKN.clips[n];return ok('vault_02')&&(rnd()<.75||!ok('vault'))?'vault_02':ok('vault')?'vault':null;}
 const MUZZLE_AT={pistol:[6.5,1.65],shotgun:[21.4,2],rifle:[18.5,1.5]};
 function noteMuzzle(e,F){const m=MUZZLE_AT[e.weapon];if(!m||WXF)return;const p=vadd(F.o,vadd(vscale(F.u,m[0]),vscale(F.v,m[1])));e._mzRel=V(p.x-e.x,p.y-e.y,p.z-e.z);e._mzT=world.time;e._mzW=e.weapon;}
 function drawWeaponsSK(e,P,SK,acc,al){

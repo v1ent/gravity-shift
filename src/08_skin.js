@@ -337,11 +337,11 @@ function clipFor(e,A,dt){
     if(D.fix)rotatePose(P,qaxis(V(0,1,0),D.fix*smooth(clamp((f-D.fix0)/(D.fix1-D.fix0),0,1))),V(P.hip.x,0,P.hip.z));
     return {P:placeAt(P,s.yaw,o),key:'dodge'};
   }
-  if(st==='climbup'&&e.st.vault&&e.st.over&&SKN.clips.vault){
+  if(st==='climbup'&&e.st.vault&&e.st.over&&(SKN.clips[e.st.vclip]||SKN.clips.vault)){
     // dive vault: hands on the obstacle, body over flat, landing; the clip's travel stretched to the real distance
-    const s=e.st,u=clamp(s.t,0,1),f=lerp(4,54,u),yaw=Math.atan2(s.d[0],s.d[1]);
-    if(!s.vz){const h=fr=>sampleClip('vault',fr/30,false).hip;s.vz=[h(4).z,h(54).z];}
-    const P=clipAt('vault',f,false,'clip'),dist=Math.hypot(s.s1.x-s.s0.x,s.s1.z-s.s0.z),k=dist/Math.max(1,s.vz[1]-s.vz[0]);
+    const s=e.st,vn=SKN.clips[s.vclip]?s.vclip:'vault',VC=VAULT_CLIPS[vn],u=clamp(s.t,0,1),f=lerp(VC.f0,VC.f1,u),yaw=Math.atan2(s.d[0],s.d[1]);
+    if(!s.vz){const h=fr=>sampleClip(vn,fr/30,false).hip;s.vz=[h(VC.f0).z,h(VC.f1).z];}
+    const P=clipAt(vn,f,false,'clip'),dist=Math.hypot(s.s1.x-s.s0.x,s.s1.z-s.s0.z),k=dist/Math.max(1,s.vz[1]-s.vz[0]);
     P.hip.z=(P.hip.z-s.vz[0])*k;P.hip.x*=.5;
     return {P:placeAt(P,yaw,V(s.s0.x,Math.min(s.s0.y,s.s1.y),s.s0.z)),key:'vault'};
   }
