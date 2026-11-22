@@ -4,7 +4,7 @@
 // =====================================================================
 const G=1500,WALK=95,RUN=215,JUMPV=410,RUNJUMPV=470,MAXFALL=950; // standing jump ~1.7 blocks, running ~2.3: higher walls need a ledge grab
 const STAND_H=62,BODY_W=23,CHAR_SCALE=64/56; // fighters are ~2 m: 62 px hitbox, model drawn 64 px tall
-const CROUCH_SPD=48,CROUCH_H=41,SLIDE_H=30,SLIDE_DUR=.7,SLIDE_FRIC=280,STAM_DRAIN=1/7.2,STAM_REGEN=1/3.5,STEALTH_T=1.6;
+const CROUCH_SPD=48,CROUCH_H=41,SLIDE_H=30,SLIDE_DUR=1.05,SLIDE_FRIC=190,STAM_DRAIN=1/7.2,STAM_REGEN=1/3.5,STEALTH_T=1.6;
 const STEALTH_ON=false; // cloaking is switched off for now (players and bots)
 const HARD_FALL=10*T,GETUP_DUR=.8,KICK_DUR=.6,KICK_HIT=.42,KICK_DMG=15,KICK_PUSH=560;
 const MAG=10,RELOAD=2,FIRE_CD=.42,BULLET_SPEED=1300,PISTOL_SPEED=3900,DMG=25,HEAD_DMG=45;
@@ -351,7 +351,7 @@ function updateChar(e,dt){
     }
     // step up single blocks while walking; vault 2-block obstacles while sprinting
     if(e.state==='normal'&&e.grounded&&moving&&(e.hitX||e.hitZ||Math.hypot(e.vx,e.vz)<30)){
-      const d=cardOf(mx,mz);let ob=ctrl&&c.noVault?null:lowObstacle(e,d,e.sprinting);
+      const d=cardOf(mx,mz);let ob=(ctrl&&c.noVault)||(e.cover&&d[0]===e.cover.d[0]&&d[1]===e.cover.d[1])?null:lowObstacle(e,d,e.sprinting); // pushing into your cover doesn't climb it (jump does)
       if(ob&&(ob.h===1||e.sprinting)){
         const speed=ob.h===2||ob.over;
         e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,vclip:ob.over?pickVault():null,dur:ob.over?.44:ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};if(e.st.vclip)e.st.dur=VAULT_CLIPS[e.st.vclip].dur;
@@ -427,6 +427,8 @@ function updateChar(e,dt){
     if(rnd()<dt*30)addPart(e.x,e.y+2,e.z,-e.vx*.3+(rnd()-.5)*40,rnd()*40,-e.vz*.3+(rnd()-.5)*40,.35,[.48,.52,.63],4,'dust');
     const fw=V(Math.sin(s.yaw),0,Math.cos(s.yaw));
     let hit=meleeHit(e,fw,e.w/2+18,32,s.hitSet);
+    // sliding up to a cover-height box: stop against it (don't kick it away) and take cover
+    if(!hit&&!e.isBot){const cv=coverIn(e,cardOf(fw.x,fw.z),5);if(cv&&cv.kind==='box'){e.vx=e.vz=0;hit=true;}}
     if(e.hitX||e.hitZ){
       const d=cardOf(fw.x,fw.z);
       const ks=(world.rotCD<=0&&!world.rot&&!world.pendingRot)?kickableSide(e,d):null;
@@ -545,10 +547,17 @@ function reveal(e){
 function startSlide(e){
   const yaw=yawOf(e.vx,e.vz);
   e.state='slide';e.st={t:0,yaw,hitSet:new Set()};e.bodyYaw=e.legYaw=yaw;e.h=SLIDE_H;e.crouch=false;
-  const sp=Math.max(Math.hypot(e.vx,e.vz),RUN)*1.18;e.vx=Math.sin(yaw)*sp;e.vz=Math.cos(yaw)*sp;e.stam=Math.max(0,e.stam-.15);e.poseBlend=.5;
+  const sp=Math.max(Math.hypot(e.vx,e.vz),RUN)*1.25;e.vx=Math.sin(yaw)*sp;e.vz=Math.cos(yaw)*sp;e.stam=Math.max(0,e.stam-.15);e.poseBlend=.5;
   sfx('whoosh',e);
 }
-function endSlide(e){e.state='normal';e.poseBlend=.5;if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.h=STAND_H;e.crouch=false;}else{e.h=CROUCH_H;e.crouch=true;}}
+function endSlide(e){
+  const yaw=e.st&&e.st.yaw!==undefined?e.st.yaw:e.bodyYaw;
+  e.state='normal';e.poseBlend=.5;
+  // a slide that ends against low cover (a wall or a box) drops you straight into cover, facing it
+  if(!e.isBot&&e.grounded){const d=cardOf(Math.sin(yaw),Math.cos(yaw)),cv=coverIn(e,d,18);
+    if(cv){e.cover={d,lost:0,t:world.time};e.crouch=true;e.h=COVER_H;e.cdeep=Math.max(e.cdeep||0,11);e.vx=e.vz=0;return;}}
+  if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.h=STAND_H;e.crouch=false;}else{e.h=CROUCH_H;e.crouch=true;}
+}
 function enterDown(e,sev){
   e.state='down';
   const fwd=e.vx*Math.sin(e.bodyYaw)+e.vz*Math.cos(e.bodyYaw);
@@ -573,6 +582,7 @@ function meleeHit(e,fw,reach,height,already){
   for(const b of props){
     if(b.dead||(already&&already.has(b)))continue;
     if(PICKUP_GLOW[b.kind]||(b.kind==='medkit'&&e.state==='slide'))continue; // weapons aren't kicked away, and a slide collects a medkit
+    if(e.state==='slide'&&!e.isBot&&b.grounded&&b.y<=e.y+8&&b.y+b.h-e.y>=24&&b.y+b.h-e.y<=54)continue; // a player sliding into cover-height boxes takes cover behind them instead
     if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
       if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
       if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),.5);

@@ -246,6 +246,28 @@ function render(){
   drawParticles(alpha,false);drawParticles(add,true);
   drawHUD();drawFPS(hctx);
 }
+// a crosshair per weapon, in that weapon's colour, so you can tell at a glance what's in your hands
+function drawCrosshair(c,p,cx,cy,sp,hm){
+  const w=p.weapon,col=hm?'#fff':(WEAPON_COL[w]||'#29f0ff');c.save();c.lineWidth=2;c.strokeStyle=col;c.fillStyle=col;
+  c.shadowColor=col;c.shadowBlur=6;c.beginPath();
+  if(w==='shotgun'){ // the pellet circle, ticked at the four sides
+    const rr=Math.max(Math.tan(SG_SPREAD)/Math.tan(.6)*H/2*(p.aiming?.6:1),sp+4);
+    c.arc(cx,cy,rr,0,Math.PI*2);for(const a of [0,1,2,3]){const ux=Math.cos(a*Math.PI/2),uy=Math.sin(a*Math.PI/2);c.moveTo(cx+ux*(rr-5),cy+uy*(rr-5));c.lineTo(cx+ux*(rr+5),cy+uy*(rr+5));}
+    c.stroke();c.fillRect(cx-1.5,cy-1.5,3,3);
+  }else if(w==='rifle'){ // four corner brackets and a fine centre cross
+    const r=sp+5,k=5;
+    for(const [sx,sy] of [[-1,-1],[1,-1],[1,1],[-1,1]]){c.moveTo(cx+sx*r,cy+sy*(r-k));c.lineTo(cx+sx*r,cy+sy*r);c.lineTo(cx+sx*(r-k),cy+sy*r);}
+    c.moveTo(cx-3,cy);c.lineTo(cx+3,cy);c.moveTo(cx,cy-3);c.lineTo(cx,cy+3);c.stroke();
+  }else if(w==='rocket'){ // a diamond with a drop mark below, and a pip for each rocket in the launcher
+    const r=sp+6;c.moveTo(cx,cy-r);c.lineTo(cx+r,cy);c.lineTo(cx,cy+r);c.lineTo(cx-r,cy);c.closePath();
+    c.moveTo(cx,cy+r+3);c.lineTo(cx,cy+r+10);c.moveTo(cx-4,cy+r+7);c.lineTo(cx+4,cy+r+7);c.stroke();c.fillRect(cx-1.5,cy-1.5,3,3);
+    const n=rMag(p),have=p.rockets||0;for(let i=0;i<n;i++){const x=cx+(i-(n-1)/2)*9;c.beginPath();c.arc(x,cy-r-8,2.6,0,Math.PI*2);if(i<have)c.fill();else{c.lineWidth=1;c.stroke();c.lineWidth=2;}}
+  }else{ // pistol: the classic four ticks and a dot
+    c.moveTo(cx-sp-6,cy);c.lineTo(cx-sp,cy);c.moveTo(cx+sp,cy);c.lineTo(cx+sp+6,cy);c.moveTo(cx,cy-sp-6);c.lineTo(cx,cy-sp);c.moveTo(cx,cy+sp);c.lineTo(cx,cy+sp+6);c.stroke();
+    c.fillRect(cx-1,cy-1,2,2);
+  }
+  c.restore();
+}
 function drawHUD(){
   const c=hctx,p=player;c.setTransform(DPR,0,0,DPR,0,0);c.clearRect(0,0,W,H);
   if(gameState==='menu')return;
@@ -296,10 +318,7 @@ function drawHUD(){
   feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+rows.length*18+i*16);});c.globalAlpha=1;}
   // crosshair
   const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
-  c.strokeStyle=hm?'#fff':'#29f0ff';c.lineWidth=2;c.beginPath();
-  c.moveTo(cx-sp-6,cy);c.lineTo(cx-sp,cy);c.moveTo(cx+sp,cy);c.lineTo(cx+sp+6,cy);c.moveTo(cx,cy-sp-6);c.lineTo(cx,cy-sp);c.moveTo(cx,cy+sp);c.lineTo(cx,cy+sp+6);c.stroke();
-  c.fillStyle='#29f0ff';c.fillRect(cx-1,cy-1,2,2);
-  if(p.weapon==='shotgun'){const rr=Math.tan(SG_SPREAD)/Math.tan(.6)*H/2;c.strokeStyle='rgba(255,138,42,.7)';c.beginPath();c.arc(cx,cy,rr,0,7);c.stroke();}
+  drawCrosshair(c,p,cx,cy,sp,hm);
   if(hm){c.strokeStyle='#ff3fa4';c.beginPath();c.moveTo(cx-5,cy-5);c.lineTo(cx+5,cy+5);c.moveTo(cx+5,cy-5);c.lineTo(cx-5,cy+5);c.stroke();}
   c.textAlign='center';
   if(!locked&&gameState==='play'&&!paused&&SETTINGS.input!=='gamepad'&&!world.demo){c.font='12px "Courier New",monospace';c.fillStyle='#889';c.fillText('click to capture the mouse',W/2,H-16);}

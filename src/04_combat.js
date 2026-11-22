@@ -8,7 +8,7 @@ const AIR_PUSH=2.6,GROUND_PUSH=.6,AIR_DMG=.3,FRAG_LIMIT=15;
 // rocket jumps: a blast at your feet always launches you; jumping just before it (within RJ_WINDOW) makes it cheap
 const RJ_WINDOW=.6,RJ_DMG_GROUND=60,RJ_DMG_PERFECT=18,RJ_DMG_AIR=21,RJ_VY_GROUND=760,RJ_VY_AIR=880,RJ_FLOAT=.75;
 // shotgun: found on the level, replaces the pistol until you die
-const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.11,SG_DMG=10,SG_RANGE=620;
+const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.095,SG_DMG=10,SG_RANGE=840;
 // assault rifle: found on the level like the shotgun; full auto, 30 rounds
 const AR_MAG=30,AR_RELOAD=2.3,AR_CD=.095,AR_DMG=13,AR_HEAD=24;
 const magOf=e=>e.weapon==='shotgun'?SG_MAG:e.weapon==='rifle'?AR_MAG:MAG,reloadOf=e=>e.weapon==='shotgun'?SG_RELOAD:e.weapon==='rifle'?AR_RELOAD:RELOAD;

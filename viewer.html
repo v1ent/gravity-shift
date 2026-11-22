@@ -212,7 +212,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <tr><td>SHIFT</td><td>Sprint (stamina) · vaults low walls and boxes (or climbs onto long ones) · you can shoot on the run (but not while aiming)</td></tr>
 <tr><td>SPACE</td><td>Jump · from a sprint it's a hands-first dive · hold to reach for ledges</td></tr>
 <tr><td>C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them; slide over pickups to grab them)</td></tr>
-<tr><td>C at low cover</td><td>Facing a low wall or box: take cover — you stay down until you press C again or walk away · hold right mouse to rise and shoot, let go to duck</td></tr>
+<tr><td>C at low cover</td><td>Facing a low wall or box (or sliding into one): take cover — you stay down until you press C again or walk away · hold right mouse to rise and shoot, let go to duck</td></tr>
 <tr><td>LMB</td><td>Fire the selected weapon</td></tr>
 <tr><td>RMB (hold)</td><td>Aim: the view zooms, shots are tighter, you walk instead of running</td></tr>
 <tr><td>MMB</td><td>Fire a rocket from the wrist <b style="color:#ff5a3c">launcher</b>, whatever is in your hands (the standard one holds one rocket and recharges by itself)</td></tr>
@@ -1018,7 +1018,7 @@ function buildDecoMesh(){
 // =====================================================================
 const G=1500,WALK=95,RUN=215,JUMPV=410,RUNJUMPV=470,MAXFALL=950; // standing jump ~1.7 blocks, running ~2.3: higher walls need a ledge grab
 const STAND_H=62,BODY_W=23,CHAR_SCALE=64/56; // fighters are ~2 m: 62 px hitbox, model drawn 64 px tall
-const CROUCH_SPD=48,CROUCH_H=41,SLIDE_H=30,SLIDE_DUR=.7,SLIDE_FRIC=280,STAM_DRAIN=1/7.2,STAM_REGEN=1/3.5,STEALTH_T=1.6;
+const CROUCH_SPD=48,CROUCH_H=41,SLIDE_H=30,SLIDE_DUR=1.05,SLIDE_FRIC=190,STAM_DRAIN=1/7.2,STAM_REGEN=1/3.5,STEALTH_T=1.6;
 const STEALTH_ON=false; // cloaking is switched off for now (players and bots)
 const HARD_FALL=10*T,GETUP_DUR=.8,KICK_DUR=.6,KICK_HIT=.42,KICK_DMG=15,KICK_PUSH=560;
 const MAG=10,RELOAD=2,FIRE_CD=.42,BULLET_SPEED=1300,PISTOL_SPEED=3900,DMG=25,HEAD_DMG=45;
@@ -1365,7 +1365,7 @@ function updateChar(e,dt){
     }
     // step up single blocks while walking; vault 2-block obstacles while sprinting
     if(e.state==='normal'&&e.grounded&&moving&&(e.hitX||e.hitZ||Math.hypot(e.vx,e.vz)<30)){
-      const d=cardOf(mx,mz);let ob=ctrl&&c.noVault?null:lowObstacle(e,d,e.sprinting);
+      const d=cardOf(mx,mz);let ob=(ctrl&&c.noVault)||(e.cover&&d[0]===e.cover.d[0]&&d[1]===e.cover.d[1])?null:lowObstacle(e,d,e.sprinting); // pushing into your cover doesn't climb it (jump does)
       if(ob&&(ob.h===1||e.sprinting)){
         const speed=ob.h===2||ob.over;
         e.state='climbup';e.st={t:0,s0:V(e.x,e.y,e.z),s1:ob.stand,ly:ob.ly,d,vault:true,speed:true,over:ob.over,face:ob.face,vclip:ob.over?pickVault():null,dur:ob.over?.44:ob.h===1?.22:.34,exitV:e.sprinting?RUN:WALK};if(e.st.vclip)e.st.dur=VAULT_CLIPS[e.st.vclip].dur;
@@ -1441,6 +1441,8 @@ function updateChar(e,dt){
     if(rnd()<dt*30)addPart(e.x,e.y+2,e.z,-e.vx*.3+(rnd()-.5)*40,rnd()*40,-e.vz*.3+(rnd()-.5)*40,.35,[.48,.52,.63],4,'dust');
     const fw=V(Math.sin(s.yaw),0,Math.cos(s.yaw));
     let hit=meleeHit(e,fw,e.w/2+18,32,s.hitSet);
+    // sliding up to a cover-height box: stop against it (don't kick it away) and take cover
+    if(!hit&&!e.isBot){const cv=coverIn(e,cardOf(fw.x,fw.z),5);if(cv&&cv.kind==='box'){e.vx=e.vz=0;hit=true;}}
     if(e.hitX||e.hitZ){
       const d=cardOf(fw.x,fw.z);
       const ks=(world.rotCD<=0&&!world.rot&&!world.pendingRot)?kickableSide(e,d):null;
@@ -1559,10 +1561,17 @@ function reveal(e){
 function startSlide(e){
   const yaw=yawOf(e.vx,e.vz);
   e.state='slide';e.st={t:0,yaw,hitSet:new Set()};e.bodyYaw=e.legYaw=yaw;e.h=SLIDE_H;e.crouch=false;
-  const sp=Math.max(Math.hypot(e.vx,e.vz),RUN)*1.18;e.vx=Math.sin(yaw)*sp;e.vz=Math.cos(yaw)*sp;e.stam=Math.max(0,e.stam-.15);e.poseBlend=.5;
+  const sp=Math.max(Math.hypot(e.vx,e.vz),RUN)*1.25;e.vx=Math.sin(yaw)*sp;e.vz=Math.cos(yaw)*sp;e.stam=Math.max(0,e.stam-.15);e.poseBlend=.5;
   sfx('whoosh',e);
 }
-function endSlide(e){e.state='normal';e.poseBlend=.5;if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.h=STAND_H;e.crouch=false;}else{e.h=CROUCH_H;e.crouch=true;}}
+function endSlide(e){
+  const yaw=e.st&&e.st.yaw!==undefined?e.st.yaw:e.bodyYaw;
+  e.state='normal';e.poseBlend=.5;
+  // a slide that ends against low cover (a wall or a box) drops you straight into cover, facing it
+  if(!e.isBot&&e.grounded){const d=cardOf(Math.sin(yaw),Math.cos(yaw)),cv=coverIn(e,d,18);
+    if(cv){e.cover={d,lost:0,t:world.time};e.crouch=true;e.h=COVER_H;e.cdeep=Math.max(e.cdeep||0,11);e.vx=e.vz=0;return;}}
+  if(!overlapSolid(e.x,e.y,e.z,e.w,STAND_H)){e.h=STAND_H;e.crouch=false;}else{e.h=CROUCH_H;e.crouch=true;}
+}
 function enterDown(e,sev){
   e.state='down';
   const fwd=e.vx*Math.sin(e.bodyYaw)+e.vz*Math.cos(e.bodyYaw);
@@ -1587,6 +1596,7 @@ function meleeHit(e,fw,reach,height,already){
   for(const b of props){
     if(b.dead||(already&&already.has(b)))continue;
     if(PICKUP_GLOW[b.kind]||(b.kind==='medkit'&&e.state==='slide'))continue; // weapons aren't kicked away, and a slide collects a medkit
+    if(e.state==='slide'&&!e.isBot&&b.grounded&&b.y<=e.y+8&&b.y+b.h-e.y>=24&&b.y+b.h-e.y<=54)continue; // a player sliding into cover-height boxes takes cover behind them instead
     if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
       if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
       if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),.5);
@@ -2099,7 +2109,7 @@ const AIR_PUSH=2.6,GROUND_PUSH=.6,AIR_DMG=.3,FRAG_LIMIT=15;
 // rocket jumps: a blast at your feet always launches you; jumping just before it (within RJ_WINDOW) makes it cheap
 const RJ_WINDOW=.6,RJ_DMG_GROUND=60,RJ_DMG_PERFECT=18,RJ_DMG_AIR=21,RJ_VY_GROUND=760,RJ_VY_AIR=880,RJ_FLOAT=.75;
 // shotgun: found on the level, replaces the pistol until you die
-const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.11,SG_DMG=10,SG_RANGE=620;
+const SG_MAG=6,SG_RELOAD=2.6,SG_CD=.95,SG_PELLETS=9,SG_SPREAD=.095,SG_DMG=10,SG_RANGE=840;
 // assault rifle: found on the level like the shotgun; full auto, 30 rounds
 const AR_MAG=30,AR_RELOAD=2.3,AR_CD=.095,AR_DMG=13,AR_HEAD=24;
 const magOf=e=>e.weapon==='shotgun'?SG_MAG:e.weapon==='rifle'?AR_MAG:MAG,reloadOf=e=>e.weapon==='shotgun'?SG_RELOAD:e.weapon==='rifle'?AR_RELOAD:RELOAD;
@@ -3800,6 +3810,28 @@ function render(){
   drawParticles(alpha,false);drawParticles(add,true);
   drawHUD();drawFPS(hctx);
 }
+// a crosshair per weapon, in that weapon's colour, so you can tell at a glance what's in your hands
+function drawCrosshair(c,p,cx,cy,sp,hm){
+  const w=p.weapon,col=hm?'#fff':(WEAPON_COL[w]||'#29f0ff');c.save();c.lineWidth=2;c.strokeStyle=col;c.fillStyle=col;
+  c.shadowColor=col;c.shadowBlur=6;c.beginPath();
+  if(w==='shotgun'){ // the pellet circle, ticked at the four sides
+    const rr=Math.max(Math.tan(SG_SPREAD)/Math.tan(.6)*H/2*(p.aiming?.6:1),sp+4);
+    c.arc(cx,cy,rr,0,Math.PI*2);for(const a of [0,1,2,3]){const ux=Math.cos(a*Math.PI/2),uy=Math.sin(a*Math.PI/2);c.moveTo(cx+ux*(rr-5),cy+uy*(rr-5));c.lineTo(cx+ux*(rr+5),cy+uy*(rr+5));}
+    c.stroke();c.fillRect(cx-1.5,cy-1.5,3,3);
+  }else if(w==='rifle'){ // four corner brackets and a fine centre cross
+    const r=sp+5,k=5;
+    for(const [sx,sy] of [[-1,-1],[1,-1],[1,1],[-1,1]]){c.moveTo(cx+sx*r,cy+sy*(r-k));c.lineTo(cx+sx*r,cy+sy*r);c.lineTo(cx+sx*(r-k),cy+sy*r);}
+    c.moveTo(cx-3,cy);c.lineTo(cx+3,cy);c.moveTo(cx,cy-3);c.lineTo(cx,cy+3);c.stroke();
+  }else if(w==='rocket'){ // a diamond with a drop mark below, and a pip for each rocket in the launcher
+    const r=sp+6;c.moveTo(cx,cy-r);c.lineTo(cx+r,cy);c.lineTo(cx,cy+r);c.lineTo(cx-r,cy);c.closePath();
+    c.moveTo(cx,cy+r+3);c.lineTo(cx,cy+r+10);c.moveTo(cx-4,cy+r+7);c.lineTo(cx+4,cy+r+7);c.stroke();c.fillRect(cx-1.5,cy-1.5,3,3);
+    const n=rMag(p),have=p.rockets||0;for(let i=0;i<n;i++){const x=cx+(i-(n-1)/2)*9;c.beginPath();c.arc(x,cy-r-8,2.6,0,Math.PI*2);if(i<have)c.fill();else{c.lineWidth=1;c.stroke();c.lineWidth=2;}}
+  }else{ // pistol: the classic four ticks and a dot
+    c.moveTo(cx-sp-6,cy);c.lineTo(cx-sp,cy);c.moveTo(cx+sp,cy);c.lineTo(cx+sp+6,cy);c.moveTo(cx,cy-sp-6);c.lineTo(cx,cy-sp);c.moveTo(cx,cy+sp);c.lineTo(cx,cy+sp+6);c.stroke();
+    c.fillRect(cx-1,cy-1,2,2);
+  }
+  c.restore();
+}
 function drawHUD(){
   const c=hctx,p=player;c.setTransform(DPR,0,0,DPR,0,0);c.clearRect(0,0,W,H);
   if(gameState==='menu')return;
@@ -3850,10 +3882,7 @@ function drawHUD(){
   feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+rows.length*18+i*16);});c.globalAlpha=1;}
   // crosshair
   const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
-  c.strokeStyle=hm?'#fff':'#29f0ff';c.lineWidth=2;c.beginPath();
-  c.moveTo(cx-sp-6,cy);c.lineTo(cx-sp,cy);c.moveTo(cx+sp,cy);c.lineTo(cx+sp+6,cy);c.moveTo(cx,cy-sp-6);c.lineTo(cx,cy-sp);c.moveTo(cx,cy+sp);c.lineTo(cx,cy+sp+6);c.stroke();
-  c.fillStyle='#29f0ff';c.fillRect(cx-1,cy-1,2,2);
-  if(p.weapon==='shotgun'){const rr=Math.tan(SG_SPREAD)/Math.tan(.6)*H/2;c.strokeStyle='rgba(255,138,42,.7)';c.beginPath();c.arc(cx,cy,rr,0,7);c.stroke();}
+  drawCrosshair(c,p,cx,cy,sp,hm);
   if(hm){c.strokeStyle='#ff3fa4';c.beginPath();c.moveTo(cx-5,cy-5);c.lineTo(cx+5,cy+5);c.moveTo(cx+5,cy-5);c.lineTo(cx-5,cy+5);c.stroke();}
   c.textAlign='center';
   if(!locked&&gameState==='play'&&!paused&&SETTINGS.input!=='gamepad'&&!world.demo){c.font='12px "Courier New",monospace';c.fillStyle='#889';c.fillText('click to capture the mouse',W/2,H-16);}
