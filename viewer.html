@@ -3211,7 +3211,8 @@ function updateEmote(e,c,ctrl,dt){
   m.t+=dt;
   if(e.state!=='normal'){e.emote=null;return;}
   if(m.kind==='wave'){
-    const busy=ctrl&&(Math.hypot(c.mx,c.mz)>.2||c.fire||c.alt||c.jump||c.kick||c.dodge);
+    // a player calls the wave off by doing something else; a bot's wave runs its course (its AI ends it if it must)
+    const busy=ctrl&&!e.isBot&&(Math.hypot(c.mx,c.mz)>.2||c.fire||c.alt||c.jump||c.kick||c.dodge);
     if(busy||m.t>WAVE_T){e.emote=null;return;}
   }else{ // bowing: locked in place, facing the partner
     const p=m.partner;
@@ -3233,7 +3234,8 @@ function botDiplomacy(b,ai,dt,see,t){
     // gave up, got shot by them, or it's no longer possible
     // the one you're offering to waves first: just answer it
     if(d.role==='offer'&&o.emote&&o.emote.kind==='wave'&&!(b.emote&&b.emote.kind==='wave')&&canAlly(o,b)){d.role='accept';d.until=world.time+WAVE_T+1.5;}
-    if(!o.alive||world.time>d.until||(b.lastHit===o&&world.time-b.lastHitT<.5&&!b.emote)||!canAlly(o,b)&&!(b.emote&&b.emote.kind==='bow')){ai.dip=null;ai.dipCD=8+rnd()*6;return null;}
+    const shotByThem=b.lastHit===o&&world.time-b.lastHitT<.5&&!(b.emote&&b.emote.kind==='bow');
+    if(!o.alive||world.time>d.until||shotByThem||!canAlly(o,b)&&!(b.emote&&b.emote.kind==='bow')){if(b.emote&&b.emote.kind==='wave')b.emote=null;ai.dip=null;ai.dipCD=8+rnd()*6;return null;}
     if(b.emote&&b.emote.kind==='bow')return {stay:true};
     let goal;
     if(d.role==='accept'){
@@ -3245,9 +3247,9 @@ function botDiplomacy(b,ai,dt,see,t){
     }else{ // offering: walk up to them, then wave and wait
       goal=V(o.x,o.y,o.z);
       if(b.emote&&b.emote.kind==='wave')return {stay:true,face:o};
-      if(d.waved){ai.dip=null;ai.dipCD=10+rnd()*8;return null;} // waved, nobody answered
+      if(d.waved){ai.dip=null;ai.dipCD=10+rnd()*8;ai.holdFire=world.time+1;return null;} // waved, nobody answered (a beat before it turns hostile again)
       const dd=Math.hypot(o.x-b.x,o.z-b.z);if(dd>220)return {path:o};
-      if(dd<260&&losClear(headPos(b),headPos(o))){if(Math.abs(angDiff(Math.atan2(o.x-b.x,o.z-b.z),b.bodyYaw))<.5){c.wave=true;d.waved=true;}return {stay:true,face:o};}
+      if(dd<260&&losClear(headPos(b),headPos(o))){if(Math.abs(angDiff(Math.atan2(o.x-b.x,o.z-b.z),b.bodyYaw))<.5&&Math.hypot(b.vx,b.vz)<25){c.wave=true;d.waved=true;d.until=world.time+WAVE_T+1;}return {stay:true,face:o};} // the answer window starts when it actually waves
     }
     return {goal,face:o};
   }
@@ -3440,7 +3442,9 @@ function botThink(b,dt){
   const loose=b.weapon==='shotgun'?.16:b.weapon==='rifle'?.12:.09;
   const onTarget=Math.abs(angDiff(ty,ai.yaw))<loose&&Math.abs(tp-ai.pitch)<loose+.03;
   const range=b.weapon==='shotgun'?560:1100;
-  if(see&&t&&ai.acquire<=0&&onTarget&&dist<range){
+  // waving / bowing, waiting for an answer to its offer, or just turned down: no shooting at them
+  const peaceful=!!b.emote||(ai.holdFire||0)>world.time||(ai.dip&&t===ai.dip.target);
+  if(see&&t&&ai.acquire<=0&&onTarget&&dist<range&&!peaceful){
     if(wantRocket&&b.rfireCD<=0){c.rocketClick=true;ai.rocketT=(3+rnd()*4)/BOT_CFG.rocket;}
     else if(ai.pause>0)ai.pause-=dt;
     else{c.fire=true;ai.burst+=dt;if(ai.burst>(.9+rnd()*.7)*BOT_CFG.burst){ai.burst=0;ai.pause=(.6+rnd()*.6)*BOT_CFG.pause;}}
@@ -3545,7 +3549,7 @@ function botThink(b,dt){
    ai.mvx=(ai.mvx||0)+(dx-(ai.mvx||0))*k;ai.mvz=(ai.mvz||0)+(dz-(ai.mvz||0))*k;
    c.mx=ai.mvx;c.mz=ai.mvz;}
   // kick the world
-  if(t&&see&&b.state==='normal'&&b.kickCD<=0&&Math.hypot(t.x-b.x,t.z-b.z)<44&&Math.abs(t.y-b.y)<40&&rnd()<dt*4){c.kick=true;}
+  if(t&&see&&!peaceful&&b.state==='normal'&&b.kickCD<=0&&Math.hypot(t.x-b.x,t.z-b.z)<44&&Math.abs(t.y-b.y)<40&&rnd()<dt*4){c.kick=true;}
   if((b.grounded||b.wasBox)&&world.rotCD<=0&&!world.rot&&b.kickPrompt&&(ai.kickGoal||rnd()<dt*.9)){c.kick=true;ai.kickGoal=null;}
   if(ai.hold>0){ai.hold-=dt;c.jumpHeld=true;}else c.jumpHeld=false;
   if(!c.grab)c.noGrab=true; // bots only reach for a ledge when their route jumps to one

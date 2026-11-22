@@ -168,7 +168,9 @@ function botThink(b,dt){
   const loose=b.weapon==='shotgun'?.16:b.weapon==='rifle'?.12:.09;
   const onTarget=Math.abs(angDiff(ty,ai.yaw))<loose&&Math.abs(tp-ai.pitch)<loose+.03;
   const range=b.weapon==='shotgun'?560:1100;
-  if(see&&t&&ai.acquire<=0&&onTarget&&dist<range){
+  // waving / bowing, waiting for an answer to its offer, or just turned down: no shooting at them
+  const peaceful=!!b.emote||(ai.holdFire||0)>world.time||(ai.dip&&t===ai.dip.target);
+  if(see&&t&&ai.acquire<=0&&onTarget&&dist<range&&!peaceful){
     if(wantRocket&&b.rfireCD<=0){c.rocketClick=true;ai.rocketT=(3+rnd()*4)/BOT_CFG.rocket;}
     else if(ai.pause>0)ai.pause-=dt;
     else{c.fire=true;ai.burst+=dt;if(ai.burst>(.9+rnd()*.7)*BOT_CFG.burst){ai.burst=0;ai.pause=(.6+rnd()*.6)*BOT_CFG.pause;}}
@@ -273,7 +275,7 @@ function botThink(b,dt){
    ai.mvx=(ai.mvx||0)+(dx-(ai.mvx||0))*k;ai.mvz=(ai.mvz||0)+(dz-(ai.mvz||0))*k;
    c.mx=ai.mvx;c.mz=ai.mvz;}
   // kick the world
-  if(t&&see&&b.state==='normal'&&b.kickCD<=0&&Math.hypot(t.x-b.x,t.z-b.z)<44&&Math.abs(t.y-b.y)<40&&rnd()<dt*4){c.kick=true;}
+  if(t&&see&&!peaceful&&b.state==='normal'&&b.kickCD<=0&&Math.hypot(t.x-b.x,t.z-b.z)<44&&Math.abs(t.y-b.y)<40&&rnd()<dt*4){c.kick=true;}
   if((b.grounded||b.wasBox)&&world.rotCD<=0&&!world.rot&&b.kickPrompt&&(ai.kickGoal||rnd()<dt*.9)){c.kick=true;ai.kickGoal=null;}
   if(ai.hold>0){ai.hold-=dt;c.jumpHeld=true;}else c.jumpHeld=false;
   if(!c.grab)c.noGrab=true; // bots only reach for a ledge when their route jumps to one

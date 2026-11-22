@@ -63,7 +63,8 @@ function updateEmote(e,c,ctrl,dt){
   m.t+=dt;
   if(e.state!=='normal'){e.emote=null;return;}
   if(m.kind==='wave'){
-    const busy=ctrl&&(Math.hypot(c.mx,c.mz)>.2||c.fire||c.alt||c.jump||c.kick||c.dodge);
+    // a player calls the wave off by doing something else; a bot's wave runs its course (its AI ends it if it must)
+    const busy=ctrl&&!e.isBot&&(Math.hypot(c.mx,c.mz)>.2||c.fire||c.alt||c.jump||c.kick||c.dodge);
     if(busy||m.t>WAVE_T){e.emote=null;return;}
   }else{ // bowing: locked in place, facing the partner
     const p=m.partner;
@@ -85,7 +86,8 @@ function botDiplomacy(b,ai,dt,see,t){
     // gave up, got shot by them, or it's no longer possible
     // the one you're offering to waves first: just answer it
     if(d.role==='offer'&&o.emote&&o.emote.kind==='wave'&&!(b.emote&&b.emote.kind==='wave')&&canAlly(o,b)){d.role='accept';d.until=world.time+WAVE_T+1.5;}
-    if(!o.alive||world.time>d.until||(b.lastHit===o&&world.time-b.lastHitT<.5&&!b.emote)||!canAlly(o,b)&&!(b.emote&&b.emote.kind==='bow')){ai.dip=null;ai.dipCD=8+rnd()*6;return null;}
+    const shotByThem=b.lastHit===o&&world.time-b.lastHitT<.5&&!(b.emote&&b.emote.kind==='bow');
+    if(!o.alive||world.time>d.until||shotByThem||!canAlly(o,b)&&!(b.emote&&b.emote.kind==='bow')){if(b.emote&&b.emote.kind==='wave')b.emote=null;ai.dip=null;ai.dipCD=8+rnd()*6;return null;}
     if(b.emote&&b.emote.kind==='bow')return {stay:true};
     let goal;
     if(d.role==='accept'){
@@ -97,9 +99,9 @@ function botDiplomacy(b,ai,dt,see,t){
     }else{ // offering: walk up to them, then wave and wait
       goal=V(o.x,o.y,o.z);
       if(b.emote&&b.emote.kind==='wave')return {stay:true,face:o};
-      if(d.waved){ai.dip=null;ai.dipCD=10+rnd()*8;return null;} // waved, nobody answered
+      if(d.waved){ai.dip=null;ai.dipCD=10+rnd()*8;ai.holdFire=world.time+1;return null;} // waved, nobody answered (a beat before it turns hostile again)
       const dd=Math.hypot(o.x-b.x,o.z-b.z);if(dd>220)return {path:o};
-      if(dd<260&&losClear(headPos(b),headPos(o))){if(Math.abs(angDiff(Math.atan2(o.x-b.x,o.z-b.z),b.bodyYaw))<.5){c.wave=true;d.waved=true;}return {stay:true,face:o};}
+      if(dd<260&&losClear(headPos(b),headPos(o))){if(Math.abs(angDiff(Math.atan2(o.x-b.x,o.z-b.z),b.bodyYaw))<.5&&Math.hypot(b.vx,b.vz)<25){c.wave=true;d.waved=true;d.until=world.time+WAVE_T+1;}return {stay:true,face:o};} // the answer window starts when it actually waves
     }
     return {goal,face:o};
   }
