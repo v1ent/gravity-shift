@@ -3695,9 +3695,9 @@ const dblTap={};
 // ---------- camera ----------
 function updateCamera(){
   // demo: the camera looks where the followed bot looks
-  if(world.demo&&player){cam.yaw+=angDiff(player.yaw,cam.yaw)*.12;cam.pitch+=(clamp((player.pitch||0)*.6-.12,-.8,.6)-cam.pitch)*.08;}
+  if(world.demo&&player){cam.yaw+=angDiff(player.yaw,cam.yaw)*perFrame(.12);cam.pitch+=(clamp((player.pitch||0)*.6-.12,-.8,.6)-cam.pitch)*perFrame(.08);}
   // aiming zooms in a little (and slows the mouse to match)
-  {const p=player,z=p&&p.alive&&p.aiming?.72:1;cam.zoom=(cam.zoom||1)+(z-(cam.zoom||1))*.18;}
+  {const p=player,z=p&&p.alive&&p.aiming?.72:1;cam.zoom=(cam.zoom||1)+(z-(cam.zoom||1))*perFrame(.18);}
   const p=player;
   const crouchDrop=p.alive?(STAND_H-p.h)*.6:0;
   const head=V(p.x,p.y+57-crouchDrop+(p.stepOff||0),p.z);
@@ -3889,7 +3889,7 @@ function drawHUD(){
   if(!p.alive&&gameState==='play'){c.font='bold 26px "Courier New",monospace';c.fillStyle='#ff3f5a';c.fillText('SIGNAL LOST',W/2,H/2-40);c.font='14px "Courier New",monospace';c.fillStyle='#aab';c.fillText(`re-deploying in ${Math.max(0,p.respawn).toFixed(1)}s`,W/2,H/2-18);}
   // bowing: the rest of the screen dims, a soft spotlight on the two of you
   {const m=p.alive&&p.emote&&p.emote.kind==='bow'?p.emote:null;
-   world.bowDim=approach(world.bowDim||0,m?1:0,1/60*(m?2.5:4));
+   world.bowDim=approach(world.bowDim||0,m?1:0,frameDt*(m?2.5:4));
    if(world.bowDim>.01){const q=m&&m.partner?m.partner:p,mid=V((p.x+q.x)/2,(p.y+q.y)/2+40,(p.z+q.z)/2),s=project(mid);
      const cx=s&&s.x!==undefined?s.x:W/2,cy=s&&s.y!==undefined?s.y:H/2,r0=Math.min(W,H)*.16,r1=Math.min(W,H)*.62;
      const g=c.createRadialGradient(cx,cy,r0,cx,cy,r1);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,`rgba(0,0,6,${.62*world.bowDim})`);
@@ -3897,7 +3897,7 @@ function drawHUD(){
   // demo banner
   if(world.demo){c.font='bold 13px "Courier New",monospace';c.textAlign='center';c.fillStyle='rgba(5,6,14,.65)';c.fillRect(W/2-300,52,600,24);
     c.fillStyle=p.color;c.fillText(`DEMO · following ${p.name} · A / D or click to switch · ESC for the menu`,W/2,69);
-    if(gameState==='over'){world.demoT=(world.demoT||0)+1/60;if(world.demoT>7)newMatch((SETTINGS.seed||'').trim()||undefined,{demo:true});}}
+    if(gameState==='over'){world.demoT=(world.demoT||0)+frameDt;if(world.demoT>7)newMatch((SETTINGS.seed||'').trim()||undefined,{demo:true});}}
   // cover
   if(p.alive&&gameState==='play'&&!world.demo&&p.state==='normal'){
     const pad=SETTINGS.input==='gamepad';let tip=null,col='#9fe8ff';
@@ -3984,8 +3984,11 @@ function newMatch(seed,opt){
 
 // ---------- loop ----------
 let last=performance.now(),acc=0;const STEP=1/120;
+// real seconds since the last screen frame, for anything smoothed per frame (so it behaves the same at 30, 60 or 144 Hz)
+let frameDt=1/60;const perFrame=f=>1-Math.pow(1-f,frameDt*60);
 function frame(now){
-  let dt=Math.min(.05,(now-last)/1000);last=now;
+  // game time keeps pace with real time down to 10 fps (below that it slows rather than take huge leaps)
+  let dt=Math.min(.1,(now-last)/1000);last=now;frameDt=dt;
   fpsTick(now);
   if(window.VIEWER){if(R.ok)viewerFrame(dt);requestAnimationFrame(frame);return;} // the motion viewer (viewer.html) runs its own loop
   pollPad(dt);
