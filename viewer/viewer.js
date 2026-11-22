@@ -55,7 +55,7 @@ function viewerList(){
   }
 }
 function selectItem(key){
-  VW.item=key;VW.t=0;VW.playing=true;VW.e=null;chars=[];
+  VW.item=key;VW.t=0;VW.playing=true;VW.e=null;chars=[];gibs=[];parts=[];corpses=[];dolls=[]; // nothing left over from the last item (dropped magazines, shells…)
   const [kind,name]=key.split(/:(.*)/s);
   VQ('vclipopts').style.display=kind==='clip'?'':'none';
   if(kind==='pose')setupPose(GAME_POSES[name]);
@@ -88,6 +88,7 @@ function stepPose(dt){
   VW.pf++;
   e.hp=100;world.time+=dt;
   updateChar(e,dt);updatePose(e,dt);
+  updateGibs(dt);updateParts(dt); // dropped magazines, shells and sparks fall and settle as in the game
   e.x=clamp(e.x,VW.o.x-8*T,VW.o.x+8*T);e.z=clamp(e.z,VW.o.z-8*T,VW.o.z+8*T);
 }
 
@@ -150,7 +151,7 @@ function syncControls(){
 }
 function viewerUI(){
   for(const b of document.querySelectorAll('#vmodel button'))b.onclick=()=>{VW.model=b.dataset.m;VW.item=null;VW.e=null;chars=[];
-    VW.tgt=V(VW.o.x,VW.o.y+(VW.model==='char'?30:8),VW.o.z);VW.dist=VW.model==='char'?150:90;
+    VW.tgt=V(VW.o.x,VW.o.y+(VW.model==='char'?30:8),VW.o.z);VW.dist=VW.model==='char'?150:90;gibs=[];parts=[];
     selectItem(VW.model==='char'?((SKN.ready&&SKN.clips)?'clip:'+Object.keys(SKN.clips).sort()[0]:null):'spider:Walk');};
   for(const b of document.querySelectorAll('#vspeed button'))b.onclick=()=>{VW.speed=+b.dataset.s;syncControls();};
   for(const b of document.querySelectorAll('#vroot button'))b.onclick=()=>{VW.root=b.dataset.r;VW.tgt=V(VW.o.x,VW.o.y+30,VW.o.z);syncControls();};
