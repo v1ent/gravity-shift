@@ -58,9 +58,52 @@ function updateParts(dt){
 // ---------- audio ----------
 let AC=null,noiseBuf=null,master=null;
 function initAudio(){try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=.5*SETTINGS.fx/100;master.connect(AC.destination);
-  noiseBuf=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;}catch(e){AC=null;}}
+  noiseBuf=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;loadSamples();}catch(e){AC=null;}}
+// ---------- recorded sounds (src/04e_sound_data.js): decoded once the audio context exists ----------
+// files named name_00, name_01… form a group that is picked from at random
+const SNDG={};let sndLoad=false;
+function loadSamples(){
+  if(sndLoad||!AC||typeof SND_B64==='undefined')return;sndLoad=true;
+  for(const [n,b] of Object.entries(SND_B64)){
+    const bin=atob(b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+    const g=n.replace(/_\d+$/,'');
+    AC.decodeAudioData(u.buffer).then(buf=>{(SNDG[g]||(SNDG[g]=[])).push(buf);}).catch(()=>{});
+  }
+}
+function playS(g,at,o){
+  const l=SNDG[g];if(!AC||!l||!l.length)return false;o=o||{};
+  let vol=o.vol===undefined?1:o.vol,pan=0;
+  if(at&&player&&at!==player){const d=Math.hypot(at.x-player.x,at.y-player.y,at.z-player.z);vol*=clamp(1-d/(o.range||1300),0,1);if(vol<.02)return true;
+    if(cam.pos&&cam.fwd){const v=vsub(V(at.x,at.y,at.z),cam.pos),L=vlen(v)||1,r=V(-cam.fwd.z,0,cam.fwd.x),rl=vlen(r)||1;pan=clamp((v.x*r.x+v.z*r.z)/(L*rl),-1,1)*.8;}}
+  const s=AC.createBufferSource();s.buffer=l[Math.random()*l.length|0];
+  s.playbackRate.value=(o.rate||1)*(1+(Math.random()-.5)*(o.jit===undefined?.06:o.jit));
+  const g2=AC.createGain();g2.gain.value=vol;let out=g2;
+  if(pan&&AC.createStereoPanner){const p=AC.createStereoPanner();p.pan.value=pan;g2.connect(p);out=p;}
+  s.connect(g2);out.connect(master);s.start();return true;
+}
+// game events that have a recording; anything else (or before the recordings are decoded) uses the synthesised sound
+function sfxSample(kind,at){
+  const me=at===player;
+  switch(kind){
+    case 'shot':return playS(me?'pistol_player_shot':'pistol_enemy_shot',at,{vol:me?.75:.85});
+    case 'rocket':return playS('launcher_shot',at,{vol:.9});
+    case 'boom':return playS('launcher_impact',at,{vol:1,range:1800,jit:.1});
+    case 'land':return playS('land',at,{vol:me?.55:.7,range:900});
+    case 'crate':return playS('box_collide',at,{vol:.8,range:1000,jit:.15});
+    case 'boxkick':return playS('box_kick',at,{vol:.85});
+    case 'jump':return playS('jump',at,{vol:me?.45:.55,range:900});
+    case 'step':return playS('footstep',at,{vol:me?.28:.4,range:650,jit:.12});
+    case 'flyby':return playS('bullet_flyby',at,{vol:.75,range:400});
+    case 'hurt':return playS('player_taking_damage',null,{vol:.75});
+    case 'die':return me?playS('player_death',null,{vol:.9}):false;
+    case 'killed':return playS('enemy_killed',null,{vol:.8,jit:0});
+    case 'respawn':return playS('player_respawn',null,{vol:.7,jit:0});
+    case 'ui':return playS('ui_button_press',null,{vol:.55,jit:.04});
+  }
+  return false;
+}
 function sfx(kind,at){
-  if(!AC)return;let vol=1;
+  if(!AC)return;if(sfxSample(kind,at))return;let vol=1;
   if(at&&player){const d=Math.hypot(at.x-player.x,at.y-player.y,at.z-player.z);vol=clamp(1-d/1300,.06,1);}
   const t=AC.currentTime,g=AC.createGain();g.connect(master);
   const noise=(dur,f,q,type)=>{const s=AC.createBufferSource();s.buffer=noiseBuf;const fl=AC.createBiquadFilter();fl.type=type||'bandpass';fl.frequency.value=f;fl.Q.value=q||1;s.connect(fl);fl.connect(g);s.start(t,Math.random()*.5,dur);};
@@ -96,6 +139,7 @@ function damage(e,amt,src,dir){
   if(!e.alive||e.invuln>0||amt<=0)return;
   if(TUT.on&&TUT.cfg&&TUT.cfg.noDeath&&e===player)amt=Math.min(amt,e.hp-1);
   e.hp-=amt;e.flinch=1;reveal(e);
+  if(e===player&&!world.demo&&world.time-(e.hurtSndT||-9)>.3){e.hurtSndT=world.time;sfx('hurt');}
   if(src&&src!==e){e.lastHit=src;e.lastHitT=world.time;e.hitFrom={p:V(src.x,src.y,src.z),t:world.time};}
   if(e.hp<=0)kill(e,src,dir);
 }
@@ -105,7 +149,7 @@ function kill(e,src,dir){
   if((!killer||killer===e)&&e.lastHit&&world.time-e.lastHitT<5)killer=e.lastHit;
   if(killer&&killer.isSpider){feed.unshift({t:4,text:`SPIDER ✕ ${e.name}`,color:'#e8ecf2'});}
   else if(killer&&killer!==e&&allied(killer,e)){killer.kills=Math.max(0,killer.kills-1);feed.unshift({t:4,text:`${killer.name} ✕ ${e.name}  TEAMKILL`,color:'#ff3f5a'});}
-  else if(killer&&killer!==e){killer.kills++;feed.unshift({t:4,text:`${killer.name} ⌁ ${e.name}`,color:killer.color});}
+  else if(killer&&killer!==e){killer.kills++;if(killer===player&&!world.demo)sfx('killed');feed.unshift({t:4,text:`${killer.name} ⌁ ${e.name}`,color:killer.color});}
   else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,text:`${e.name} ✕ self-destructed`,color:'#888'});}
   // the special weapon in their hands stays where they fell
   {const dk=e.weapon==='shotgun'?'shotgun':e.weapon==='rifle'?'rifle':(e.weapon==='rocket'&&e.bigLauncher)?'launcher':null;
@@ -170,6 +214,8 @@ function updateBullets(dt){
     const b=bullets[n];b.life-=dt;
     const sp=Math.hypot(b.vx,b.vy,b.vz),dist=sp*dt,steps=Math.ceil(dist/8);
     const sx=b.vx*dt/steps,sy=b.vy*dt/steps,sz=b.vz*dt/steps;let dead=b.life<=0;
+    // a shot that passes close to your head: a fly-by whizz
+    if(!b.flew&&player&&player.alive&&b.owner!==player){const h=headPos(player);if(Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z)<90){b.flew=true;sfx('flyby',b);}}
     for(let s=0;s<steps&&!dead;s++){
       b.x+=sx;b.y+=sy;b.z+=sz;
       if(solid(tileAt(b.x,b.y,b.z))){dead=true;sparkAt(b.x-sx,b.y-sy,b.z-sz,b.col);break;}

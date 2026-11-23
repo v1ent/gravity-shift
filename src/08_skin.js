@@ -32,6 +32,41 @@ void main(){
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
 }`;
 
+// ---- "lines" style (like the blocky fighters): a dark body with the model's sharp edges glowing in the fighter's colour ----
+// The mesh is unpacked so each triangle corner carries edge flags: component k reaches 0 on the edge opposite corner k,
+// and stays 1 everywhere for edges that aren't sharp (so only creases, borders and material seams draw).
+const SKVS_L=SKVS.replace('attribute vec4 aW;','attribute vec4 aW;attribute vec3 aB;varying vec3 vB;').replace('vMat=aNor.w;','vMat=aNor.w;vB=aB;');
+function skfsLines(deriv){return (deriv?'#extension GL_OES_standard_derivatives : enable\n':'')+`
+precision mediump float;
+varying vec3 vNor;varying float vMat;varying float vD;varying vec3 vW;varying vec3 vB;uniform vec4 uLP;uniform vec3 uLC;
+uniform vec3 uBody;uniform vec3 uJoint;uniform vec3 uGlow;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uAlpha;uniform vec3 uLine;
+void main(){
+  vec3 n=normalize(vNor);
+  float dif=max(dot(n,uSun),0.0),hemi=n.y*0.5+0.5;
+  vec3 fill=vec3(0.035,0.04,0.065)*(0.6+0.5*hemi+0.5*dif)+uLine*0.05;
+  ${deriv?'vec3 w=fwidth(vB)*1.35;':'vec3 w=vec3(0.06);'}
+  vec3 a=smoothstep(vec3(0.0),w,vB);float edge=1.0-min(min(a.x,a.y),a.z);
+  vec3 col=mix(fill,uLine*1.25+vec3(0.12),edge);
+  {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=fill*uLC*la*la*1.5;}
+  float f=exp(-pow(vD*uFogD,2.0));
+  gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
+}`;}
+function buildLineMesh(gl,u8,vOff,ni,idx,q){
+  const nv=ni;const out=new Uint8Array(nv*24),pos=i=>{const o=vOff+i*20,d=new DataView(u8.buffer,u8.byteOffset);return [d.getInt16(o,true),d.getInt16(o+2,true),d.getInt16(o+4,true)];};
+  const key=p=>p[0]+','+p[1]+','+p[2],nt=ni/3,N=[],edges=new Map(),mat=i=>u8[vOff+i*20+11];
+  for(let t=0;t<nt;t++){const a=pos(idx[t*3]),b=pos(idx[t*3+1]),c=pos(idx[t*3+2]);
+    const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]],n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],l=Math.hypot(...n)||1;N.push(n.map(x=>x/l));
+    const ks=[key(a),key(b),key(c)];
+    for(let k=0;k<3;k++){const e=[ks[(k+1)%3],ks[(k+2)%3]].sort().join('|');if(!edges.has(e))edges.set(e,[]);edges.get(e).push(t);}}
+  const sharp=(t,k)=>{const ks=[0,1,2].map(j=>key(pos(idx[t*3+j]))),e=[ks[(k+1)%3],ks[(k+2)%3]].sort().join('|'),l=edges.get(e);
+    if(l.length!==2)return true;const o=l[0]===t?l[1]:l[0],a=N[t],b=N[o];
+    if(mat(idx[t*3])!==mat(idx[o*3]))return true;
+    return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]<Math.cos(28*Math.PI/180);};
+  for(let t=0;t<nt;t++){const vis=[sharp(t,0),sharp(t,1),sharp(t,2)];
+    for(let j=0;j<3;j++){const src=vOff+idx[t*3+j]*20,dst=(t*3+j)*24;out.set(u8.subarray(src,src+20),dst);
+      for(let k=0;k<3;k++)out[dst+20+k]=(j===k||!vis[k])?255:0;}}
+  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,out,gl.STATIC_DRAW);return {b,n:nv};
+}
 async function loadModel(){
   try{
     if(typeof MODEL_B64==='undefined'||!R.ok||typeof DecompressionStream==='undefined'){SKN.failed=true;return;}
@@ -51,6 +86,16 @@ async function loadModel(){
     SKN.vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(buf,vOff,vLen),gl.STATIC_DRAW);
     SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(buf.slice(iOff,iOff+meta.ni*2)),gl.STATIC_DRAW);
     SKN.p=p;SKN.loc=loc;SKN.meta=meta;SKN.ni=meta.ni;
+    try{ // the "lines" variant: its own program and an unpacked copy of the mesh
+      const deriv=!!gl.getExtension('OES_standard_derivatives'),lp=gl.createProgram();
+      for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,skfsLines(deriv)]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
+        if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));gl.attachShader(lp,s);}
+      gl.linkProgram(lp);if(!gl.getProgramParameter(lp,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(lp));
+      const ll={};for(const a of ['aPos','aNor','aJ','aW','aB'])ll[a]=gl.getAttribLocation(lp,a);
+      for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uLine'])ll[u]=gl.getUniformLocation(lp,u);
+      const u8=new Uint8Array(buf),idx=new Uint16Array(buf.slice(iOff,iOff+meta.ni*2));
+      SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx,meta.q);SKN.lp=lp;SKN.ll=ll;
+    }catch(err){console.warn('line style unavailable:',err);}
     // rest skeleton
     SKN.bones=meta.bones.map(b=>({name:b.name,head:V(b.head[0],b.head[1],b.head[2]),parent:b.parent}));
     SKN.bi={};SKN.bones.forEach((b,i)=>SKN.bi[b.name]=i);
@@ -606,14 +651,17 @@ function corpsesToDolls(){
 }
 
 function drawPose(P,col,alpha,flash){
-  const gl=R.gl,L=SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
-  gl.useProgram(SKN.p);
+  const lines=SETTINGS.charStyle==='lines'&&SKN.lp,gl=R.gl,L=lines?SKN.ll:SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
+  gl.useProgram(lines?SKN.lp:SKN.p);
   for(let a=0;a<8;a++)gl.disableVertexAttribArray(a);
-  gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);
-  gl.enableVertexAttribArray(L.aPos);gl.vertexAttribPointer(L.aPos,3,gl.SHORT,false,20,0);
-  gl.enableVertexAttribArray(L.aNor);gl.vertexAttribPointer(L.aNor,4,gl.BYTE,true,20,8);
-  gl.enableVertexAttribArray(L.aJ);gl.vertexAttribPointer(L.aJ,4,gl.UNSIGNED_BYTE,false,20,12);
-  gl.enableVertexAttribArray(L.aW);gl.vertexAttribPointer(L.aW,4,gl.UNSIGNED_BYTE,true,20,16);
+  const ST=lines?24:20;
+  if(lines)gl.bindBuffer(gl.ARRAY_BUFFER,SKN.lm.b);else{gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);}
+  gl.enableVertexAttribArray(L.aPos);gl.vertexAttribPointer(L.aPos,3,gl.SHORT,false,ST,0);
+  gl.enableVertexAttribArray(L.aNor);gl.vertexAttribPointer(L.aNor,4,gl.BYTE,true,ST,8);
+  gl.enableVertexAttribArray(L.aJ);gl.vertexAttribPointer(L.aJ,4,gl.UNSIGNED_BYTE,false,ST,12);
+  gl.enableVertexAttribArray(L.aW);gl.vertexAttribPointer(L.aW,4,gl.UNSIGNED_BYTE,true,ST,16);
+  if(lines){gl.enableVertexAttribArray(L.aB);gl.vertexAttribPointer(L.aB,3,gl.UNSIGNED_BYTE,true,ST,20);gl.uniform3f(L.uLine,col[0],col[1],col[2]);}
+  const draw=()=>{if(lines)gl.drawArrays(gl.TRIANGLES,0,SKN.lm.n);else gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);};
   gl.uniformMatrix4fv(L.uVP,false,FR.vp);gl.uniformMatrix4fv(L.uWorldFix,false,FR.fix);
   gl.uniformMatrix4fv(L.uB,false,SKN.mats);gl.uniform1f(L.uQ,SKN.meta.q);
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
@@ -624,12 +672,12 @@ function drawPose(P,col,alpha,flash){
   if(alpha<.99){
     // see-through: lay down the body's depth first, so only its front shows and nothing behind it (guns, its own far side) bleeds through
     gl.colorMask(false,false,false,false);gl.depthMask(true);gl.disable(gl.BLEND);gl.uniform1f(L.uAlpha,1);
-    gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);
+    draw();
     gl.colorMask(true,true,true,true);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthFunc(gl.LEQUAL);gl.depthMask(false);
-    gl.uniform1f(L.uAlpha,alpha);gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);
+    gl.uniform1f(L.uAlpha,alpha);draw();
     gl.depthFunc(gl.LESS);gl.depthMask(true);
-  }else{gl.uniform1f(L.uAlpha,1);gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);}
-  for(const a of [L.aPos,L.aNor,L.aJ,L.aW])gl.disableVertexAttribArray(a);
+  }else{gl.uniform1f(L.uAlpha,1);draw();}
+  for(const a of [L.aPos,L.aNor,L.aJ,L.aW,L.aB])if(a!==undefined&&a>=0)gl.disableVertexAttribArray(a);
   gl.useProgram(R.main.p);cubeBegin();
   const qh=P.q[bi.RightHand];
   return {hR:H[bi.RightHand],hL:H[bi.LeftHand],eR:H[bi.RightForeArm],eL:H[bi.LeftForeArm],handFwd:qrot(qh,V(0,0,1)),handDown:qrot(qh,V(0,-1,0)),

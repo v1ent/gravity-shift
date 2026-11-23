@@ -66,6 +66,7 @@ function spawn(e){
   if(!best)best={x:L/2,y:T,z:L/2};
   Object.assign(e,{x:best.x,y:best.y,z:best.z,h:STAND_H,vx:0,vy:0,vz:0,hp:100,alive:true,state:'normal',stun:0,knocked:false,kickCD:0,weapon:'pistol',hasShotgun:false,hasRifle:false,stash:{pistol:MAG,shotgun:0,rifle:0},ammo:MAG,reload:0,rockets:RMAG_S,bigLauncher:false,rreload:0,
     stam:1,sprinting:false,crouch:false,crouchT:0,hidden:false,vis:1,runJump:false,ba:0,bav:0,tumbleHold:0,invuln:1.2,poseBlend:1,land:.6,lastHit:null,rocketJump:false});
+  if(e===player&&gameState==='play'&&!world.demo&&world.time>.5)sfx('respawn');
   // face the middle of the arena
   e.yaw=e.bodyYaw=e.legYaw=yawOf(L/2-e.x,L/2-e.z);e.pitch=0;e.ctl.aimYaw=e.yaw;e.ctl.aimPitch=0;
   e.pose=null;
@@ -322,7 +323,7 @@ function updateChar(e,dt){
         e.jumpAt=world.time;
         if(run){e.runJump=true;e.vy=RUNJUMPV;const s=RUN*1.08/Math.max(1,Math.hypot(e.vx,e.vz));e.vx*=s;e.vz*=s;e.cut=false;}
         else{e.vy=JUMPV;e.cut=true;}
-        e.grounded=false;e.coyote=0;e.jumpBuf=0;e.takeoff=1;
+        e.grounded=false;e.coyote=0;e.jumpBuf=0;e.takeoff=1;sfx('jump',e);
       }
     }
     if(!c.jumpHeld&&e.cut&&e.vy>180){e.vy*=.5;e.cut=false;}
@@ -591,7 +592,7 @@ function meleeHit(e,fw,reach,height,already){
     if(PICKUP_GLOW[b.kind]||(b.kind==='medkit'&&e.state==='slide'))continue; // weapons aren't kicked away, and a slide collects a medkit
     if(e.state==='slide'&&!e.isBot&&b.grounded&&b.y<=e.y+8&&b.y+b.h-e.y>=24&&b.y+b.h-e.y<=54)continue; // a player sliding into cover-height boxes takes cover behind them instead
     if(Math.abs(b.x-cx)<rr+b.w/2&&Math.abs(b.z-cz)<rr+b.d/2&&b.y<e.y+height&&b.y+b.h>e.y){
-      if(already)already.add(b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
+      if(already)already.add(b);sfx('boxkick',b);b.vx+=fw.x*700/Math.pow(b.m,.65);b.vz+=fw.z*700/Math.pow(b.m,.65);b.vy=320/Math.sqrt(b.m);b.grounded=false;b.kickedBy=e;b.kickT=world.time;hit=true;
       if(b.rb)rbSpin(b,V(b.x-fw.x*b.w/2,e.y+24,b.z-fw.z*b.d/2),V(fw.x*700*Math.pow(b.m,.35),120,fw.z*700*Math.pow(b.m,.35)),.5);
     }
   }
@@ -662,6 +663,7 @@ function updatePose(e,dt){
     e.runW=lerp(e.runW,mv?1:0,1-Math.exp(-12*dt));
     const s=lerp(.62,.4,speedN),A=lerp(7,17,speedN),cyc=2*A/s,lift=lerp(5,13,speedN);
     e.phase+=lvx*dt/cyc;
+    {const fs=Math.floor(e.phase*2);if(fs!==e.stepN){if(e.stepN!==undefined&&speedN>.15&&!e.crouch)sfx('step',e);e.stepN=fs;}} // a footfall every half cycle
     const pa=legPhase(e.phase,s,A,lift),pb=legPhase(e.phase+.5,s,A,lift);e.armPh={a:pa.x/A,b:pb.x/A};
     const bob=lerp(.8,3.2,speedN)*(.5+.5*Math.cos(4*Math.PI*(e.phase-s/2)));
     e.cdeep=lerp(e.cdeep||0,e.crouch?(e.cover?23:11):0,1-Math.exp(-14*dt)); // cover: a deep squat, head tucked

@@ -49,6 +49,7 @@ function wireMenu(){
     $('asdesc').textContent=pad?'slows the look on a target, tracks and pulls toward it · RB snaps on':'gamepad only — switch Controls to Gamepad to use it';};
   opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{
     SETTINGS.input=v;if(v==='gamepad'&&!SETTINGS.padSeen){SETTINGS.padSeen=true;SETTINGS.assist=true;SETTINGS.assistStr=50;$('asSl').value=50;}drawAssist();});
+  opts($('styleopt'),[['lines','LINES'],['solid','SOLID']],()=>SETTINGS.charStyle,v=>{SETTINGS.charStyle=v;});
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
@@ -66,7 +67,7 @@ function drawFPS(c){if(!SETTINGS.fps)return;c.font='bold 12px "Courier New",mono
 
 // ---------- volumes + a small generated synthwave loop ----------
 let musicG=null,musicOn=false,musicNext=0,musicStepI=0,musicTimer=null;
-function applyVolumes(){if(!AC)return;if(master)master.gain.value=.5*SETTINGS.fx/100;if(musicG)musicG.gain.value=.22*SETTINGS.music/100;}
+function applyVolumes(){if(!AC)return;if(master)master.gain.value=.5*SETTINGS.fx/100;if(musicG)musicG.gain.value=(SNDG.music_game?.55:.22)*SETTINGS.music/100;}
 const MUS_BPM=104,MUS_STEP=60/MUS_BPM/4;
 // A minor: Am - F - C - G, one bar each
 const MUS_ROOTS=[45,41,48,43],MUS_ARP=[[0,3,7,12],[0,4,7,12],[0,4,7,12],[0,4,7,11]];
@@ -77,9 +78,23 @@ function musicStart(){
   applyVolumes();musicNext=AC.currentTime+.1;musicStepI=0;
   musicTimer=setInterval(musicSchedule,40);
 }
-function musicStop(){musicOn=false;if(musicTimer)clearInterval(musicTimer);musicTimer=null;}
+function musicStop(){musicOn=false;if(musicTimer)clearInterval(musicTimer);musicTimer=null;if(musTrack){try{musTrack.s.stop();}catch(e){}musTrack=null;}}
+// the recorded loops: menu music in the menus, game music in matches; they cross-fade when that changes
+const MUS_LOOP={music_menu:6.0,music_game:10.5};let musTrack=null;
+function musicRecorded(){
+  if(!SNDG.music_menu||!SNDG.music_game)return false;
+  const want=gameState==='menu'||(TUT.on&&gameState!=='play')?'music_menu':'music_game';
+  if(!musTrack||musTrack.name!==want){
+    const t=AC.currentTime;
+    if(musTrack){const old=musTrack;old.g.gain.setTargetAtTime(0,t,.25);setTimeout(()=>{try{old.s.stop();}catch(e){}},1500);}
+    const s=AC.createBufferSource(),g=AC.createGain();s.buffer=SNDG[want][0];s.loop=true;s.loopStart=0;s.loopEnd=Math.min(MUS_LOOP[want],s.buffer.duration);
+    g.gain.value=0;g.gain.setTargetAtTime(1,t,.3);s.connect(g);g.connect(musicG);s.start();musTrack={name:want,s,g};
+  }
+  return true;
+}
 function musicSchedule(){
   if(!AC||!musicOn)return;
+  if(musicRecorded())return; // (the generated synthwave below is only the fallback now)
   if(SETTINGS.music<=0){musicNext=AC.currentTime+.1;return;}
   while(musicNext<AC.currentTime+.18){musicNote(musicStepI,musicNext);musicNext+=MUS_STEP;musicStepI=(musicStepI+1)%64;}
 }
@@ -210,3 +225,7 @@ function padBack(){
   if(b){b.click();padNav(1);}
 }
 wireMenu();
+// a click for every button in the menus
+document.addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('button');if(b&&AC)sfx('ui');},true);
+// the music volume follows whether the recorded loops have arrived yet
+setTimeout(function volWatch(){if(typeof SNDG!=='undefined'&&SNDG.music_game){applyVolumes();return;}if(AC)setTimeout(volWatch,500);},1000);
