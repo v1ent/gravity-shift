@@ -212,6 +212,8 @@ function clipAt(name,f,mirror,root){
 function placeAt(P,yaw,o){const qy=qaxis(V(0,1,0),yaw);for(let b=0;b<20;b++)P.q[b]=qmul(qy,P.q[b]);P.hip=vadd(o,qrot(qy,P.hip));return P;}
 const UPPER_SHARE={Spine:.3,Spine1:.6,Spine2:1,Neck:1,Head:1,LeftShoulder:1,RightShoulder:1,LeftArm:1,RightArm:1,LeftForeArm:1,RightForeArm:1,LeftHand:1,RightHand:1};
 function twistUpper(P,tw){if(Math.abs(tw)<1e-3)return;const bi=SKN.bi;for(const nm in UPPER_SHARE)P.q[bi[nm]]=qmul(qaxis(V(0,1,0),tw*UPPER_SHARE[nm]),P.q[bi[nm]]);}
+// bend the upper body forward (clip space, before placing: +x is the character's left, so +ang tips the chest forward)
+function bendUpper(P,ang){if(Math.abs(ang)<1e-3)return;const bi=SKN.bi;for(const nm in UPPER_SHARE)P.q[bi[nm]]=qmul(qaxis(V(1,0,0),ang*UPPER_SHARE[nm]),P.q[bi[nm]]);}
 // rotate a whole pose about a world pivot
 function rotatePose(P,q,piv){for(let b=0;b<20;b++)P.q[b]=qmul(q,P.q[b]);P.hip=vadd(piv,qrot(q,vsub(P.hip,piv)));}
 // copy some bones from another pose, carried along by a reference bone (e.g. arms relative to the chest)
@@ -331,7 +333,7 @@ function clipFor(e,A,dt){
     return {P,key:'climb'};
   }
   if(st==='dodge'){
-    const s=e.st,D=DODGES[s.kind],f=D.f0+Math.min(s.t,D.dur)*30*D.rate;
+    const s=e.st,D=DODGES[s.kind],f=dodgeFrame(D,Math.min(s.t,D.dur)*30*D.rate).f;
     const P=clipAt(D.clip,f,D.mirror,'none');
     // dodge_right ends turned 93° to the side: turn it back so it finishes facing forward
     if(D.fix)rotatePose(P,qaxis(V(0,1,0),D.fix*smooth(clamp((f-D.fix0)/(D.fix1-D.fix0),0,1))),V(P.hip.x,0,P.hip.z));
@@ -371,6 +373,28 @@ function clipFor(e,A,dt){
     const yaw=A.legYaw;A.legYaw+=clamp(angDiff(e.bodyYaw,A.legYaw),-dt*6,dt*6);
     P=placeAt(P,yaw,o);twistUpper(P,angDiff(e.bodyYaw,yaw));
     return {P,key:'air',aim:true};
+  }
+  if(e.cover&&e.grounded&&SKN.clips.crouch_to_cover){
+    // in cover: crouch_to_cover holds the hidden squat (its end), rises to peek over (frames 6->24, held to 42) while you aim,
+    // and ducks back (42->60). Shuffling along the cover uses cover_sneaking_right, turned to face the cover, mirrored for left.
+    const d=e.cover.d,yaw=Math.atan2(d[0],d[1]),up=!e.crouch;
+    let f=A.covF===undefined?80:A.covF;const r=30*1.6*dt;
+    if(up){if(f>=60||f<6)f=6;else if(f<42)f=Math.min(36,f+r);else f=Math.min(60,f+r);}      // rise and hold the peek
+    else{if(f>=24&&f<60)f=Math.max(f,42)+r;else if(f<24&&f>=6)f=Math.max(6,f-r);else if(f>=60)f=Math.min(90,f+r*.3);if(f>=90)f=66;} // duck, then breathe
+    A.covF=f;
+    const lat=V(Math.cos(yaw),0,-Math.sin(yaw)),vs=e.vx*lat.x+e.vz*lat.z; // + = to the right while facing the cover
+    A.sneakW=lerp(A.sneakW||0,!up&&Math.abs(vs)>12?1:0,1-Math.exp(-10*dt));
+    let P=clipAt('crouch_to_cover',f,false,'feet');
+    if(A.sneakW>.01){
+      const n=SKN.clips.cover_sneaking_right.n;A.sneakF=((A.sneakF||0)+Math.abs(vs)*dt/42*(n-1))%(n-1);
+      const S=clipAt('cover_sneaking_right',A.sneakF,vs<0,'feet');                 // (the clip faces backwards: turned below)
+      const q=qaxis(V(0,1,0),Math.PI);for(let b=0;b<20;b++)S.q[b]=qmul(q,S.q[b]);S.hip=qrot(q,S.hip);
+      // keep low: only part of the sneak's height, chest bent over the cover's top
+      P=blendPose(P,S,smooth(A.sneakW)*.55);bendUpper(P,.5*smooth(A.sneakW));
+    }
+    A.legYaw=yaw;A.act=null;A.air=0;
+    P=placeAt(P,yaw,o);twistUpper(P,angDiff(e.bodyYaw,yaw)*(up?1:.3));
+    return {P,key:'cover',aim:true};
   }
   if(e.h<STAND_H-1)return null; // crouched: procedural
   if(e.emote){ // waving hands / bowing to a new ally

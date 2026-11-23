@@ -19,15 +19,22 @@ let chars=[],player=null;
 const DODGE_STAM=.3;
 const DODGES={
   back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
-  right:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:false,scale:2.6,fb:V(-82,0,-5)}, // ends facing forward: no turn-back needed
-  left:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:true,scale:2.6,fb:V(82,0,-5)},
+  // side dodges: three strides of jogging_strafe_left (a 21-frame cycle, 72 px each) at double speed; right is its mirror
+  left:{clip:'jogging_strafe_left',f0:0,f1:63,cyc:21,rate:2,mirror:false,fb:V(216,0,0)},
+  right:{clip:'jogging_strafe_left',f0:0,f1:63,cyc:21,rate:2,mirror:true,fb:V(-216,0,0)},
+  // forward (double-tap W): the dive-and-roll of cover_jump_over, from the take-off run to standing up again
+  fwd:{clip:'cover_jump_over',f0:8,f1:68,rate:1.6,mirror:false,fb:V(0,0,252)},
 };
 for(const k in DODGES){const D=DODGES[k];D.dur=(D.f1-D.f0)/30/D.rate;}
+// where in the clip a dodge is after `frames` clip frames, and how many whole cycles it has done (for looped strides)
+function dodgeFrame(D,frames){if(!D.cyc)return {f:D.f0+frames,k:0};const k=Math.floor(frames/D.cyc);return {f:frames-k*D.cyc,k};}
 // travel so far (character space: +z forward, -x right)
 function dodgeDisp(D,t){
   const u=clamp(t/D.dur,0,1);
   if(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips[D.clip]){
-    const h=f=>sampleClip(D.clip,f/30,D.mirror).hip,a=h(D.f0),b=h(D.f0+u*(D.f1-D.f0)),k=D.scale||1;return V((b.x-a.x)*k,0,(b.z-a.z)*k);}
+    const h=f=>sampleClip(D.clip,f/30,D.mirror).hip,k=D.scale||1,F=dodgeFrame(D,u*(D.f1-D.f0)),a=h(D.f0),b=h(F.f);
+    let x=b.x-a.x,z=b.z-a.z;if(D.cyc){const c=h(D.cyc);x+=(c.x-a.x)*F.k;z+=(c.z-a.z)*F.k;}
+    return V(x*k,0,z*k);}
   return vscale(D.fb,smooth(u)*(D.scale||1));
 }
 function startDodge(e,kind){
@@ -988,8 +995,10 @@ function drawRifleModel(F,acc,al,recoil,magOut){
 }
 // the muzzle of the gun model as last drawn, kept relative to the fighter so it follows them between frames
 // dive vaults: mostly vault_02 (lands on its feet), now and then the old one (rolls through)
-const VAULT_CLIPS={vault_02:{f0:4,f1:44,dur:.6},vault:{f0:4,f1:54,dur:.66}};
-function pickVault(){const ok=n=>typeof SKN!=='undefined'&&SKN.clips&&SKN.clips[n];return ok('vault_02')&&(rnd()<.75||!ok('vault'))?'vault_02':ok('vault')?'vault':null;}
+const VAULT_CLIPS={vault_02:{f0:4,f1:44,dur:.6,w:.6},vault:{f0:4,f1:54,dur:.66,w:.25},cover_jump_over:{f0:12,f1:62,dur:.85,w:.15}};
+function pickVault(){const ok=n=>typeof SKN!=='undefined'&&SKN.clips&&SKN.clips[n];
+  const l=Object.keys(VAULT_CLIPS).filter(ok);if(!l.length)return null;let r=rnd()*l.reduce((a,n)=>a+VAULT_CLIPS[n].w,0);
+  for(const n of l){r-=VAULT_CLIPS[n].w;if(r<=0)return n;}return l[0];}
 const MUZZLE_AT={pistol:[6.5,1.65],shotgun:[21.4,2],rifle:[18.5,1.5]};
 function noteMuzzle(e,F){const m=MUZZLE_AT[e.weapon];if(!m||WXF)return;const p=vadd(F.o,vadd(vscale(F.u,m[0]),vscale(F.v,m[1])));e._mzRel=V(p.x-e.x,p.y-e.y,p.z-e.z);e._mzT=world.time;e._mzW=e.weapon;}
 function drawWeaponsSK(e,P,SK,acc,al){

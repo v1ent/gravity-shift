@@ -162,7 +162,7 @@ function pollPad(dt){
   if(down(6)){mouseDown=true;pressed['lmb']=true;}if(up(6))mouseDown=false;
   if(down(5))mouseRight=true;if(up(5))mouseRight=false;
   if(down(7))pressed['mmb']=true;
-  if(down(11))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):'back';
+  if(down(11))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):ly<-.3?'fwd':'back';
   padPrev=now;
 }
 // aim assist: the enemy closest to the crosshair, inside a cone that grows with the strength and with how near they are

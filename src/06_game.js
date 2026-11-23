@@ -122,7 +122,7 @@ function playerInput(first){
   c.swap=first&&!!(pressed['wheel']||pressed['q']);c.select=first?(pressed['1']?'pistol':pressed['2']?'rocket':pressed['3']?'shotgun':pressed['4']?'rifle':null):null;
   // double-tap S / A / D: dodge
   const tap=k=>{if(!(first&&pressed[k]))return false;const t=performance.now()/1000,l=dblTap[k]||-9;dblTap[k]=t;if(t-l<.3){dblTap[k]=-9;return true;}return false;};
-  c.dodge=tap('s')?'back':tap('a')?'left':tap('d')?'right':null;if(first&&padDodge)c.dodge=padDodge;
+  c.dodge=tap('s')?'back':tap('a')?'left':tap('d')?'right':tap('w')?'fwd':null;if(first&&padDodge)c.dodge=padDodge;
   c.wave=first&&!!pressed['t'];
   c.aimYaw=cam.yaw;c.aimPitch=cam.pitch;
 }

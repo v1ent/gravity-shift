@@ -26,6 +26,10 @@ const GAME_POSES={
   'Crouch':{crouch:true},
   'Cover: squat behind a wall':{cover:true},
   'Cover: pop up and aim':{cover:true,aim:true},
+  'Cover: shuffle along it':{cover:true,shuffle:true},
+  'Dodge forward (live)':{dodge:'fwd'},
+  'Dodge left (live)':{dodge:'left'},
+  'Dodge right (live)':{dodge:'right'},
   'Aim pistol':{aim:true},
   'Aim shotgun':{aim:true,weapon:'shotgun'},
   'Aim rifle':{aim:true,weapon:'rifle'},
@@ -81,6 +85,8 @@ function stepPose(dt){
   if(cfg.crouch)c.crouch=true;
   if(cfg.cover&&!e.cover&&VW.pf>2)c.crouchPressed=true;
   if(cfg.aim)c.aim=true;
+  if(cfg.shuffle&&e.cover){const s=Math.sin(VW.pf/60*2.6)>0?1:-1,d=e.cover.d,lat=[d[1],-d[0]];c.mx=lat[0]*s*.7;c.mz=lat[1]*s*.7;} // sideways along the wall and back
+  if(cfg.dodge&&e.state==='normal'&&VW.pf%150===10){Object.assign(e,{x:VW.o.x-(cfg.dodge==='left'?3*T:cfg.dodge==='right'?-3*T:0),z:VW.o.z-(cfg.dodge==='fwd'?4*T:0)});startDodge(e,cfg.dodge);}
   if(cfg.reload){
     if(e.weapon==='rocket'){if(e.rreload<=0&&e.rockets>=rMag(e)){e.rockets=0;}}
     else if(e.reload<=0&&e.ammo>=magOf(e)-0){e.ammo=0;c.reload=true;}else if(e.reload<=0)c.reload=true;
