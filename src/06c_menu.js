@@ -238,7 +238,7 @@ function audioGesture(){
   if(AC.state!=='running')AC.resume().then(go).catch(()=>{});else go();
 }
 for(const ev of ['pointerdown','keydown','touchend','click'])document.addEventListener(ev,audioGesture,true);
-(function(){const h=document.createElement('div');h.id='sndhint';h.textContent='🔇 click or press any key to turn sound on';
+if(document.body)(function(){const h=document.createElement('div');h.id='sndhint';h.textContent='🔇 click or press any key to turn sound on';
   h.style.cssText='position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;font:12px monospace;letter-spacing:.08em;color:#29f0ff;background:rgba(5,8,20,.8);border:1px solid #29f0ff55;padding:6px 12px;pointer-events:none;display:none';
   document.body.appendChild(h);
   setInterval(()=>{const blocked=!AC||AC.state!=='running';h.style.display=blocked&&(SETTINGS.fx>0||SETTINGS.music>0)&&!window.VIEWER?'block':'none';},500);})();
