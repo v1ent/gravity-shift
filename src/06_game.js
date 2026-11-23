@@ -356,7 +356,7 @@ function drawHUD(){
 }
 
 // ---------- settings (start screen) ----------
-const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50,padSeen:false,charStyle:'lines'};
+const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50,padSeen:false,charStyle:'lines',speed:85};
 const playerName=()=>(SETTINGS.name||'').trim().toUpperCase().slice(0,12)||'YOU';
 const PLAYER_COLORS=['#29f0ff','#ff3fa4','#ffb020','#9dff3a','#b06bff','#ff5a3c','#ffffff','#3c8cff','#ffe23c','#00e0a0'];
 // a bot (or tutorial actor) that would share your colour gets the colour you gave up
@@ -364,7 +364,7 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(s.charStyle==='solid'||s.charStyle==='lines')SETTINGS.charStyle=s.charStyle;}}catch(e){}
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(s.charStyle==='solid'||s.charStyle==='lines')SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;}}catch(e){}
 function getSettings(){return SETTINGS;}
 function saveSettings(){try{localStorage.setItem('gravityShiftSettings',JSON.stringify(SETTINGS));}catch(e){}}
 function setupMenu(){
@@ -434,7 +434,7 @@ function frame(now){
     world.timeScale+=((world.rot?.35:1)-world.timeScale)*Math.min(1,dt*6);
     world.flash=Math.max(0,world.flash-dt*1.5);world.shake=Math.max(0,world.shake-dt*30);
     for(const f of feed)f.t-=dt;while(feed.length&&feed[feed.length-1].t<=0)feed.pop();
-    const sdt=dt*world.timeScale;acc+=sdt;let first=true,n=0;
+    const sdt=dt*world.timeScale*SETTINGS.speed/100;acc+=sdt;let first=true,n=0; // Options > game speed slows the whole simulation and the animations
     while(acc>=STEP&&n<12){step(STEP,first);first=false;acc-=STEP;n++;for(const k in pressed)delete pressed[k];}
     if(world.hitstop<=0)for(const e of chars)updatePose(e,sdt);
   }

@@ -53,6 +53,7 @@ function wireMenu(){
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
+  slider('spdSl','spdV','speed',v=>v+'%'+(v===100?' (original)':''));
   slider('sensSl','sensV','sens',v=>(v/100).toFixed(2)+'×');
   slider('asSl','asV','assistStr',v=>v+'%');drawAssist();
   slider('musSl','musV','music',v=>v+'%',()=>{wakeAudio();applyVolumes();});
