@@ -4268,6 +4268,18 @@ wireMenu();
 document.addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('button');if(b&&AC)sfx('ui');},true);
 // the music volume follows whether the recorded loops have arrived yet
 setTimeout(function volWatch(){if(typeof SNDG!=='undefined'&&SNDG.music_game){applyVolumes();return;}if(AC)setTimeout(volWatch,500);},1000);
+// Browsers only let sound start from a real click or key press (a gamepad button doesn't count), so every click/key/touch
+// creates or resumes the audio; while it's still blocked a small hint says how to turn it on.
+function audioGesture(){
+  if(!AC)initAudio();if(!AC)return;
+  const go=()=>{applyVolumes();musicStart();};
+  if(AC.state!=='running')AC.resume().then(go).catch(()=>{});else go();
+}
+for(const ev of ['pointerdown','keydown','touchend','click'])document.addEventListener(ev,audioGesture,true);
+(function(){const h=document.createElement('div');h.id='sndhint';h.textContent='🔇 click or press any key to turn sound on';
+  h.style.cssText='position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;font:12px monospace;letter-spacing:.08em;color:#29f0ff;background:rgba(5,8,20,.8);border:1px solid #29f0ff55;padding:6px 12px;pointer-events:none;display:none';
+  document.body.appendChild(h);
+  setInterval(()=>{const blocked=!AC||AC.state!=='running';h.style.display=blocked&&(SETTINGS.fx>0||SETTINGS.music>0)&&!window.VIEWER?'block':'none';},500);})();
 
 // =====================================================================
 //  TUTORIAL — practice rooms built into the same voxel grid as the arena
