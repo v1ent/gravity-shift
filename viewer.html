@@ -124,6 +124,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </style>
 <div id="vpanel">
 <h1>GRAVITY<span>SHIFT</span></h1><div class="sub">MOTION &amp; POSE VIEWER</div>
+<div class="row" id="vstyle"><button data-st="lines">LINES</button><button data-st="solid">SOLID</button><button data-st="shiny">SHINY</button></div>
 <div class="row" id="vmodel"><button data-m="char">CHARACTER</button><button data-m="spider">SPIDER</button></div>
 <div id="vclipopts">
 <div class="row" id="vroot"><button data-r="none">IN PLACE</button><button data-r="feet">FEET CENTRED</button><button data-r="clip">ROOT MOTION</button></div>
@@ -1690,7 +1691,8 @@ function updatePose(e,dt){
     e.runW=lerp(e.runW,mv?1:0,1-Math.exp(-12*dt));
     const s=lerp(.62,.4,speedN),A=lerp(7,17,speedN),cyc=2*A/s,lift=lerp(5,13,speedN);
     e.phase+=lvx*dt/cyc;
-    {const fs=Math.floor(e.phase*2);if(fs!==e.stepN){if(e.stepN!==undefined&&speedN>.15&&!e.crouch)sfx('step',e);e.stepN=fs;}} // a footfall every half cycle
+    if(typeof stepClock==='function'&&SKN.clips)stepClock(e,dt); // footsteps in time with the walk/run clips (src/08_skin.js)
+    else{const fs=Math.floor(e.phase*2);if(fs!==e.stepN){if(e.stepN!==undefined&&speedN>.15&&!e.crouch)sfx('step',e);e.stepN=fs;}}
     const pa=legPhase(e.phase,s,A,lift),pb=legPhase(e.phase+.5,s,A,lift);e.armPh={a:pa.x/A,b:pb.x/A};
     const bob=lerp(.8,3.2,speedN)*(.5+.5*Math.cos(4*Math.PI*(e.phase-s/2)));
     e.cdeep=lerp(e.cdeep||0,e.crouch?(e.cover?23:11):0,1-Math.exp(-14*dt)); // cover: a deep squat, head tucked
@@ -2217,7 +2219,7 @@ function sfxSample(kind,at){
     case 'crate':return playS('box_collide',at,{vol:.8,range:1000,jit:.15});
     case 'boxkick':return playS('box_kick',at,{vol:.85});
     case 'jump':return playS('jump',at,{vol:me?.45:.55,range:900});
-    case 'step':return playS('footstep',at,{vol:me?.28:.4,range:650,jit:.12});
+    case 'step':{const soft=at&&at.stepSoft;return playS('footstep',at,{vol:(me?.28:.4)*(soft?.55:1),rate:soft?.88:1,range:soft?450:650,jit:.12});} // walking: softer, slower
     case 'flyby':return playS('bullet_flyby',at,{vol:.75,range:400});
     case 'hurt':return playS('player_taking_damage',null,{vol:.75});
     case 'die':return me?playS('player_death',null,{vol:.9}):false;
@@ -2269,7 +2271,11 @@ function damage(e,amt,src,dir){
   if(e.hp<=0)kill(e,src,dir);
 }
 // ---------- kill streaks: kills in a row without dying ----------
-function streakWord(n){return n<2?'':['','','DOUBLE KILL','TRIPLE KILL','QUADRA KILL','PENTA KILL'][n]||`${n} KILLS IN A ROW`;}
+const NUMW=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN','TWENTY'];
+const MULTI=['','','DOUBLE KILL','TRIPLE KILL','QUADRA KILL','PENTA KILL'];
+function streakWord(n){return n<2?'':MULTI[n]||`${NUMW[n]||n} KILLS IN A ROW`;}
+// the banner's words: "<name> HAS" + "A TRIPLE KILL!" / "SIX KILLS IN A ROW!"
+function streakBanner(n){return MULTI[n]?`A ${MULTI[n]}!`:`${NUMW[n]||n} KILLS IN A ROW!`;}
 // the banner at the top of the screen: from the third kill in a row until someone ends that run
 let spree=null;
 function spreeKill(k){
@@ -2280,7 +2286,7 @@ function spreeKill(k){
 }
 function spreeEnd(e,killer){
   if(!spree||spree.who!==e||spree.end)return;
-  const by=killer&&killer!==e?(killer.isSpider?['THE SPIDER','#e8ecf2']:[killer.name,killer.color]):null;
+  const by=killer&&killer!==e?(killer.isSpider?['THE SPIDER','#ffffff']:[killer.name,killer.color]):null;
   spree.end={by,t:hudClock,n:spree.n};
 }
 function kill(e,src,dir){
@@ -2670,13 +2676,15 @@ function charProps(e){
       const share=clamp(.45/b.m,.08,.5);
       if(ox<oz){const s=Math.sign(b.x-e.x)||1,bx0=b.x,ex0=e.x;b.x+=s*ox*share;if(overlapSolid(b.x,b.y,b.z,b.w,b.h,b.d)){b.x=bx0;e.x-=s*ox;}else e.x-=s*ox*(1-share);
         if(overlapSolid(e.x,e.y,e.z,e.w,e.h)){e.x=ex0;}
-        if(e.vx*s>0){const dv=s*Math.max(Math.abs(e.vx)*.9/Math.sqrt(b.m),25)-b.vx;b.vx+=dv;if(b.rb)rbSpin(b,V(b.x-s*b.w/2,Math.min(e.y+34,b.y+b.h*.9),b.z),V(dv*b.m*.35,0,0));if(b.m>2)e.vx*=.6;}}
+        if(e.vx*s>0){boxPushed(e,b);const dv=s*Math.max(Math.abs(e.vx)*.9/Math.sqrt(b.m),25)-b.vx;b.vx+=dv;if(b.rb)rbSpin(b,V(b.x-s*b.w/2,Math.min(e.y+34,b.y+b.h*.9),b.z),V(dv*b.m*.35,0,0));if(b.m>2)e.vx*=.6;}}
       else{const s=Math.sign(b.z-e.z)||1,bz0=b.z,ez0=e.z;b.z+=s*oz*share;if(overlapSolid(b.x,b.y,b.z,b.w,b.h,b.d)){b.z=bz0;e.z-=s*oz;}else e.z-=s*oz*(1-share);
         if(overlapSolid(e.x,e.y,e.z,e.w,e.h)){e.z=ez0;}
-        if(e.vz*s>0){const dv=s*Math.max(Math.abs(e.vz)*.9/Math.sqrt(b.m),25)-b.vz;b.vz+=dv;if(b.rb)rbSpin(b,V(b.x,Math.min(e.y+34,b.y+b.h*.9),b.z-s*b.d/2),V(0,0,dv*b.m*.35));if(b.m>2)e.vz*=.6;}}
+        if(e.vz*s>0){boxPushed(e,b);const dv=s*Math.max(Math.abs(e.vz)*.9/Math.sqrt(b.m),25)-b.vz;b.vz+=dv;if(b.rb)rbSpin(b,V(b.x,Math.min(e.y+34,b.y+b.h*.9),b.z-s*b.d/2),V(0,0,dv*b.m*.35));if(b.m>2)e.vz*=.6;}}
     }
   }
 }
+// a bot walking into a loose box: remember which box and since when (the AI reacts instead of shoving it along)
+function boxPushed(e,b){if(!e.isBot)return;if(e.boxPush!==b||world.time-e.boxPushLast>.2){e.boxPush=b;e.boxPushStart=world.time;}e.boxPushLast=world.time;}
 function spawnFurniture(){
   const pts=spawnPoints();
   const want=['container','container','big','big','big','barrel','barrel','barrel','barrel','barrel','barrel','crate','crate','crate','crate','crate','crate','small','small','small','small',
@@ -3634,10 +3642,35 @@ function botThink(b,dt){
     if(Math.hypot(b.x-ai.last.x,b.y-ai.last.y,b.z-ai.last.z)<10&&!see&&(mvx||mvz)){c.jump=true;ai.hold=.4;ai.flip=.5;ai.replan=0;}
     ai.stuckT=0;ai.last=V(b.x,b.y,b.z);
   }
+  // walked into a loose box: never shove it along. Take cover at it (in a fight), kick it away, hop over it,
+  // step round it, or head off another way.
+  if(ai.boxAct&&ai.boxAct.t>0){const A2=ai.boxAct;A2.t-=dt;
+    if(A2.kind==='around'){mvx=A2.px+A2.fx*A2.fwd;mvz=A2.pz+A2.fz*A2.fwd;}
+    else if(A2.kind==='hold'){mvx=0;mvz=0;if(A2.crouch)c.crouch=true;}
+    else if(A2.kind==='kick'){mvx=0;mvz=0;if(!A2.done&&b.kickCD<=0){c.kick=true;A2.done=true;}}
+  }else if(b.boxPush&&world.time-b.boxPushLast<.12&&world.time-b.boxPushStart>.25&&b.state==='normal'&&b.grounded&&!b.boxPush.dead){
+    const B=b.boxPush,dx=B.x-b.x,dz=B.z-b.z,l=Math.hypot(dx,dz)||1,fx=dx/l,fz=dz/l;
+    const facing=Math.sin(b.yaw)*fx+Math.cos(b.yaw)*fz>.75,again=ai.boxLast===B&&world.time-ai.boxLastT<4;
+    const opts=[];
+    if(fight&&B.h>=26&&B.h<=64&&!again)opts.push(['hold',4]);
+    if(B.m<=2.5&&facing&&b.kickCD<=0)opts.push(['kick',3]);
+    if(B.h<=40)opts.push(['hop',2]);
+    opts.push(['around',again?2:3]);
+    if(!fight)opts.push(['away',again?3:1]);
+    let r=rnd()*opts.reduce((a,o)=>a+o[1],0),kind='around';for(const o of opts){if((r-=o[1])<0){kind=o[0];break;}}
+    const off=(b.x-B.x)*-fz+(b.z-B.z)*fx,sg=Math.abs(off)>4?Math.sign(off):(rnd()<.5?-1:1),half=Math.max(B.w,B.d||B.w)/2;
+    if(kind==='hold')ai.boxAct={kind,t:1.5+rnd()*2,crouch:B.h<=50};
+    else if(kind==='kick')ai.boxAct={kind,t:.45};
+    else if(kind==='hop'){c.jump=true;ai.hold=.35;ai.boxAct={kind,t:.4};}
+    else if(kind==='away'){ai.boxAct={kind:'around',t:1.1,px:-fz*sg,pz:fx*sg,fx,fz,fwd:-.6};ai.replan=0;ai.path=null;}
+    else ai.boxAct={kind:'around',t:.25+(half+20)/WALK,px:-fz*sg,pz:fx*sg,fx,fz,fwd:.25};
+    if(kind==='hop'){mvx=fx;mvz=fz;}else if(ai.boxAct.kind==='around'){mvx=ai.boxAct.px;mvz=ai.boxAct.pz;}else{mvx=0;mvz=0;}
+    ai.boxLast=B;ai.boxLastT=world.time;b.boxPush=null;
+  }
   if(dip&&(!fight||dip.close||dip.stay)&&!dip.path){if(dip.stay){mvx=0;mvz=0;}else if(dip.goal&&Math.hypot(dip.goal.x-b.x,dip.goal.z-b.z)<240){mvx=dip.goal.x-b.x;mvz=dip.goal.z-b.z;if(Math.hypot(mvx,mvz)<10){mvx=0;mvz=0;}}}
   if(ai.flip>0){ai.flip-=dt;const t2=mvx;mvx=-mvz;mvz=t2;}
   {const l=Math.hypot(mvx,mvz),dx=l>0?mvx/l:0,dz=l>0?mvz/l:0;
-   const nn=ai.path&&ai.path[0],precise=(!fight&&nn&&(nn.type==='jump'||nn.type==='gap'))||ai.flip>0;
+   const nn=ai.path&&ai.path[0],precise=(!fight&&nn&&(nn.type==='jump'||nn.type==='gap'))||ai.flip>0||(ai.boxAct&&ai.boxAct.t>0);
    const k=Math.min(1,dt*(precise?20:fight?3.5:7));
    ai.mvx=(ai.mvx||0)+(dx-(ai.mvx||0))*k;ai.mvz=(ai.mvz||0)+(dz-(ai.mvz||0))*k;
    c.mx=ai.mvx;c.mz=ai.mvz;}
@@ -3954,41 +3987,49 @@ function drawFeed(c){
     const segs=f.segs||[[f.text,f.color]],age=(f.life||(f.life=f.t))-f.t,slide=Math.max(0,1-age*6);
     c.globalAlpha=clamp(f.t,0,1)*(1-slide);let x=20-slide*40,y=30+i*19;
     const wd=segs.reduce((a,s)=>a+c.measureText(s[0]).width,0);c.fillStyle='rgba(5,6,14,.55)';c.fillRect(x-6,y-14,wd+12,18);
-    for(const [t,col] of segs){c.fillStyle=col;c.shadowColor=col;c.shadowBlur=t.trim().length&&col!=='#8a93a8'?6:0;c.fillText(t,x,y);x+=c.measureText(t).width;}
+    c.fillStyle='#f2f4f8';c.shadowBlur=0;for(const [t] of segs){c.fillText(t,x,y);x+=c.measureText(t).width;} // all white
   });
   c.restore();
 }
-// the kill-streak banner at the top: the name flies in from the left, the count from the right, they slam together at the
-// centre; each new kill knocks the old count away; when the run ends, "ENDED BY …" flies in, the name is struck through
+// the kill-streak banner at the top: "<NAME> HAS" flies in from the left, "A TRIPLE KILL!" from the right, they slam together
+// at the centre; each new kill sends the new words in from the right and knocks the old ones away. When the run ends a white
+// line crosses the whole banner out from right to left, the banner flies up, and "<KILLER> ENDED <NAME>'S STREAK" slides in
+// from the right, stops in the middle, then flies up off the screen.
 const backOut=u=>{u=clamp(u,0,1);const s=1.9;return 1+(s+1)*Math.pow(u-1,3)+s*Math.pow(u-1,2);};
+const easeIn=u=>{u=clamp(u,0,1);return u*u*u;};
+function segsW(c,segs){return segs.reduce((a,s)=>a+c.measureText(s[0]).width,0);}
+function drawSegs(c,segs,x,y,glow){for(const [t,col] of segs){c.fillStyle=col;c.shadowColor=col;c.shadowBlur=glow;c.fillText(t,x,y);x+=c.measureText(t).width;}}
 function drawSpree(c){
-  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y=94,F=32;
-  const endA=S.end?clamp(1-(T-S.end.t-3.2)/.6,0,1):1;if(endA<=0){spree=null;return;}
-  c.save();c.textBaseline='middle';c.font=`bold ${F}px "Courier New",monospace`;c.globalAlpha=endA;
-  const u0=T-S.t0,inL=backOut(u0/.45);
-  // the impact: a white flash and a shake as the two halves meet (and again for each new count)
-  const hit=Math.min(Math.max(0,u0-.32),S.end?T-S.end.t-.3:9,T-S.nT-.3),shake=hit>=0&&hit<.25?(1-hit/.25)*5:0;
-  const sx=(Math.random()-.5)*shake,sy=(Math.random()-.5)*shake;
-  // left: the name, ending just left of the centre
-  const nameW=c.measureText(S.name).width,lx=cx-16+(1-inL)*-(cx+nameW)+sx;
-  c.textAlign='right';c.fillStyle=S.color;c.shadowColor=S.color;c.shadowBlur=16;c.fillText(S.name,lx,y+sy);
-  if(S.end){const k=clamp((T-S.end.t-.15)/.3,0,1);if(k>0){c.strokeStyle='#ff3f5a';c.lineWidth=4;c.shadowColor='#ff3f5a';c.beginPath();c.moveTo(lx-nameW-6,y+sy+2);c.lineTo(lx-nameW-6+(nameW+12)*k,y+sy-2);c.stroke();}}
-  // right: the count (TRIPLE KILL first, then just the number), or who ended it
-  const right=(txt,col,t,size)=>{const u=backOut((T-t)/.4);c.font=`bold ${size}px "Courier New",monospace`;c.textAlign='left';c.fillStyle=col;c.shadowColor=col;c.shadowBlur=18;
-    c.fillText(txt,cx+16+(1-u)*(W-cx)+sx,y+sy);};
-  const label=n=>n===3?'TRIPLE KILL':String(n);
-  if(!S.end){
+  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y0=94,F=32,GAP=10,WH='#f2f4f8',GOLD='#ffd23a';
+  c.save();c.textBaseline='middle';c.textAlign='left';
+  const font=sz=>c.font=`bold ${sz}px "Courier New",monospace`;
+  const E=S.end?T-S.end.t:-1;
+  // ---- the banner itself (until it has flown away after an ending) ----
+  if(E<.95){
+    const up=E>.5?easeIn((E-.5)/.4):0,y=y0-up*130;c.globalAlpha=1-up;
+    const u0=T-S.t0,inL=backOut(u0/.45),hit=Math.min(Math.max(0,u0-.32),T-S.nT-.3),shake=!S.end&&hit>=0&&hit<.25?(1-hit/.25)*5:0;
+    const sx=(Math.random()-.5)*shake,sy=(Math.random()-.5)*shake;
+    font(F);const L=[[S.name,S.color],[S.who===player?' HAVE':' HAS',WH]],lw=segsW(c,L),lx=cx-GAP-lw+(1-inL)*-(cx+lw)+sx;drawSegs(c,L,lx,y+sy,14);
     if(S.lastN!==S.n){S.prevN=S.lastN||0;S.lastN=S.n;}
-    if(S.prevN&&T-S.nT<.35){const k=(T-S.nT)/.35;c.save();c.globalAlpha*=1-k;c.font=`bold ${F}px "Courier New",monospace`;c.textAlign='left';c.fillStyle='#ffd23a';
-      c.fillText(label(S.prevN),cx+16-k*30,y-k*40);c.restore();}
-    right(label(S.n),'#ffd23a',S.nT,S.n===3?F:Math.round(F*1.25));
-  }else{
-    const by=S.end.by;right(by?`ENDED BY ${by[0]}`:'SELF-DESTRUCTED',by?by[1]:'#8a93a8',S.end.t,Math.round(F*.8));
+    if(S.prevN&&T-S.nT<.35){const k=(T-S.nT)/.35;c.save();c.globalAlpha*=1-k;font(F);c.fillStyle=GOLD;c.shadowColor=GOLD;c.shadowBlur=14;
+      c.fillText(streakBanner(S.prevN),cx+GAP-k*30,y-k*40);c.restore();}
+    font(F);const rt=streakBanner(S.n),rw=c.measureText(rt).width,ru=backOut((T-S.nT)/.4);
+    c.fillStyle=GOLD;c.shadowColor=GOLD;c.shadowBlur=16;c.fillText(rt,cx+GAP+(1-ru)*(W-cx)+sx,y+sy);
+    // crossed out: a white line drawn from the right end to the left end of the whole line
+    if(S.end){const k=clamp(E/.35,0,1),x1=cx+GAP+rw+8,x0=lx-8,xs=x1-(x1-x0)*k;
+      c.strokeStyle='#fff';c.lineWidth=4;c.shadowColor='#fff';c.shadowBlur=12;c.beginPath();c.moveTo(x1,y+2);c.lineTo(xs,y-1);c.stroke();}
+    // the impact: sparks and a flash where the halves meet
+    if(!S.end&&hit>=0&&hit<.3){const k=hit/.3;c.globalAlpha=1-k;c.strokeStyle='#fff';c.lineWidth=2;c.shadowColor='#fff';c.shadowBlur=10;c.beginPath();
+      for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.3,r0=8+k*30,r1=r0+10*(1-k);c.moveTo(cx+Math.cos(a)*r0,y+Math.sin(a)*r0*.6);c.lineTo(cx+Math.cos(a)*r1,y+Math.sin(a)*r1*.6);}c.stroke();
+      c.globalAlpha=(1-k)*.35;c.shadowBlur=0;c.fillStyle='#fff';c.fillRect(0,y-F*.7,W,F*1.4);}
   }
-  // sparks at the meeting point
-  if(hit>=0&&hit<.3){const k=hit/.3;c.globalAlpha=endA*(1-k);c.strokeStyle='#fff';c.lineWidth=2;c.shadowColor='#fff';c.shadowBlur=10;c.beginPath();
-    for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.3,r0=8+k*30,r1=r0+10*(1-k);c.moveTo(cx+Math.cos(a)*r0,y+Math.sin(a)*r0*.6);c.lineTo(cx+Math.cos(a)*r1,y+Math.sin(a)*r1*.6);}c.stroke();
-    c.globalAlpha=endA*(1-k)*.35;c.fillStyle='#fff';c.fillRect(0,y-F*.7,W,F*1.4);}
+  // ---- who ended it ----
+  if(S.end&&E>.7){
+    const me=S.who===player,by=S.end.by,segs=by?[[by[0],by[1]],[' ENDED ',WH]].concat(me?[['YOUR STREAK',WH]]:[[S.name,S.color],["'S STREAK",WH]]):[[S.name,S.color],[me?' ENDED YOUR OWN STREAK':' ENDED THEIR OWN STREAK',WH]];
+    font(Math.round(F*.8));const w=segsW(c,segs),u=backOut((E-.7)/.45),out=easeIn((E-3)/.45);
+    c.globalAlpha=1-out*.6;drawSegs(c,segs,cx-w/2+(1-u)*(W/2+w),y0-out*(y0+40),14);
+    if(E>3.5){spree=null;}
+  }
   c.restore();
 }
 function drawHUD(){
@@ -4087,7 +4128,7 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(s.charStyle==='solid'||s.charStyle==='lines')SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(['solid','lines','shiny'].includes(s.charStyle))SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
   if(s.kb)for(const a in KB_DEF)if(typeof s.kb[a]==='string'&&s.kb[a])SETTINGS.kb[a]=s.kb[a];
   if(s.gp)for(const a in GP_DEF)if(Number.isInteger(s.gp[a])&&s.gp[a]>=-1&&s.gp[a]<20&&s.gp[a]!==9)SETTINGS.gp[a]=s.gp[a];}}catch(e){}
 function getSettings(){return SETTINGS;}
@@ -4223,7 +4264,7 @@ function wireMenu(){
     $('asdesc').textContent=pad?'slows the look on a target, tracks and pulls toward it · RB snaps on':'gamepad only — switch Controls to Gamepad to use it';};
   opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{
     SETTINGS.input=v;if(v==='gamepad'&&!SETTINGS.padSeen){SETTINGS.padSeen=true;SETTINGS.assist=true;SETTINGS.assistStr=50;$('asSl').value=50;}drawAssist();});
-  opts($('styleopt'),[['lines','LINES'],['solid','SOLID']],()=>SETTINGS.charStyle,v=>{SETTINGS.charStyle=v;});
+  opts($('styleopt'),[['lines','LINES'],['solid','SOLID'],['shiny','SHINY']],()=>SETTINGS.charStyle,v=>{SETTINGS.charStyle=v;});
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
@@ -4972,6 +5013,30 @@ void main(){
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
 }`;
 
+// ---- "shiny" style: the solid colours with a glossy coat — highlights from the sun and the nearest light,
+// a reflection of a dark-floor / neon-sky environment that grows toward the silhouette, and a rim in the fighter's colour
+const SKFS_SHINY=`
+precision mediump float;
+varying vec3 vNor;varying float vMat;varying float vD;varying vec3 vW;uniform vec4 uLP;uniform vec3 uLC;uniform vec3 uCam;
+uniform vec3 uBody;uniform vec3 uJoint;uniform vec3 uGlow;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uAlpha;
+void main(){
+  vec3 n=normalize(vNor),v=normalize(uCam-vW);
+  float body=step(0.5,vMat),ndv=max(dot(n,v),0.0);
+  vec3 base=mix(uJoint,uBody,body);
+  float dif=max(dot(n,uSun),0.0),hemi=n.y*0.5+0.5;
+  vec3 col=base*(0.24+0.24*hemi+0.58*dif);
+  vec3 r=reflect(-v,n);float sky=smoothstep(-0.25,0.75,r.y);
+  vec3 env=mix(vec3(0.05,0.03,0.09),vec3(0.42,0.3,0.75),sky)+vec3(0.9,0.5,1.0)*pow(max(r.y,0.0),24.0)*0.6;
+  float fres=0.14+0.86*pow(1.0-ndv,3.5);
+  col+=env*fres*(0.75+0.55*body);
+  col+=vec3(1.0)*pow(max(dot(n,normalize(uSun+v)),0.0),70.0)*(0.7+0.8*body)+vec3(0.25)*pow(max(dot(n,normalize(uSun+v)),0.0),12.0)*body;
+  col+=uGlow*pow(1.0-ndv,3.0)*0.7;
+  col+=uGlow*(1.0-body)*0.55+uGlow*body*0.06;
+  {vec3 lv=uLP.xyz-vW;float ld=length(lv),la=clamp(1.0-ld/uLP.w,0.0,1.0);
+   col+=base*uLC*la*la*1.1+uLC*pow(max(dot(n,normalize(lv/ld+v)),0.0),40.0)*la*1.4;}
+  float f=exp(-pow(vD*uFogD,2.0));
+  gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
+}`;
 // ---- "lines" style (like the blocky fighters): a dark body with the model's sharp edges glowing in the fighter's colour ----
 // The mesh is unpacked so each triangle corner carries edge flags: component k reaches 0 on the edge opposite corner k,
 // and stays 1 everywhere for edges that aren't sharp (so only creases, borders and material seams draw).
@@ -4986,7 +5051,9 @@ void main(){
   vec3 fill=vec3(0.035,0.04,0.065)*(0.6+0.5*hemi+0.5*dif)+uLine*0.05;
   ${deriv?'vec3 w=fwidth(vB)*'+LINE_W.toFixed(2)+';':'vec3 w=vec3(0.03);'}
   vec3 a=smoothstep(vec3(0.0),w,vB);float edge=1.0-min(min(a.x,a.y),a.z);
-  vec3 col=mix(fill,uLine*1.25+vec3(0.12),edge);
+  vec3 a2=smoothstep(vec3(0.0),w*3.5,vB);float halo=1.0-min(min(a2.x,a2.y),a2.z);
+  vec3 col=fill+uLine*0.55*halo;                       // soft glow around each line
+  col=mix(col,uLine*2.3+vec3(0.35),edge);              // bright core
   {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=fill*uLC*la*la*1.5;}
   float f=exp(-pow(vD*uFogD,2.0));
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
@@ -5041,6 +5108,15 @@ async function loadModel(){
     SKN.vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(buf,vOff,vLen),gl.STATIC_DRAW);
     SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(buf.slice(iOff,iOff+meta.ni*2)),gl.STATIC_DRAW);
     SKN.p=p;SKN.loc=loc;SKN.meta=meta;SKN.ni=meta.ni;
+    try{ // the "shiny" variant: same mesh, glossy fragment shader
+      const sp=gl.createProgram();
+      for(const [t,src] of [[gl.VERTEX_SHADER,SKVS],[gl.FRAGMENT_SHADER,SKFS_SHINY]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
+        if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));gl.attachShader(sp,s);}
+      gl.linkProgram(sp);if(!gl.getProgramParameter(sp,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(sp));
+      const sl={};for(const a of ['aPos','aNor','aJ','aW'])sl[a]=gl.getAttribLocation(sp,a);
+      for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uCam'])sl[u]=gl.getUniformLocation(sp,u);
+      SKN.sp=sp;SKN.sl=sl;
+    }catch(err){console.warn('shiny style unavailable:',err);}
     try{ // the "lines" variant: its own program and an unpacked copy of the mesh
       const deriv=!!gl.getExtension('OES_standard_derivatives'),lp=gl.createProgram();
       for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,skfsLines(deriv)]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
@@ -5226,6 +5302,28 @@ const ARM_L=['LeftShoulder','LeftArm','LeftForeArm','LeftHand'];
 
 // ---------- locomotion ----------
 const LOCO={F:['walking_forward','running'],B:['walking_backward','running_backward']};
+// when each foot touches down in a walk/run clip, as a fraction of its cycle (found once from the foot heights)
+const FOOTC={};
+function footContacts(name){
+  if(FOOTC[name])return FOOTC[name];const c=SKN.clips[name],bi=SKN.bi,N=48,out=[];
+  for(const f of ['LeftFoot','RightFoot']){
+    const ys=[];for(let i=0;i<N;i++)ys.push(fkHeads(sampleClip(name,i/N*c.dur,false))[bi[f]].y);
+    const lo=Math.min(...ys),hi=Math.max(...ys),th=lo+(hi-lo)*.2;
+    for(let i=0;i<N;i++){const a=ys[i],b=ys[(i+1)%N];if(a>th&&b<=th)out.push(((i+(a-th)/(a-b))/N)%1);}
+  }
+  if(out.length<2)out.push(0,.5);
+  return FOOTC[name]=out;
+}
+// the walk/run cycle position, advanced like locoPose does it (so the pose can use it too); a footstep each time a foot lands
+function stepClock(e,dt){
+  const sp=Math.hypot(e.vx,e.vz),A=e.anim,back=!!(A&&A.back);
+  if(clamp((sp-8)/40,0,1)<=.01){e.lph=0;e.lphT=world.time;return;}
+  const [wn,rn]=LOCO[back?'B':'F'],cw=SKN.clips[wn],cr=SKN.clips[rn];
+  const k=clamp((sp-cw.speed)/(cr.speed-cw.speed),0,1),nat=lerp(cw.speed,cr.speed,k),dur=lerp(cw.dur,cr.dur,k);
+  const a=e.lph||0,b=(a+(Math.max(sp,10)/nat)/dur*dt)%1;e.lph=b;e.lphT=world.time;
+  if(e.crouch||sp<40)return;
+  for(const c of footContacts(k<.5?wn:rn))if(b>=a?(c>a&&c<=b):(c>a||c<=b)){e.stepSoft=k<.5;sfx('step',e);if(window.__stepLog&&e===player)__stepLog.push([+world.time.toFixed(2),sp|0,e.stepSoft]);break;}
+}
 function locoPose(e,A,dt){
   const sp=Math.hypot(e.vx,e.vz),by=e.bodyYaw;
   const wMove=clamp((sp-8)/40,0,1);
@@ -5238,7 +5336,7 @@ function locoPose(e,A,dt){
   if(wMove<=.01){A.ph=0;return idle;}
   const [wn,rn]=LOCO[A.back?'B':'F'],cw=SKN.clips[wn],cr=SKN.clips[rn];
   const k=clamp((sp-cw.speed)/(cr.speed-cw.speed),0,1),nat=lerp(cw.speed,cr.speed,k),dur=lerp(cw.dur,cr.dur,k);
-  A.ph=(A.ph+(Math.max(sp,10)/nat)/dur*dt)%1;
+  A.ph=e.lph!==undefined&&e.lphT>world.time-.2?e.lph:(A.ph+(Math.max(sp,10)/nat)/dur*dt)%1; // the simulation's step clock, so the feet match the footstep sounds
   const mv=blendPose(sampleClip(wn,A.ph*cw.dur,false),sampleClip(rn,A.ph*cr.dur,false),k);
   return wMove>=.99?mv:blendPose(idle,mv,wMove);
 }
@@ -5606,8 +5704,9 @@ function corpsesToDolls(){
 }
 
 function drawPose(P,col,alpha,flash){
-  const lines=SETTINGS.charStyle==='lines'&&SKN.lp,gl=R.gl,L=lines?SKN.ll:SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
-  gl.useProgram(lines?SKN.lp:SKN.p);
+  const lines=SETTINGS.charStyle==='lines'&&SKN.lp,shiny=!lines&&SETTINGS.charStyle==='shiny'&&SKN.sp,gl=R.gl,L=lines?SKN.ll:shiny?SKN.sl:SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
+  gl.useProgram(lines?SKN.lp:shiny?SKN.sp:SKN.p);
+  if(shiny)gl.uniform3f(L.uCam,cam.pos.x,cam.pos.y,cam.pos.z);
   for(let a=0;a<8;a++)gl.disableVertexAttribArray(a);
   const ST=lines?24:20;
   if(lines)gl.bindBuffer(gl.ARRAY_BUFFER,SKN.lm.b);else{gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);}
@@ -5798,6 +5897,8 @@ function syncControls(){
   VQ('vmirror').classList.toggle('on',VW.mirror);
 }
 function viewerUI(){
+  for(const b of document.querySelectorAll('#vstyle button'))b.onclick=()=>{SETTINGS.charStyle=b.dataset.st;saveSettings();for(const x of document.querySelectorAll('#vstyle button'))x.classList.toggle('on',x===b);};
+  for(const x of document.querySelectorAll('#vstyle button'))x.classList.toggle('on',x.dataset.st===SETTINGS.charStyle);
   for(const b of document.querySelectorAll('#vmodel button'))b.onclick=()=>{VW.model=b.dataset.m;VW.item=null;VW.e=null;chars=[];
     VW.tgt=V(VW.o.x,VW.o.y+(VW.model==='char'?30:8),VW.o.z);VW.dist=VW.model==='char'?150:90;gibs=[];parts=[];
     selectItem(VW.model==='char'?((SKN.ready&&SKN.clips)?'clip:'+Object.keys(SKN.clips).sort()[0]:null):'spider:Walk');};

@@ -663,7 +663,8 @@ function updatePose(e,dt){
     e.runW=lerp(e.runW,mv?1:0,1-Math.exp(-12*dt));
     const s=lerp(.62,.4,speedN),A=lerp(7,17,speedN),cyc=2*A/s,lift=lerp(5,13,speedN);
     e.phase+=lvx*dt/cyc;
-    {const fs=Math.floor(e.phase*2);if(fs!==e.stepN){if(e.stepN!==undefined&&speedN>.15&&!e.crouch)sfx('step',e);e.stepN=fs;}} // a footfall every half cycle
+    if(typeof stepClock==='function'&&SKN.clips)stepClock(e,dt); // footsteps in time with the walk/run clips (src/08_skin.js)
+    else{const fs=Math.floor(e.phase*2);if(fs!==e.stepN){if(e.stepN!==undefined&&speedN>.15&&!e.crouch)sfx('step',e);e.stepN=fs;}}
     const pa=legPhase(e.phase,s,A,lift),pb=legPhase(e.phase+.5,s,A,lift);e.armPh={a:pa.x/A,b:pb.x/A};
     const bob=lerp(.8,3.2,speedN)*(.5+.5*Math.cos(4*Math.PI*(e.phase-s/2)));
     e.cdeep=lerp(e.cdeep||0,e.crouch?(e.cover?23:11):0,1-Math.exp(-14*dt)); // cover: a deep squat, head tucked

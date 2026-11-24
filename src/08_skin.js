@@ -32,6 +32,30 @@ void main(){
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
 }`;
 
+// ---- "shiny" style: the solid colours with a glossy coat — highlights from the sun and the nearest light,
+// a reflection of a dark-floor / neon-sky environment that grows toward the silhouette, and a rim in the fighter's colour
+const SKFS_SHINY=`
+precision mediump float;
+varying vec3 vNor;varying float vMat;varying float vD;varying vec3 vW;uniform vec4 uLP;uniform vec3 uLC;uniform vec3 uCam;
+uniform vec3 uBody;uniform vec3 uJoint;uniform vec3 uGlow;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uAlpha;
+void main(){
+  vec3 n=normalize(vNor),v=normalize(uCam-vW);
+  float body=step(0.5,vMat),ndv=max(dot(n,v),0.0);
+  vec3 base=mix(uJoint,uBody,body);
+  float dif=max(dot(n,uSun),0.0),hemi=n.y*0.5+0.5;
+  vec3 col=base*(0.24+0.24*hemi+0.58*dif);
+  vec3 r=reflect(-v,n);float sky=smoothstep(-0.25,0.75,r.y);
+  vec3 env=mix(vec3(0.05,0.03,0.09),vec3(0.42,0.3,0.75),sky)+vec3(0.9,0.5,1.0)*pow(max(r.y,0.0),24.0)*0.6;
+  float fres=0.14+0.86*pow(1.0-ndv,3.5);
+  col+=env*fres*(0.75+0.55*body);
+  col+=vec3(1.0)*pow(max(dot(n,normalize(uSun+v)),0.0),70.0)*(0.7+0.8*body)+vec3(0.25)*pow(max(dot(n,normalize(uSun+v)),0.0),12.0)*body;
+  col+=uGlow*pow(1.0-ndv,3.0)*0.7;
+  col+=uGlow*(1.0-body)*0.55+uGlow*body*0.06;
+  {vec3 lv=uLP.xyz-vW;float ld=length(lv),la=clamp(1.0-ld/uLP.w,0.0,1.0);
+   col+=base*uLC*la*la*1.1+uLC*pow(max(dot(n,normalize(lv/ld+v)),0.0),40.0)*la*1.4;}
+  float f=exp(-pow(vD*uFogD,2.0));
+  gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
+}`;
 // ---- "lines" style (like the blocky fighters): a dark body with the model's sharp edges glowing in the fighter's colour ----
 // The mesh is unpacked so each triangle corner carries edge flags: component k reaches 0 on the edge opposite corner k,
 // and stays 1 everywhere for edges that aren't sharp (so only creases, borders and material seams draw).
@@ -46,7 +70,9 @@ void main(){
   vec3 fill=vec3(0.035,0.04,0.065)*(0.6+0.5*hemi+0.5*dif)+uLine*0.05;
   ${deriv?'vec3 w=fwidth(vB)*'+LINE_W.toFixed(2)+';':'vec3 w=vec3(0.03);'}
   vec3 a=smoothstep(vec3(0.0),w,vB);float edge=1.0-min(min(a.x,a.y),a.z);
-  vec3 col=mix(fill,uLine*1.25+vec3(0.12),edge);
+  vec3 a2=smoothstep(vec3(0.0),w*3.5,vB);float halo=1.0-min(min(a2.x,a2.y),a2.z);
+  vec3 col=fill+uLine*0.55*halo;                       // soft glow around each line
+  col=mix(col,uLine*2.3+vec3(0.35),edge);              // bright core
   {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=fill*uLC*la*la*1.5;}
   float f=exp(-pow(vD*uFogD,2.0));
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
@@ -101,6 +127,15 @@ async function loadModel(){
     SKN.vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(buf,vOff,vLen),gl.STATIC_DRAW);
     SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(buf.slice(iOff,iOff+meta.ni*2)),gl.STATIC_DRAW);
     SKN.p=p;SKN.loc=loc;SKN.meta=meta;SKN.ni=meta.ni;
+    try{ // the "shiny" variant: same mesh, glossy fragment shader
+      const sp=gl.createProgram();
+      for(const [t,src] of [[gl.VERTEX_SHADER,SKVS],[gl.FRAGMENT_SHADER,SKFS_SHINY]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
+        if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));gl.attachShader(sp,s);}
+      gl.linkProgram(sp);if(!gl.getProgramParameter(sp,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(sp));
+      const sl={};for(const a of ['aPos','aNor','aJ','aW'])sl[a]=gl.getAttribLocation(sp,a);
+      for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uCam'])sl[u]=gl.getUniformLocation(sp,u);
+      SKN.sp=sp;SKN.sl=sl;
+    }catch(err){console.warn('shiny style unavailable:',err);}
     try{ // the "lines" variant: its own program and an unpacked copy of the mesh
       const deriv=!!gl.getExtension('OES_standard_derivatives'),lp=gl.createProgram();
       for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,skfsLines(deriv)]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
@@ -286,6 +321,28 @@ const ARM_L=['LeftShoulder','LeftArm','LeftForeArm','LeftHand'];
 
 // ---------- locomotion ----------
 const LOCO={F:['walking_forward','running'],B:['walking_backward','running_backward']};
+// when each foot touches down in a walk/run clip, as a fraction of its cycle (found once from the foot heights)
+const FOOTC={};
+function footContacts(name){
+  if(FOOTC[name])return FOOTC[name];const c=SKN.clips[name],bi=SKN.bi,N=48,out=[];
+  for(const f of ['LeftFoot','RightFoot']){
+    const ys=[];for(let i=0;i<N;i++)ys.push(fkHeads(sampleClip(name,i/N*c.dur,false))[bi[f]].y);
+    const lo=Math.min(...ys),hi=Math.max(...ys),th=lo+(hi-lo)*.2;
+    for(let i=0;i<N;i++){const a=ys[i],b=ys[(i+1)%N];if(a>th&&b<=th)out.push(((i+(a-th)/(a-b))/N)%1);}
+  }
+  if(out.length<2)out.push(0,.5);
+  return FOOTC[name]=out;
+}
+// the walk/run cycle position, advanced like locoPose does it (so the pose can use it too); a footstep each time a foot lands
+function stepClock(e,dt){
+  const sp=Math.hypot(e.vx,e.vz),A=e.anim,back=!!(A&&A.back);
+  if(clamp((sp-8)/40,0,1)<=.01){e.lph=0;e.lphT=world.time;return;}
+  const [wn,rn]=LOCO[back?'B':'F'],cw=SKN.clips[wn],cr=SKN.clips[rn];
+  const k=clamp((sp-cw.speed)/(cr.speed-cw.speed),0,1),nat=lerp(cw.speed,cr.speed,k),dur=lerp(cw.dur,cr.dur,k);
+  const a=e.lph||0,b=(a+(Math.max(sp,10)/nat)/dur*dt)%1;e.lph=b;e.lphT=world.time;
+  if(e.crouch||sp<40)return;
+  for(const c of footContacts(k<.5?wn:rn))if(b>=a?(c>a&&c<=b):(c>a||c<=b)){e.stepSoft=k<.5;sfx('step',e);if(window.__stepLog&&e===player)__stepLog.push([+world.time.toFixed(2),sp|0,e.stepSoft]);break;}
+}
 function locoPose(e,A,dt){
   const sp=Math.hypot(e.vx,e.vz),by=e.bodyYaw;
   const wMove=clamp((sp-8)/40,0,1);
@@ -298,7 +355,7 @@ function locoPose(e,A,dt){
   if(wMove<=.01){A.ph=0;return idle;}
   const [wn,rn]=LOCO[A.back?'B':'F'],cw=SKN.clips[wn],cr=SKN.clips[rn];
   const k=clamp((sp-cw.speed)/(cr.speed-cw.speed),0,1),nat=lerp(cw.speed,cr.speed,k),dur=lerp(cw.dur,cr.dur,k);
-  A.ph=(A.ph+(Math.max(sp,10)/nat)/dur*dt)%1;
+  A.ph=e.lph!==undefined&&e.lphT>world.time-.2?e.lph:(A.ph+(Math.max(sp,10)/nat)/dur*dt)%1; // the simulation's step clock, so the feet match the footstep sounds
   const mv=blendPose(sampleClip(wn,A.ph*cw.dur,false),sampleClip(rn,A.ph*cr.dur,false),k);
   return wMove>=.99?mv:blendPose(idle,mv,wMove);
 }
@@ -666,8 +723,9 @@ function corpsesToDolls(){
 }
 
 function drawPose(P,col,alpha,flash){
-  const lines=SETTINGS.charStyle==='lines'&&SKN.lp,gl=R.gl,L=lines?SKN.ll:SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
-  gl.useProgram(lines?SKN.lp:SKN.p);
+  const lines=SETTINGS.charStyle==='lines'&&SKN.lp,shiny=!lines&&SETTINGS.charStyle==='shiny'&&SKN.sp,gl=R.gl,L=lines?SKN.ll:shiny?SKN.sl:SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
+  gl.useProgram(lines?SKN.lp:shiny?SKN.sp:SKN.p);
+  if(shiny)gl.uniform3f(L.uCam,cam.pos.x,cam.pos.y,cam.pos.z);
   for(let a=0;a<8;a++)gl.disableVertexAttribArray(a);
   const ST=lines?24:20;
   if(lines)gl.bindBuffer(gl.ARRAY_BUFFER,SKN.lm.b);else{gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);}

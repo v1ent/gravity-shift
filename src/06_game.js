@@ -293,41 +293,49 @@ function drawFeed(c){
     const segs=f.segs||[[f.text,f.color]],age=(f.life||(f.life=f.t))-f.t,slide=Math.max(0,1-age*6);
     c.globalAlpha=clamp(f.t,0,1)*(1-slide);let x=20-slide*40,y=30+i*19;
     const wd=segs.reduce((a,s)=>a+c.measureText(s[0]).width,0);c.fillStyle='rgba(5,6,14,.55)';c.fillRect(x-6,y-14,wd+12,18);
-    for(const [t,col] of segs){c.fillStyle=col;c.shadowColor=col;c.shadowBlur=t.trim().length&&col!=='#8a93a8'?6:0;c.fillText(t,x,y);x+=c.measureText(t).width;}
+    c.fillStyle='#f2f4f8';c.shadowBlur=0;for(const [t] of segs){c.fillText(t,x,y);x+=c.measureText(t).width;} // all white
   });
   c.restore();
 }
-// the kill-streak banner at the top: the name flies in from the left, the count from the right, they slam together at the
-// centre; each new kill knocks the old count away; when the run ends, "ENDED BY …" flies in, the name is struck through
+// the kill-streak banner at the top: "<NAME> HAS" flies in from the left, "A TRIPLE KILL!" from the right, they slam together
+// at the centre; each new kill sends the new words in from the right and knocks the old ones away. When the run ends a white
+// line crosses the whole banner out from right to left, the banner flies up, and "<KILLER> ENDED <NAME>'S STREAK" slides in
+// from the right, stops in the middle, then flies up off the screen.
 const backOut=u=>{u=clamp(u,0,1);const s=1.9;return 1+(s+1)*Math.pow(u-1,3)+s*Math.pow(u-1,2);};
+const easeIn=u=>{u=clamp(u,0,1);return u*u*u;};
+function segsW(c,segs){return segs.reduce((a,s)=>a+c.measureText(s[0]).width,0);}
+function drawSegs(c,segs,x,y,glow){for(const [t,col] of segs){c.fillStyle=col;c.shadowColor=col;c.shadowBlur=glow;c.fillText(t,x,y);x+=c.measureText(t).width;}}
 function drawSpree(c){
-  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y=94,F=32;
-  const endA=S.end?clamp(1-(T-S.end.t-3.2)/.6,0,1):1;if(endA<=0){spree=null;return;}
-  c.save();c.textBaseline='middle';c.font=`bold ${F}px "Courier New",monospace`;c.globalAlpha=endA;
-  const u0=T-S.t0,inL=backOut(u0/.45);
-  // the impact: a white flash and a shake as the two halves meet (and again for each new count)
-  const hit=Math.min(Math.max(0,u0-.32),S.end?T-S.end.t-.3:9,T-S.nT-.3),shake=hit>=0&&hit<.25?(1-hit/.25)*5:0;
-  const sx=(Math.random()-.5)*shake,sy=(Math.random()-.5)*shake;
-  // left: the name, ending just left of the centre
-  const nameW=c.measureText(S.name).width,lx=cx-16+(1-inL)*-(cx+nameW)+sx;
-  c.textAlign='right';c.fillStyle=S.color;c.shadowColor=S.color;c.shadowBlur=16;c.fillText(S.name,lx,y+sy);
-  if(S.end){const k=clamp((T-S.end.t-.15)/.3,0,1);if(k>0){c.strokeStyle='#ff3f5a';c.lineWidth=4;c.shadowColor='#ff3f5a';c.beginPath();c.moveTo(lx-nameW-6,y+sy+2);c.lineTo(lx-nameW-6+(nameW+12)*k,y+sy-2);c.stroke();}}
-  // right: the count (TRIPLE KILL first, then just the number), or who ended it
-  const right=(txt,col,t,size)=>{const u=backOut((T-t)/.4);c.font=`bold ${size}px "Courier New",monospace`;c.textAlign='left';c.fillStyle=col;c.shadowColor=col;c.shadowBlur=18;
-    c.fillText(txt,cx+16+(1-u)*(W-cx)+sx,y+sy);};
-  const label=n=>n===3?'TRIPLE KILL':String(n);
-  if(!S.end){
+  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y0=94,F=32,GAP=10,WH='#f2f4f8',GOLD='#ffd23a';
+  c.save();c.textBaseline='middle';c.textAlign='left';
+  const font=sz=>c.font=`bold ${sz}px "Courier New",monospace`;
+  const E=S.end?T-S.end.t:-1;
+  // ---- the banner itself (until it has flown away after an ending) ----
+  if(E<.95){
+    const up=E>.5?easeIn((E-.5)/.4):0,y=y0-up*130;c.globalAlpha=1-up;
+    const u0=T-S.t0,inL=backOut(u0/.45),hit=Math.min(Math.max(0,u0-.32),T-S.nT-.3),shake=!S.end&&hit>=0&&hit<.25?(1-hit/.25)*5:0;
+    const sx=(Math.random()-.5)*shake,sy=(Math.random()-.5)*shake;
+    font(F);const L=[[S.name,S.color],[S.who===player?' HAVE':' HAS',WH]],lw=segsW(c,L),lx=cx-GAP-lw+(1-inL)*-(cx+lw)+sx;drawSegs(c,L,lx,y+sy,14);
     if(S.lastN!==S.n){S.prevN=S.lastN||0;S.lastN=S.n;}
-    if(S.prevN&&T-S.nT<.35){const k=(T-S.nT)/.35;c.save();c.globalAlpha*=1-k;c.font=`bold ${F}px "Courier New",monospace`;c.textAlign='left';c.fillStyle='#ffd23a';
-      c.fillText(label(S.prevN),cx+16-k*30,y-k*40);c.restore();}
-    right(label(S.n),'#ffd23a',S.nT,S.n===3?F:Math.round(F*1.25));
-  }else{
-    const by=S.end.by;right(by?`ENDED BY ${by[0]}`:'SELF-DESTRUCTED',by?by[1]:'#8a93a8',S.end.t,Math.round(F*.8));
+    if(S.prevN&&T-S.nT<.35){const k=(T-S.nT)/.35;c.save();c.globalAlpha*=1-k;font(F);c.fillStyle=GOLD;c.shadowColor=GOLD;c.shadowBlur=14;
+      c.fillText(streakBanner(S.prevN),cx+GAP-k*30,y-k*40);c.restore();}
+    font(F);const rt=streakBanner(S.n),rw=c.measureText(rt).width,ru=backOut((T-S.nT)/.4);
+    c.fillStyle=GOLD;c.shadowColor=GOLD;c.shadowBlur=16;c.fillText(rt,cx+GAP+(1-ru)*(W-cx)+sx,y+sy);
+    // crossed out: a white line drawn from the right end to the left end of the whole line
+    if(S.end){const k=clamp(E/.35,0,1),x1=cx+GAP+rw+8,x0=lx-8,xs=x1-(x1-x0)*k;
+      c.strokeStyle='#fff';c.lineWidth=4;c.shadowColor='#fff';c.shadowBlur=12;c.beginPath();c.moveTo(x1,y+2);c.lineTo(xs,y-1);c.stroke();}
+    // the impact: sparks and a flash where the halves meet
+    if(!S.end&&hit>=0&&hit<.3){const k=hit/.3;c.globalAlpha=1-k;c.strokeStyle='#fff';c.lineWidth=2;c.shadowColor='#fff';c.shadowBlur=10;c.beginPath();
+      for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.3,r0=8+k*30,r1=r0+10*(1-k);c.moveTo(cx+Math.cos(a)*r0,y+Math.sin(a)*r0*.6);c.lineTo(cx+Math.cos(a)*r1,y+Math.sin(a)*r1*.6);}c.stroke();
+      c.globalAlpha=(1-k)*.35;c.shadowBlur=0;c.fillStyle='#fff';c.fillRect(0,y-F*.7,W,F*1.4);}
   }
-  // sparks at the meeting point
-  if(hit>=0&&hit<.3){const k=hit/.3;c.globalAlpha=endA*(1-k);c.strokeStyle='#fff';c.lineWidth=2;c.shadowColor='#fff';c.shadowBlur=10;c.beginPath();
-    for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.3,r0=8+k*30,r1=r0+10*(1-k);c.moveTo(cx+Math.cos(a)*r0,y+Math.sin(a)*r0*.6);c.lineTo(cx+Math.cos(a)*r1,y+Math.sin(a)*r1*.6);}c.stroke();
-    c.globalAlpha=endA*(1-k)*.35;c.fillStyle='#fff';c.fillRect(0,y-F*.7,W,F*1.4);}
+  // ---- who ended it ----
+  if(S.end&&E>.7){
+    const me=S.who===player,by=S.end.by,segs=by?[[by[0],by[1]],[' ENDED ',WH]].concat(me?[['YOUR STREAK',WH]]:[[S.name,S.color],["'S STREAK",WH]]):[[S.name,S.color],[me?' ENDED YOUR OWN STREAK':' ENDED THEIR OWN STREAK',WH]];
+    font(Math.round(F*.8));const w=segsW(c,segs),u=backOut((E-.7)/.45),out=easeIn((E-3)/.45);
+    c.globalAlpha=1-out*.6;drawSegs(c,segs,cx-w/2+(1-u)*(W/2+w),y0-out*(y0+40),14);
+    if(E>3.5){spree=null;}
+  }
   c.restore();
 }
 function drawHUD(){
@@ -426,7 +434,7 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(s.charStyle==='solid'||s.charStyle==='lines')SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(['solid','lines','shiny'].includes(s.charStyle))SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
   if(s.kb)for(const a in KB_DEF)if(typeof s.kb[a]==='string'&&s.kb[a])SETTINGS.kb[a]=s.kb[a];
   if(s.gp)for(const a in GP_DEF)if(Number.isInteger(s.gp[a])&&s.gp[a]>=-1&&s.gp[a]<20&&s.gp[a]!==9)SETTINGS.gp[a]=s.gp[a];}}catch(e){}
 function getSettings(){return SETTINGS;}

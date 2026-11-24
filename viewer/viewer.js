@@ -156,6 +156,8 @@ function syncControls(){
   VQ('vmirror').classList.toggle('on',VW.mirror);
 }
 function viewerUI(){
+  for(const b of document.querySelectorAll('#vstyle button'))b.onclick=()=>{SETTINGS.charStyle=b.dataset.st;saveSettings();for(const x of document.querySelectorAll('#vstyle button'))x.classList.toggle('on',x===b);};
+  for(const x of document.querySelectorAll('#vstyle button'))x.classList.toggle('on',x.dataset.st===SETTINGS.charStyle);
   for(const b of document.querySelectorAll('#vmodel button'))b.onclick=()=>{VW.model=b.dataset.m;VW.item=null;VW.e=null;chars=[];
     VW.tgt=V(VW.o.x,VW.o.y+(VW.model==='char'?30:8),VW.o.z);VW.dist=VW.model==='char'?150:90;gibs=[];parts=[];
     selectItem(VW.model==='char'?((SKN.ready&&SKN.clips)?'clip:'+Object.keys(SKN.clips).sort()[0]:null):'spider:Walk');};

@@ -267,10 +267,35 @@ function botThink(b,dt){
     if(Math.hypot(b.x-ai.last.x,b.y-ai.last.y,b.z-ai.last.z)<10&&!see&&(mvx||mvz)){c.jump=true;ai.hold=.4;ai.flip=.5;ai.replan=0;}
     ai.stuckT=0;ai.last=V(b.x,b.y,b.z);
   }
+  // walked into a loose box: never shove it along. Take cover at it (in a fight), kick it away, hop over it,
+  // step round it, or head off another way.
+  if(ai.boxAct&&ai.boxAct.t>0){const A2=ai.boxAct;A2.t-=dt;
+    if(A2.kind==='around'){mvx=A2.px+A2.fx*A2.fwd;mvz=A2.pz+A2.fz*A2.fwd;}
+    else if(A2.kind==='hold'){mvx=0;mvz=0;if(A2.crouch)c.crouch=true;}
+    else if(A2.kind==='kick'){mvx=0;mvz=0;if(!A2.done&&b.kickCD<=0){c.kick=true;A2.done=true;}}
+  }else if(b.boxPush&&world.time-b.boxPushLast<.12&&world.time-b.boxPushStart>.25&&b.state==='normal'&&b.grounded&&!b.boxPush.dead){
+    const B=b.boxPush,dx=B.x-b.x,dz=B.z-b.z,l=Math.hypot(dx,dz)||1,fx=dx/l,fz=dz/l;
+    const facing=Math.sin(b.yaw)*fx+Math.cos(b.yaw)*fz>.75,again=ai.boxLast===B&&world.time-ai.boxLastT<4;
+    const opts=[];
+    if(fight&&B.h>=26&&B.h<=64&&!again)opts.push(['hold',4]);
+    if(B.m<=2.5&&facing&&b.kickCD<=0)opts.push(['kick',3]);
+    if(B.h<=40)opts.push(['hop',2]);
+    opts.push(['around',again?2:3]);
+    if(!fight)opts.push(['away',again?3:1]);
+    let r=rnd()*opts.reduce((a,o)=>a+o[1],0),kind='around';for(const o of opts){if((r-=o[1])<0){kind=o[0];break;}}
+    const off=(b.x-B.x)*-fz+(b.z-B.z)*fx,sg=Math.abs(off)>4?Math.sign(off):(rnd()<.5?-1:1),half=Math.max(B.w,B.d||B.w)/2;
+    if(kind==='hold')ai.boxAct={kind,t:1.5+rnd()*2,crouch:B.h<=50};
+    else if(kind==='kick')ai.boxAct={kind,t:.45};
+    else if(kind==='hop'){c.jump=true;ai.hold=.35;ai.boxAct={kind,t:.4};}
+    else if(kind==='away'){ai.boxAct={kind:'around',t:1.1,px:-fz*sg,pz:fx*sg,fx,fz,fwd:-.6};ai.replan=0;ai.path=null;}
+    else ai.boxAct={kind:'around',t:.25+(half+20)/WALK,px:-fz*sg,pz:fx*sg,fx,fz,fwd:.25};
+    if(kind==='hop'){mvx=fx;mvz=fz;}else if(ai.boxAct.kind==='around'){mvx=ai.boxAct.px;mvz=ai.boxAct.pz;}else{mvx=0;mvz=0;}
+    ai.boxLast=B;ai.boxLastT=world.time;b.boxPush=null;
+  }
   if(dip&&(!fight||dip.close||dip.stay)&&!dip.path){if(dip.stay){mvx=0;mvz=0;}else if(dip.goal&&Math.hypot(dip.goal.x-b.x,dip.goal.z-b.z)<240){mvx=dip.goal.x-b.x;mvz=dip.goal.z-b.z;if(Math.hypot(mvx,mvz)<10){mvx=0;mvz=0;}}}
   if(ai.flip>0){ai.flip-=dt;const t2=mvx;mvx=-mvz;mvz=t2;}
   {const l=Math.hypot(mvx,mvz),dx=l>0?mvx/l:0,dz=l>0?mvz/l:0;
-   const nn=ai.path&&ai.path[0],precise=(!fight&&nn&&(nn.type==='jump'||nn.type==='gap'))||ai.flip>0;
+   const nn=ai.path&&ai.path[0],precise=(!fight&&nn&&(nn.type==='jump'||nn.type==='gap'))||ai.flip>0||(ai.boxAct&&ai.boxAct.t>0);
    const k=Math.min(1,dt*(precise?20:fight?3.5:7));
    ai.mvx=(ai.mvx||0)+(dx-(ai.mvx||0))*k;ai.mvz=(ai.mvz||0)+(dz-(ai.mvz||0))*k;
    c.mx=ai.mvx;c.mz=ai.mvz;}

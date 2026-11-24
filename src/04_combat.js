@@ -92,7 +92,7 @@ function sfxSample(kind,at){
     case 'crate':return playS('box_collide',at,{vol:.8,range:1000,jit:.15});
     case 'boxkick':return playS('box_kick',at,{vol:.85});
     case 'jump':return playS('jump',at,{vol:me?.45:.55,range:900});
-    case 'step':return playS('footstep',at,{vol:me?.28:.4,range:650,jit:.12});
+    case 'step':{const soft=at&&at.stepSoft;return playS('footstep',at,{vol:(me?.28:.4)*(soft?.55:1),rate:soft?.88:1,range:soft?450:650,jit:.12});} // walking: softer, slower
     case 'flyby':return playS('bullet_flyby',at,{vol:.75,range:400});
     case 'hurt':return playS('player_taking_damage',null,{vol:.75});
     case 'die':return me?playS('player_death',null,{vol:.9}):false;
@@ -144,7 +144,11 @@ function damage(e,amt,src,dir){
   if(e.hp<=0)kill(e,src,dir);
 }
 // ---------- kill streaks: kills in a row without dying ----------
-function streakWord(n){return n<2?'':['','','DOUBLE KILL','TRIPLE KILL','QUADRA KILL','PENTA KILL'][n]||`${n} KILLS IN A ROW`;}
+const NUMW=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN','TWENTY'];
+const MULTI=['','','DOUBLE KILL','TRIPLE KILL','QUADRA KILL','PENTA KILL'];
+function streakWord(n){return n<2?'':MULTI[n]||`${NUMW[n]||n} KILLS IN A ROW`;}
+// the banner's words: "<name> HAS" + "A TRIPLE KILL!" / "SIX KILLS IN A ROW!"
+function streakBanner(n){return MULTI[n]?`A ${MULTI[n]}!`:`${NUMW[n]||n} KILLS IN A ROW!`;}
 // the banner at the top of the screen: from the third kill in a row until someone ends that run
 let spree=null;
 function spreeKill(k){
@@ -155,7 +159,7 @@ function spreeKill(k){
 }
 function spreeEnd(e,killer){
   if(!spree||spree.who!==e||spree.end)return;
-  const by=killer&&killer!==e?(killer.isSpider?['THE SPIDER','#e8ecf2']:[killer.name,killer.color]):null;
+  const by=killer&&killer!==e?(killer.isSpider?['THE SPIDER','#ffffff']:[killer.name,killer.color]):null;
   spree.end={by,t:hudClock,n:spree.n};
 }
 function kill(e,src,dir){
@@ -545,13 +549,15 @@ function charProps(e){
       const share=clamp(.45/b.m,.08,.5);
       if(ox<oz){const s=Math.sign(b.x-e.x)||1,bx0=b.x,ex0=e.x;b.x+=s*ox*share;if(overlapSolid(b.x,b.y,b.z,b.w,b.h,b.d)){b.x=bx0;e.x-=s*ox;}else e.x-=s*ox*(1-share);
         if(overlapSolid(e.x,e.y,e.z,e.w,e.h)){e.x=ex0;}
-        if(e.vx*s>0){const dv=s*Math.max(Math.abs(e.vx)*.9/Math.sqrt(b.m),25)-b.vx;b.vx+=dv;if(b.rb)rbSpin(b,V(b.x-s*b.w/2,Math.min(e.y+34,b.y+b.h*.9),b.z),V(dv*b.m*.35,0,0));if(b.m>2)e.vx*=.6;}}
+        if(e.vx*s>0){boxPushed(e,b);const dv=s*Math.max(Math.abs(e.vx)*.9/Math.sqrt(b.m),25)-b.vx;b.vx+=dv;if(b.rb)rbSpin(b,V(b.x-s*b.w/2,Math.min(e.y+34,b.y+b.h*.9),b.z),V(dv*b.m*.35,0,0));if(b.m>2)e.vx*=.6;}}
       else{const s=Math.sign(b.z-e.z)||1,bz0=b.z,ez0=e.z;b.z+=s*oz*share;if(overlapSolid(b.x,b.y,b.z,b.w,b.h,b.d)){b.z=bz0;e.z-=s*oz;}else e.z-=s*oz*(1-share);
         if(overlapSolid(e.x,e.y,e.z,e.w,e.h)){e.z=ez0;}
-        if(e.vz*s>0){const dv=s*Math.max(Math.abs(e.vz)*.9/Math.sqrt(b.m),25)-b.vz;b.vz+=dv;if(b.rb)rbSpin(b,V(b.x,Math.min(e.y+34,b.y+b.h*.9),b.z-s*b.d/2),V(0,0,dv*b.m*.35));if(b.m>2)e.vz*=.6;}}
+        if(e.vz*s>0){boxPushed(e,b);const dv=s*Math.max(Math.abs(e.vz)*.9/Math.sqrt(b.m),25)-b.vz;b.vz+=dv;if(b.rb)rbSpin(b,V(b.x,Math.min(e.y+34,b.y+b.h*.9),b.z-s*b.d/2),V(0,0,dv*b.m*.35));if(b.m>2)e.vz*=.6;}}
     }
   }
 }
+// a bot walking into a loose box: remember which box and since when (the AI reacts instead of shoving it along)
+function boxPushed(e,b){if(!e.isBot)return;if(e.boxPush!==b||world.time-e.boxPushLast>.2){e.boxPush=b;e.boxPushStart=world.time;}e.boxPushLast=world.time;}
 function spawnFurniture(){
   const pts=spawnPoints();
   const want=['container','container','big','big','big','barrel','barrel','barrel','barrel','barrel','barrel','crate','crate','crate','crate','crate','crate','small','small','small','small',
