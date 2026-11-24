@@ -39,7 +39,7 @@ function wavePartner(e){
 function startWave(e){e.emote={kind:'wave',t:0,id:Math.random()};
   // bots that can see it think about it straight away (a short reaction, not their usual slow rhythm)
   for(const o of chars)if(o.ai&&o!==e&&Math.hypot(o.x-e.x,o.z-e.z)<700)o.ai.dipCD=Math.min(o.ai.dipCD||9,.25+rnd()*.45);
-if(e===player)feed.unshift({t:3.5,text:'YOU WAVE — an enemy who stands in front of you and presses T becomes your ally',color:'#ccd'});}
+if(e===player)feed.unshift({t:3.5,text:keyText('YOU WAVE — an enemy who stands in front of you and presses {wave} becomes your ally'),color:'#ccd'});}
 function startBow(init,resp){
   const face=(a,b)=>{a.yaw=a.bodyYaw=a.legYaw=Math.atan2(b.x-a.x,b.z-a.z);};
   face(init,resp);face(resp,init);

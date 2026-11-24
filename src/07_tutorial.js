@@ -127,12 +127,12 @@ TUT_BUILD.trav=()=>{
   return {
     name:'ADVANCED TRAVERSAL',spawn:{x:3.5*T,y:fy,z:5*T},yaw:Math.PI/2,
     card:['ADVANCED TRAVERSAL',`<p>Follow the yellow arrows.</p>
-      <p>Hold <b>SHIFT</b> to sprint — the green bar under your health is stamina. While sprinting you <b>vault</b> over low barriers on your own.</p>
+      <p>Hold <b>{sprint}</b> to sprint — the green bar under your health is stamina. While sprinting you <b>vault</b> over low barriers on your own.</p>
       <p>Sprint and press <b>C</b> to <b>slide</b> under low gaps.</p>
-      <p>Walls are too high to jump onto: jump at the wall while <b>holding SPACE</b> — you catch the ledge, hang, and <b>pull yourself up</b>.</p>`],
-    obj:[{text:'Sprint (SHIFT) into the orange barriers to vault over them',short:'VAULT',n:0,need:2},
+      <p>Walls are too high to jump onto: jump at the wall while <b>holding {jump}</b> — you catch the ledge, hang, and <b>pull yourself up</b>.</p>`],
+    obj:[{text:'Sprint ({sprint}) into the orange barriers to vault over them',short:'VAULT',n:0,need:2},
          {text:'Sprint, then press C to slide under the magenta beam',short:'SLIDE'},
-         {text:'Jump at the wall holding SPACE: catch the ledge, pull up — twice',short:'PULL-UP',n:0,need:2},
+         {text:'Jump at the wall holding {jump}: catch the ledge, pull up — twice',short:'PULL-UP',n:0,need:2},
          {text:'Sprint-jump the gap — the far side is too high, grab its ledge',short:'LEDGE GRAB'},
          {text:'Stand on the green pad',short:'FINISH'}],
     onState(a,b,p){
@@ -260,10 +260,10 @@ TUT_BUILD.shift=()=>{
   floorRect(31.2*T,15.5*T,33.8*T,21.5*T,15*T,MKC.grn,4);
   return {
     name:'ARENA SHIFT',spawn:{x:4.2*T,y:15*T,z:18.5*T},yaw:Math.PI/2,hud:{gravity:true},
-    card:['ARENA SHIFT',`<p><b style="color:#ff3fa4">Magenta panels</b> turn the whole arena 90°. Walk up to one, <b>face it</b> and press <b>E</b>: that wall becomes your floor.</p>
+    card:['ARENA SHIFT',`<p><b style="color:#ff3fa4">Magenta panels</b> turn the whole arena 90°. Walk up to one, <b>face it</b> and press <b>{kick}</b>: that wall becomes your floor.</p>
       <p>Each section of this corridor is missing the floor you're standing on. Kick the panel at the end of each section to walk on the wall, then the ceiling, then the other wall — all the way round to the exit.</p>
       <p>Fall into a pit and you're put back at the last checkpoint.</p>`],
-    obj:[{text:'Face the magenta panel (turn right) and press E',short:'SHIFT 1'},{text:'Walk on the wall to the next panel and kick it',short:'SHIFT 2'},
+    obj:[{text:'Face the magenta panel (turn right) and press {kick}',short:'SHIFT 1'},{text:'Walk on the wall to the next panel and kick it',short:'SHIFT 2'},
          {text:'Now the ceiling is your floor — kick the next panel',short:'SHIFT 3'},{text:'Last panel — kick it to come back to the floor',short:'SHIFT 4'},
          {text:'Reach the exit',short:'EXIT'}],
     snap:true,
@@ -320,8 +320,8 @@ TUT_BUILD.ally=()=>{
       <p>Allies don't target each other (friendly fire still hurts), the team's score is its members' frags averaged, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
       <p>Follow the yellow line. Stop at each blue marker and watch, then do it yourself.</p>`],
     obj:[{text:'Walk to the first blue marker and watch VOLT and NYX',short:'WATCH'},
-         {text:'Second marker: face RAZOR and press T to wave — he comes over and accepts',short:'ASK'},
-         {text:'Third marker: KAI comes to you and waves — face him and press T',short:'ACCEPT'},
+         {text:'Second marker: face RAZOR and press {wave} to wave — he comes over and accepts',short:'ASK'},
+         {text:'Third marker: KAI comes to you and waves — face him and press {wave}',short:'ACCEPT'},
          {text:'Walk with your team to the green area',short:'FINISH'}],
     update(dt,p){
       const o=TUT.cfg.obj;TUT.stage=TUT.stage||0;
@@ -329,9 +329,9 @@ TUT_BUILD.ally=()=>{
       if(TUT.stage===1){const a=A(),b=B();
         if(a.emote&&a.emote.kind==='bow')say('s1b','NYX stood in front of VOLT and pressed T — they bow…');
         if(a.team&&a.team===b.team){say('s1c','VOLT took NYX\'s colour — they are allies now','#ffb020');objDone(0,'✓ WATCHED');TUT.stage=2;}}
-      if(TUT.stage===2&&p.x>15.5*T)say('s2','Your turn: face RAZOR and press T to wave','#9dff3a');
+      if(TUT.stage===2&&p.x>15.5*T)say('s2',keyText('Your turn: face RAZOR and press {wave} to wave'),'#9dff3a');
       if(TUT.stage===2&&p.team&&p.team===C().team){say('s2b','RAZOR accepted — you took his colour. He follows you now','#9dff3a');objDone(1,'✓ ALLIANCE');TUT.stage=3;}
-      if(TUT.stage===3&&p.x>22.5*T)say('s3','KAI wants to join you — face him and press T when he waves',D().color);
+      if(TUT.stage===3&&p.x>22.5*T)say('s3',keyText('KAI wants to join you — face him and press {wave} when he waves'),D().color);
       if(TUT.stage===3&&D().team&&D().team===p.team){say('s3b','KAI joined your team. Walk to the green area together',p.color);objDone(2,'✓ NEW MEMBER');TUT.stage=4;}
       if(TUT.stage===4){const inG=e=>e.x>30.6*T&&e.x<35.4*T&&e.z>8*T&&e.z<15*T;
         if(inG(p)&&inG(C())&&inG(D())){o[3].done=true;TUT.result='Your team: '+sideName(p).split('+').join(' · ');tutComplete();}}
@@ -376,7 +376,7 @@ function startTutorial(id){
   // scripted actors (they don't think for themselves: the room drives them)
   for(const a of cfg.actors||[]){const b=makeChar(a.name,a.color,true);b.script=a.script;b.actor=a;chars.push(b);}
   fixColorClash();
-  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];feed=[];spiders=[];
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];feed=[];spree=null;spiders=[];
   if(cfg.props)cfg.props();
   if(cfg.spawn)setCp(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z,cfg.yaw);
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
@@ -441,7 +441,7 @@ function tutHUD(c){
   obj.forEach((o,i)=>{const yy=y+40+i*19;
     c.fillStyle=o.done?'#3dff7a':i===cur?'#ffffff':'#667';
     const n=('n' in o)&&!o.done&&o.need?` (${o.n}/${o.need})`:'';
-    c.fillText((o.done?'✓ ':i===cur?'▶ ':'· ')+o.text+n,x+12,yy);});
+    c.fillText((o.done?'✓ ':i===cur?'▶ ':'· ')+keyText(o.text)+n,x+12,yy);});
   if(cfg.hud&&cfg.hud.shots){c.fillStyle='#889';c.textAlign='right';c.fillText(`shots ${TUT.shots}`,x+w-10,y+20);}
   // toasts
   c.textAlign='center';
@@ -458,7 +458,7 @@ function tutHUD(c){
 function showCard(title,html,buttons){
   TUT.cardOpen=true;paused=true;for(const k in keys)keys[k]=false;mouseDown=mouseRight=false;
   if(document.pointerLockElement===cv&&document.exitPointerLock)document.exitPointerLock();
-  const el=document.getElementById('card');document.getElementById('cardT').textContent=title;document.getElementById('cardB').innerHTML=html;
+  const el=document.getElementById('card');document.getElementById('cardT').textContent=title;document.getElementById('cardB').innerHTML=keyText(html);
   const bw=document.getElementById('cardBtns');bw.innerHTML='';
   for(const b of buttons){const e=document.createElement('button');e.textContent=b.label;if(b.primary)e.className='primary';e.onclick=b.fn;bw.appendChild(e);}
   el.style.display='flex';

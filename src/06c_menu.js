@@ -5,6 +5,7 @@ function showMenu(page){
   gameState='menu';$('tut').style.display='none';$('ov').style.display='flex';
   for(const p of document.querySelectorAll('#ov .page'))p.classList.toggle('on',p.id===page);
   if(page==='pgGame')refreshGamePage();
+  if(rebind)endRebind();if(page==='pgKeys')buildKeyTable();refreshKeyCells();
   padFocus=-1;padHilite();
 }
 // the seed shown on the GAME page: the one from Arena settings, or a fresh random one
@@ -136,6 +137,11 @@ function pollPad(dt){
   // menus (any overlay open, or paused): D-pad / left stick moves, A selects, B backs out
   const menuOpen=gameState==='menu'||paused||TUT.cardOpen;
   if(menuOpen){
+    // waiting for a new gamepad button: the first press once everything is let go (START cancels)
+    if(rebind&&rebind.kind==='gp'){
+      if(!rebind.armed){if(!now.some(Boolean))rebind.armed=true;}
+      else{const i=now.findIndex(Boolean);if(i===9)endRebind();else if(i>=0)endRebind(i);}
+      padPrev=now;return;}
     padRep-=dt;let mv=0;
     if(down(12)||down(14))mv=-1;if(down(13)||down(15))mv=1;
     const sy=Math.abs(ly)>.6?Math.sign(ly):0;if(sy&&padRep<=0){mv=sy;padRep=.22;}if(!sy&&!now[12]&&!now[13])padRep=Math.min(padRep,0);
@@ -153,10 +159,10 @@ function pollPad(dt){
   if(SETTINGS.input!=='gamepad'){padPrev=now;return;}
   // look: right stick, eased so small tilts aim finely
   const k=3.1*(SETTINGS.sens/100)*(cam.zoom||1)*dt;
-  const S=SETTINGS.assist?SETTINGS.assistStr/100:0;
-  const A=S>0?assistTarget(down(5)?2.6:1):null;
+  const S=SETTINGS.assist?SETTINGS.assistStr/100:0,GA=gpOf('aim'),GF=gpOf('fire');
+  const A=S>0?assistTarget(down(GA)?2.6:1):null;
   // snap: pressing RB (aim) swings the crosshair onto the nearest enemy in a wide cone
-  if(A&&down(5)){const sn=(.35+.6*S)*.175;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
+  if(A&&down(GA)){const sn=(.35+.6*S)*.175;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
   // friction: the look slows down a lot while the crosshair is over a target
   const fr=A?1-(.45+.45*S)*.175*(1-A.e*.6):1;
   cam.yaw-=rx*Math.abs(rx)*k*fr;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75*fr,-1.35,1.25);
@@ -164,21 +170,16 @@ function pollPad(dt){
     // tracking: follow the target as it (or you) moves
     if(padTrk&&padTrk.t===A.t){const ddy=angDiff(A.ay,padTrk.ay),ddp=A.ap-padTrk.ap;if(Math.abs(ddy)<.3){const tk=(.5+.5*S)*.175;cam.yaw+=ddy*tk;cam.pitch=clamp(cam.pitch+ddp*tk,-1.35,1.25);}}
     // magnetism: pull onto the target while you move, look or shoot
-    if(rx||ry||lx||ly||now[6]||now[5]){const pull=Math.min(.6,(now[5]?2.45:1.6)*S*dt*(1.3-A.e*.6));
+    if(rx||ry||lx||ly||now[GF]||now[GA]){const pull=Math.min(.6,(now[GA]?2.45:1.6)*S*dt*(1.3-A.e*.6));
       cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
     padTrk={t:A.t,ay:A.ay,ap:A.ap};
   }else padTrk=null;
   // move: left stick; L3 latches sprint until the stick is let go
   if(lx||ly)padMove={f:-ly,s:lx};
-  if(down(10))padSprint=!padSprint;if(Math.hypot(lx,ly)<.3)padSprint=false;
+  if(down(gpOf('sprint')))padSprint=!padSprint;if(Math.hypot(lx,ly)<.3)padSprint=false;
   // buttons feed the same key / mouse state the keyboard does
-  const hold=(i,key)=>{if(down(i)){pressed[key]=true;keys[key]=true;}if(up(i))keys[key]=false;};
-  hold(0,' ');hold(1,'c');hold(2,'e');hold(4,'r');hold(12,'t');
-  if(down(3))pressed['q']=true;
-  if(down(6)){mouseDown=true;pressed['lmb']=true;}if(up(6))mouseDown=false;
-  if(down(5))mouseRight=true;if(up(5))mouseRight=false;
-  if(down(7))pressed['mmb']=true;
-  if(down(11))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):ly<-.3?'fwd':'back';
+  for(const [a] of ACTIONS){const i=gpOf(a);if(i<0||a==='sprint'||a==='dodge')continue;if(down(i)){pressed['pad:'+a]=true;keys['pad:'+a]=true;}if(up(i))keys['pad:'+a]=false;}
+  if(down(gpOf('dodge')))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):ly<-.3?'fwd':'back';
   padPrev=now;
 }
 // aim assist: the enemy closest to the crosshair, inside a cone that grows with the strength and with how near they are
@@ -226,6 +227,40 @@ function padBack(){
   if(b){b.click();padNav(1);}
 }
 wireMenu();
+// ---------- key bindings page ----------
+var rebind=null;
+// the help tables name the keys as currently bound (always the keyboard ones there)
+function refreshKeyCells(){if(!document.querySelectorAll)return;for(const td of document.querySelectorAll('td[data-k]'))td.textContent=td.dataset.k.replace(/\{(\w+)\}/g,(m,a)=>keyName(kbOf(a)));}
+function buildKeyTable(){
+  const t=$('keytab');if(!t||!t.querySelectorAll||typeof document.createElement('div').querySelectorAll!=='function')return;
+  let h='<tr><th></th><th>KEYBOARD / MOUSE</th><th>GAMEPAD</th></tr>';
+  for(const [a,label] of ACTIONS){
+    const kb=KB_FIXED[a]?`<span class="fix">${KB_FIXED[a]}</span>`:`<button class="opt" data-k="kb" data-a="${a}">${keyName(kbOf(a))}</button>`;
+    const gp=GP_FIXED[a]?`<span class="fix">${GP_FIXED[a]}</span>`:`<button class="opt" data-k="gp" data-a="${a}">${padName(gpOf(a))}</button>`;
+    h+=`<tr><td>${label}</td><td>${kb}</td><td>${gp}</td></tr>`;
+  }
+  t.innerHTML=h;
+  for(const b of t.querySelectorAll('button')){b.onclick=ev=>{ev.stopPropagation();
+    if(rebind)endRebind();rebind={kind:b.dataset.k,a:b.dataset.a,btn:b,t:performance.now(),armed:false};
+    b.classList.add('wait');b.textContent=b.dataset.k==='kb'?'press a key…':'press a button…';};}
+}
+// put the new binding on the action; whatever action had it before takes this one's old binding
+function endRebind(v){
+  const r=rebind;rebind=null;if(!r)return;
+  if(v!==undefined){const M=r.kind==='kb'?SETTINGS.kb:SETTINGS.gp,old=M[r.a];
+    for(const [a] of ACTIONS)if(a!==r.a&&M[a]===v&&!(r.kind==='kb'?KB_FIXED:GP_FIXED)[a])M[a]=old;
+    M[r.a]=v;saveSettings();}
+  buildKeyTable();if(padFocus>=0)padHilite();
+}
+addEventListener('keydown',e=>{if(!rebind)return;e.preventDefault();e.stopImmediatePropagation();
+  const k=e.key.toLowerCase();if(k==='escape'||rebind.kind!=='kb'){endRebind();return;}endRebind(k);},true);
+addEventListener('mousedown',e=>{if(!rebind||rebind.kind!=='kb'||performance.now()-rebind.t<150)return;e.preventDefault();e.stopImmediatePropagation();if(e.button===0)swallowClick=performance.now()+600;endRebind('mouse'+e.button);},true);
+addEventListener('mousedown',()=>{swallowClick=0;},true);
+// the click that finishes a mouse-button binding mustn't also press whatever is under the pointer
+let swallowClick=0;addEventListener('click',e=>{if(performance.now()<swallowClick){swallowClick=0;e.stopImmediatePropagation();e.preventDefault();}},true);
+addEventListener('auxclick',e=>{if(rebind)e.preventDefault();},true);
+if($('keyreset'))$('keyreset').onclick=()=>{SETTINGS.kb=Object.assign({},KB_DEF);SETTINGS.gp=Object.assign({},GP_DEF);saveSettings();endRebind();buildKeyTable();};
+buildKeyTable();
 // a click for every button in the menus
 document.addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('button');if(b&&AC)sfx('ui');},true);
 // the music volume follows whether the recorded loops have arrived yet

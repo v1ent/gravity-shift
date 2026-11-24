@@ -44,28 +44,43 @@ void main(){
   vec3 n=normalize(vNor);
   float dif=max(dot(n,uSun),0.0),hemi=n.y*0.5+0.5;
   vec3 fill=vec3(0.035,0.04,0.065)*(0.6+0.5*hemi+0.5*dif)+uLine*0.05;
-  ${deriv?'vec3 w=fwidth(vB)*1.35;':'vec3 w=vec3(0.06);'}
+  ${deriv?'vec3 w=fwidth(vB)*'+LINE_W.toFixed(2)+';':'vec3 w=vec3(0.03);'}
   vec3 a=smoothstep(vec3(0.0),w,vB);float edge=1.0-min(min(a.x,a.y),a.z);
   vec3 col=mix(fill,uLine*1.25+vec3(0.12),edge);
   {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=fill*uLC*la*la*1.5;}
   float f=exp(-pow(vD*uFogD,2.0));
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
 }`;}
-function buildLineMesh(gl,u8,vOff,ni,idx,q){
-  const nv=ni;const out=new Uint8Array(nv*24),pos=i=>{const o=vOff+i*20,d=new DataView(u8.buffer,u8.byteOffset);return [d.getInt16(o,true),d.getInt16(o+2,true),d.getInt16(o+4,true)];};
+// LINE_ANGLE: how sharp a crease must be to draw (higher = fewer lines). A line is kept only if its mirror twin on the
+// other side of the body (x → -x) is a line too, so the pattern is symmetric even where the two sides are triangulated differently.
+const LINE_ANGLE=42,LINE_W=.6;
+function buildLineMesh(gl,u8,vOff,ni,idx){
+  const d=new DataView(u8.buffer,u8.byteOffset),pos=i=>{const o=vOff+i*20;return [d.getInt16(o,true),d.getInt16(o+2,true),d.getInt16(o+4,true)];};
   const key=p=>p[0]+','+p[1]+','+p[2],nt=ni/3,N=[],edges=new Map(),mat=i=>u8[vOff+i*20+11];
+  const uniq=new Map();for(let k=0;k<ni;k++){const p=pos(idx[k]);uniq.set(key(p),p);}
+  // mirror partner of every distinct position: the nearest one to (-x,y,z), within a small tolerance
+  const C=96,grid=new Map(),cell=p=>Math.floor(p[0]/C)+','+Math.floor(p[1]/C)+','+Math.floor(p[2]/C);
+  for(const [k,p] of uniq){const c=cell(p);if(!grid.has(c))grid.set(c,[]);grid.get(c).push(k);}
+  const mir=new Map();
+  for(const [k,p] of uniq){const q=[-p[0],p[1],p[2]],cx=Math.floor(q[0]/C),cy=Math.floor(q[1]/C),cz=Math.floor(q[2]/C);let best=null,bd=C*C;
+    for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)for(let c=-1;c<=1;c++){const l=grid.get((cx+a)+','+(cy+b)+','+(cz+c));if(!l)continue;
+      for(const k2 of l){const r=uniq.get(k2),dd=(r[0]-q[0])**2+(r[1]-q[1])**2+(r[2]-q[2])**2;if(dd<bd){bd=dd;best=k2;}}}
+    if(best)mir.set(k,best);}
+  const ek=(a,b)=>a<b?a+'|'+b:b+'|'+a;
   for(let t=0;t<nt;t++){const a=pos(idx[t*3]),b=pos(idx[t*3+1]),c=pos(idx[t*3+2]);
     const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]],n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],l=Math.hypot(...n)||1;N.push(n.map(x=>x/l));
     const ks=[key(a),key(b),key(c)];
-    for(let k=0;k<3;k++){const e=[ks[(k+1)%3],ks[(k+2)%3]].sort().join('|');if(!edges.has(e))edges.set(e,[]);edges.get(e).push(t);}}
-  const sharp=(t,k)=>{const ks=[0,1,2].map(j=>key(pos(idx[t*3+j]))),e=[ks[(k+1)%3],ks[(k+2)%3]].sort().join('|'),l=edges.get(e);
-    if(l.length!==2)return true;const o=l[0]===t?l[1]:l[0],a=N[t],b=N[o];
-    if(mat(idx[t*3])!==mat(idx[o*3]))return true;
-    return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]<Math.cos(28*Math.PI/180);};
-  for(let t=0;t<nt;t++){const vis=[sharp(t,0),sharp(t,1),sharp(t,2)];
+    for(let k=0;k<3;k++){const e=ek(ks[(k+1)%3],ks[(k+2)%3]);if(!edges.has(e))edges.set(e,[]);edges.get(e).push(t);}}
+  const cosA=Math.cos(LINE_ANGLE*Math.PI/180),raw=new Set();
+  for(const [e,l] of edges){let sh;if(l.length!==2)sh=true;else{const a=N[l[0]],b=N[l[1]];
+      sh=mat(idx[l[0]*3])!==mat(idx[l[1]*3])||a[0]*b[0]+a[1]*b[1]+a[2]*b[2]<cosA;}
+    if(sh)raw.add(e);}
+  const sharpE=new Set();for(const e of raw){const [a,b]=e.split('|'),ma=mir.get(a),mb=mir.get(b);if(ma&&mb&&raw.has(ek(ma,mb)))sharpE.add(e);}
+  const out=new Uint8Array(ni*24);
+  for(let t=0;t<nt;t++){const ks=[0,1,2].map(j=>key(pos(idx[t*3+j]))),vis=[0,1,2].map(k=>sharpE.has(ek(ks[(k+1)%3],ks[(k+2)%3])));
     for(let j=0;j<3;j++){const src=vOff+idx[t*3+j]*20,dst=(t*3+j)*24;out.set(u8.subarray(src,src+20),dst);
       for(let k=0;k<3;k++)out[dst+20+k]=(j===k||!vis[k])?255:0;}}
-  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,out,gl.STATIC_DRAW);return {b,n:nv};
+  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,out,gl.STATIC_DRAW);return {b,n:ni,lines:sharpE.size,raw:raw.size};
 }
 async function loadModel(){
   try{
@@ -94,7 +109,7 @@ async function loadModel(){
       const ll={};for(const a of ['aPos','aNor','aJ','aW','aB'])ll[a]=gl.getAttribLocation(lp,a);
       for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uLine'])ll[u]=gl.getUniformLocation(lp,u);
       const u8=new Uint8Array(buf),idx=new Uint16Array(buf.slice(iOff,iOff+meta.ni*2));
-      SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx,meta.q);SKN.lp=lp;SKN.ll=ll;
+      SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx);SKN.lp=lp;SKN.ll=ll;
     }catch(err){console.warn('line style unavailable:',err);}
     // rest skeleton
     SKN.bones=meta.bones.map(b=>({name:b.name,head:V(b.head[0],b.head[1],b.head[2]),parent:b.parent}));

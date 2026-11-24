@@ -143,14 +143,34 @@ function damage(e,amt,src,dir){
   if(src&&src!==e){e.lastHit=src;e.lastHitT=world.time;e.hitFrom={p:V(src.x,src.y,src.z),t:world.time};}
   if(e.hp<=0)kill(e,src,dir);
 }
+// ---------- kill streaks: kills in a row without dying ----------
+function streakWord(n){return n<2?'':['','','DOUBLE KILL','TRIPLE KILL','QUADRA KILL','PENTA KILL'][n]||`${n} KILLS IN A ROW`;}
+// the banner at the top of the screen: from the third kill in a row until someone ends that run
+let spree=null;
+function spreeKill(k){
+  if(k.streak<3)return;
+  if(spree&&spree.who===k&&!spree.end){spree.n=k.streak;spree.nT=hudClock;return;}
+  if(spree&&!spree.end&&spree.who.streak>k.streak)return; // a longer run already holds the banner
+  spree={who:k,name:k.name,color:k.color,n:k.streak,t0:hudClock,nT:hudClock,prevN:0,end:null};
+}
+function spreeEnd(e,killer){
+  if(!spree||spree.who!==e||spree.end)return;
+  const by=killer&&killer!==e?(killer.isSpider?['THE SPIDER','#e8ecf2']:[killer.name,killer.color]):null;
+  spree.end={by,t:hudClock,n:spree.n};
+}
 function kill(e,src,dir){
   e.alive=false;e.respawn=2.8;e.deaths++;
   let killer=src;
   if((!killer||killer===e)&&e.lastHit&&world.time-e.lastHitT<5)killer=e.lastHit;
-  if(killer&&killer.isSpider){feed.unshift({t:4,text:`SPIDER ✕ ${e.name}`,color:'#e8ecf2'});}
-  else if(killer&&killer!==e&&allied(killer,e)){killer.kills=Math.max(0,killer.kills-1);feed.unshift({t:4,text:`${killer.name} ✕ ${e.name}  TEAMKILL`,color:'#ff3f5a'});}
-  else if(killer&&killer!==e){killer.kills++;if(killer===player&&!world.demo)sfx('killed');feed.unshift({t:4,text:`${killer.name} ⌁ ${e.name}`,color:killer.color});}
-  else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,text:`${e.name} ✕ self-destructed`,color:'#888'});}
+  // the kill feed (upper left): names in their own colours, and the killer's run of kills since their last death
+  const G='#8a93a8';
+  if(killer&&killer.isSpider){feed.unshift({t:4,segs:[['SPIDER','#e8ecf2'],[' ✕ ',G],[e.name,e.color]]});}
+  else if(killer&&killer!==e&&allied(killer,e)){killer.kills=Math.max(0,killer.kills-1);feed.unshift({t:4,segs:[[killer.name,killer.color],[' ✕ ',G],[e.name,e.color],['  TEAMKILL','#ff3f5a']]});}
+  else if(killer&&killer!==e){killer.kills++;killer.streak=(killer.streak||0)+1;if(killer===player&&!world.demo)sfx('killed');
+    const w=streakWord(killer.streak);feed.unshift({t:w?5:4,segs:[[killer.name,killer.color],[' ⌁ ',G],[e.name,e.color]].concat(w?[['  '+w,'#ffd23a']]:[])});
+    spreeKill(killer);}
+  else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,segs:[[e.name,e.color],[' ✕ self-destructed',G]]});}
+  spreeEnd(e,killer);e.streak=0;
   // the special weapon in their hands stays where they fell
   {const dk=e.weapon==='shotgun'?'shotgun':e.weapon==='rifle'?'rifle':(e.weapon==='rocket'&&e.bigLauncher)?'launcher':null;
    if(dk&&!(TUT&&TUT.on)){const d=makeProp(e.x,e.y+8,e.z,dk);d.dropped=true;d.ttl=30;d.vy=140;d.vx=(rnd()-.5)*60;d.vz=(rnd()-.5)*60;props.push(d);}}

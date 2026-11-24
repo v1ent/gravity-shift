@@ -17,6 +17,9 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #ov table{border-collapse:collapse;width:100%;margin:8px 0 14px}
 #ov td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:14px}
 #ov td:first-child{color:#ffcc33;width:140px}
+#keyhint{color:#7f8fa8;font-size:12px;text-align:center;margin:4px 0}
+#keytab td{padding:1px 6px;font-size:13px}#keytab th{color:#ff3fa4;font-size:12px;letter-spacing:2px;font-weight:normal;padding:4px}
+#keytab button.opt{min-width:150px;margin:1px}#keytab button.wait{background:#ff3fa4;color:#05060c}#keytab .fix{color:#5f6c80;font-size:12px}
 #ov p{line-height:1.45;color:#b9c8dd;margin:7px 0;font-size:14px}
 #ov button{font:inherit;font-size:20px;letter-spacing:4px;padding:12px 28px;background:#29f0ff;color:#05060c;border:0;cursor:pointer;box-shadow:0 0 20px #29f0ff}
 #ov button:hover{background:#ff3fa4;box-shadow:0 0 20px #ff3fa4}
@@ -156,8 +159,16 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <div class="lab">GAME SPEED</div><div class="fragrow"><input type="range" id="spdSl" min="60" max="100" step="5"><b id="spdV"></b></div>
 <div class="lab">FIGHTERS</div><div id="styleopt"></div>
 <div class="lab">FPS</div><div id="fpsopt"></div>
+<div class="lab">KEYS</div><div><button class="opt" data-go="pgKeys">CHANGE KEY BINDINGS</button></div>
 </div>
 <button class="mi back" data-go="pgMain">BACK</button>
+</div>
+<div class="page" id="pgKeys">
+<div class="ptitle">KEY BINDINGS</div>
+<div id="keyhint">click a binding, then press the new key, mouse button or gamepad button · ESC / START cancels · taking a key that is in use swaps the two</div>
+<table id="keytab"></table>
+<div style="text-align:center"><button class="opt" id="keyreset">RESET TO DEFAULTS</button></div>
+<button class="mi back" data-go="pgOpt">BACK</button>
 </div>
 <div class="page" id="pgBye">
 <div class="ptitle">THANKS FOR PLAYING</div>
@@ -174,18 +185,18 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <details class="howto"><summary>HOW TO PLAY — CONTROLS AND RULES</summary>
 <table>
 <tr><td>MOUSE</td><td>Look / aim (click the game to capture the mouse)</td></tr>
-<tr><td>W A S D</td><td>Walk · <b>double-tap W / S / A / D</b> to dodge: dive-roll forward, back, left, right (costs stamina)</td></tr>
-<tr><td>SHIFT</td><td>Sprint (stamina) · vaults low walls and boxes (or climbs onto long ones) · you can shoot on the run (but not while aiming)</td></tr>
-<tr><td>SPACE</td><td>Jump · from a sprint it's a hands-first dive · hold to reach for ledges</td></tr>
-<tr><td>C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them; slide over pickups to grab them)</td></tr>
-<tr><td>C at low cover</td><td>Facing a low wall or box (or sliding into one): take cover — you stay down until you press C again or walk away · hold right mouse to rise and shoot, let go to duck</td></tr>
-<tr><td>LMB</td><td>Fire the selected weapon</td></tr>
-<tr><td>RMB (hold)</td><td>Aim: the view zooms, shots are tighter, you walk instead of running</td></tr>
-<tr><td>MMB</td><td>Fire a rocket from the wrist <b style="color:#ff5a3c">launcher</b>, whatever is in your hands (the standard one holds one rocket and recharges by itself)</td></tr>
-<tr><td>WHEEL / Q · 1–4</td><td>1 pistol · 2 launcher (left click fires it; if it's still recharging you switch to the pistol and shoot) · 3 <b style="color:#ff8a2a">shotgun</b> · 4 <b style="color:#7cf0ff">rifle</b> — shotguns, rifles and the <b style="color:#ff5a3c">big 3-rocket launcher</b> lie around the arena; a fighter who dies drops the one in their hands</td></tr>
-<tr><td>E</td><td>Kick — knocks fighters down, sends boxes and spiders flying · at a <b style="color:#ff3fa4">magenta gravity panel</b> the arena turns 90°</td></tr>
-<tr><td>T</td><td>Wave — offer an alliance. Someone who stands in front of you and presses T too joins you</td></tr>
-<tr><td>R / ESC</td><td>Reload / pause</td></tr>
+<tr><td data-k="{fwd} {left} {back} {right}">W A S D</td><td>Walk · <b>double-tap W / S / A / D</b> to dodge: dive-roll forward, back, left, right (costs stamina)</td></tr>
+<tr><td data-k="{sprint}">SHIFT</td><td>Sprint (stamina) · vaults low walls and boxes (or climbs onto long ones) · you can shoot on the run (but not while aiming)</td></tr>
+<tr><td data-k="{jump}">SPACE</td><td>Jump · from a sprint it's a hands-first dive · hold to reach for ledges</td></tr>
+<tr><td data-k="{crouch} (hold)">C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them; slide over pickups to grab them)</td></tr>
+<tr><td data-k="{crouch} at low cover">C at low cover</td><td>Facing a low wall or box (or sliding into one): take cover — you stay down until you press C again or walk away · hold right mouse to rise and shoot, let go to duck</td></tr>
+<tr><td data-k="{fire}">LMB</td><td>Fire the selected weapon</td></tr>
+<tr><td data-k="{aim} (hold)">RMB (hold)</td><td>Aim: the view zooms, shots are tighter, you walk instead of running</td></tr>
+<tr><td data-k="{rocket}">MMB</td><td>Fire a rocket from the wrist <b style="color:#ff5a3c">launcher</b>, whatever is in your hands (the standard one holds one rocket and recharges by itself)</td></tr>
+<tr><td data-k="WHEEL / {swap} · {w1} {w2} {w3} {w4}">WHEEL / Q · 1–4</td><td>1 pistol · 2 launcher (left click fires it; if it's still recharging you switch to the pistol and shoot) · 3 <b style="color:#ff8a2a">shotgun</b> · 4 <b style="color:#7cf0ff">rifle</b> — shotguns, rifles and the <b style="color:#ff5a3c">big 3-rocket launcher</b> lie around the arena; a fighter who dies drops the one in their hands</td></tr>
+<tr><td data-k="{kick}">E</td><td>Kick — knocks fighters down, sends boxes and spiders flying · at a <b style="color:#ff3fa4">magenta gravity panel</b> the arena turns 90°</td></tr>
+<tr><td data-k="{wave}">T</td><td>Wave — offer an alliance. Someone who stands in front of you and presses T too joins you</td></tr>
+<tr><td data-k="{reload} / ESC">R / ESC</td><td>Reload / pause</td></tr>
 </table>
 <p><b style="color:#ff8a2a">Rockets</b> (middle mouse, or slot 2): slow, then accelerating. A direct hit kills outright, and the blast hurts anyone near it — aim at the floor or a wall beside your target. Fighters in the air take little damage but get thrown hard. <b style="color:#ff8a2a">Rocket jump:</b> fire at your feet — the blast always launches you, but on the ground it costs 60% of your health; <b>jump just before it explodes</b> and you fly higher for only 15–20%. Near the top you float for a moment. The tutorial teaches it.</p>
 <p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red exploding boxes: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins — set 10 to 50 in Arena settings.</p>

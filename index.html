@@ -17,6 +17,9 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #ov table{border-collapse:collapse;width:100%;margin:8px 0 14px}
 #ov td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:14px}
 #ov td:first-child{color:#ffcc33;width:140px}
+#keyhint{color:#7f8fa8;font-size:12px;text-align:center;margin:4px 0}
+#keytab td{padding:1px 6px;font-size:13px}#keytab th{color:#ff3fa4;font-size:12px;letter-spacing:2px;font-weight:normal;padding:4px}
+#keytab button.opt{min-width:150px;margin:1px}#keytab button.wait{background:#ff3fa4;color:#05060c}#keytab .fix{color:#5f6c80;font-size:12px}
 #ov p{line-height:1.45;color:#b9c8dd;margin:7px 0;font-size:14px}
 #ov button{font:inherit;font-size:20px;letter-spacing:4px;padding:12px 28px;background:#29f0ff;color:#05060c;border:0;cursor:pointer;box-shadow:0 0 20px #29f0ff}
 #ov button:hover{background:#ff3fa4;box-shadow:0 0 20px #ff3fa4}
@@ -156,8 +159,16 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <div class="lab">GAME SPEED</div><div class="fragrow"><input type="range" id="spdSl" min="60" max="100" step="5"><b id="spdV"></b></div>
 <div class="lab">FIGHTERS</div><div id="styleopt"></div>
 <div class="lab">FPS</div><div id="fpsopt"></div>
+<div class="lab">KEYS</div><div><button class="opt" data-go="pgKeys">CHANGE KEY BINDINGS</button></div>
 </div>
 <button class="mi back" data-go="pgMain">BACK</button>
+</div>
+<div class="page" id="pgKeys">
+<div class="ptitle">KEY BINDINGS</div>
+<div id="keyhint">click a binding, then press the new key, mouse button or gamepad button · ESC / START cancels · taking a key that is in use swaps the two</div>
+<table id="keytab"></table>
+<div style="text-align:center"><button class="opt" id="keyreset">RESET TO DEFAULTS</button></div>
+<button class="mi back" data-go="pgOpt">BACK</button>
 </div>
 <div class="page" id="pgBye">
 <div class="ptitle">THANKS FOR PLAYING</div>
@@ -174,18 +185,18 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <details class="howto"><summary>HOW TO PLAY — CONTROLS AND RULES</summary>
 <table>
 <tr><td>MOUSE</td><td>Look / aim (click the game to capture the mouse)</td></tr>
-<tr><td>W A S D</td><td>Walk · <b>double-tap W / S / A / D</b> to dodge: dive-roll forward, back, left, right (costs stamina)</td></tr>
-<tr><td>SHIFT</td><td>Sprint (stamina) · vaults low walls and boxes (or climbs onto long ones) · you can shoot on the run (but not while aiming)</td></tr>
-<tr><td>SPACE</td><td>Jump · from a sprint it's a hands-first dive · hold to reach for ledges</td></tr>
-<tr><td>C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them; slide over pickups to grab them)</td></tr>
-<tr><td>C at low cover</td><td>Facing a low wall or box (or sliding into one): take cover — you stay down until you press C again or walk away · hold right mouse to rise and shoot, let go to duck</td></tr>
-<tr><td>LMB</td><td>Fire the selected weapon</td></tr>
-<tr><td>RMB (hold)</td><td>Aim: the view zooms, shots are tighter, you walk instead of running</td></tr>
-<tr><td>MMB</td><td>Fire a rocket from the wrist <b style="color:#ff5a3c">launcher</b>, whatever is in your hands (the standard one holds one rocket and recharges by itself)</td></tr>
-<tr><td>WHEEL / Q · 1–4</td><td>1 pistol · 2 launcher (left click fires it; if it's still recharging you switch to the pistol and shoot) · 3 <b style="color:#ff8a2a">shotgun</b> · 4 <b style="color:#7cf0ff">rifle</b> — shotguns, rifles and the <b style="color:#ff5a3c">big 3-rocket launcher</b> lie around the arena; a fighter who dies drops the one in their hands</td></tr>
-<tr><td>E</td><td>Kick — knocks fighters down, sends boxes and spiders flying · at a <b style="color:#ff3fa4">magenta gravity panel</b> the arena turns 90°</td></tr>
-<tr><td>T</td><td>Wave — offer an alliance. Someone who stands in front of you and presses T too joins you</td></tr>
-<tr><td>R / ESC</td><td>Reload / pause</td></tr>
+<tr><td data-k="{fwd} {left} {back} {right}">W A S D</td><td>Walk · <b>double-tap W / S / A / D</b> to dodge: dive-roll forward, back, left, right (costs stamina)</td></tr>
+<tr><td data-k="{sprint}">SHIFT</td><td>Sprint (stamina) · vaults low walls and boxes (or climbs onto long ones) · you can shoot on the run (but not while aiming)</td></tr>
+<tr><td data-k="{jump}">SPACE</td><td>Jump · from a sprint it's a hands-first dive · hold to reach for ledges</td></tr>
+<tr><td data-k="{crouch} (hold)">C (hold)</td><td>Crouch · SHIFT+C = slide (slide into someone to kick them; slide over pickups to grab them)</td></tr>
+<tr><td data-k="{crouch} at low cover">C at low cover</td><td>Facing a low wall or box (or sliding into one): take cover — you stay down until you press C again or walk away · hold right mouse to rise and shoot, let go to duck</td></tr>
+<tr><td data-k="{fire}">LMB</td><td>Fire the selected weapon</td></tr>
+<tr><td data-k="{aim} (hold)">RMB (hold)</td><td>Aim: the view zooms, shots are tighter, you walk instead of running</td></tr>
+<tr><td data-k="{rocket}">MMB</td><td>Fire a rocket from the wrist <b style="color:#ff5a3c">launcher</b>, whatever is in your hands (the standard one holds one rocket and recharges by itself)</td></tr>
+<tr><td data-k="WHEEL / {swap} · {w1} {w2} {w3} {w4}">WHEEL / Q · 1–4</td><td>1 pistol · 2 launcher (left click fires it; if it's still recharging you switch to the pistol and shoot) · 3 <b style="color:#ff8a2a">shotgun</b> · 4 <b style="color:#7cf0ff">rifle</b> — shotguns, rifles and the <b style="color:#ff5a3c">big 3-rocket launcher</b> lie around the arena; a fighter who dies drops the one in their hands</td></tr>
+<tr><td data-k="{kick}">E</td><td>Kick — knocks fighters down, sends boxes and spiders flying · at a <b style="color:#ff3fa4">magenta gravity panel</b> the arena turns 90°</td></tr>
+<tr><td data-k="{wave}">T</td><td>Wave — offer an alliance. Someone who stands in front of you and presses T too joins you</td></tr>
+<tr><td data-k="{reload} / ESC">R / ESC</td><td>Reload / pause</td></tr>
 </table>
 <p><b style="color:#ff8a2a">Rockets</b> (middle mouse, or slot 2): slow, then accelerating. A direct hit kills outright, and the blast hurts anyone near it — aim at the floor or a wall beside your target. Fighters in the air take little damage but get thrown hard. <b style="color:#ff8a2a">Rocket jump:</b> fire at your feet — the blast always launches you, but on the ground it costs 60% of your health; <b>jump just before it explodes</b> and you fly higher for only 15–20%. Near the top you float for a moment. The tutorial teaches it.</p>
 <p>Kick a magenta panel on the outer walls and the whole hall turns so that wall becomes the floor. Everyone else falls, and so does the furniture. Bots only see what is in front of them (the cone and their reaction time depend on the skill level), need a moment to react when they spot you, and turn toward gunfire they hear. <b style="color:#e8ecf2">White spiders</b> crawl out from time to time — on floors, walls and ceilings — and go for whoever is closest. Red exploding boxes: 1 hit = 8 s fuse, 2 = on fire (3 s), 3 = boom. First to 15 frags wins — set 10 to 50 in Arena settings.</p>
@@ -2220,14 +2231,34 @@ function damage(e,amt,src,dir){
   if(src&&src!==e){e.lastHit=src;e.lastHitT=world.time;e.hitFrom={p:V(src.x,src.y,src.z),t:world.time};}
   if(e.hp<=0)kill(e,src,dir);
 }
+// ---------- kill streaks: kills in a row without dying ----------
+function streakWord(n){return n<2?'':['','','DOUBLE KILL','TRIPLE KILL','QUADRA KILL','PENTA KILL'][n]||`${n} KILLS IN A ROW`;}
+// the banner at the top of the screen: from the third kill in a row until someone ends that run
+let spree=null;
+function spreeKill(k){
+  if(k.streak<3)return;
+  if(spree&&spree.who===k&&!spree.end){spree.n=k.streak;spree.nT=hudClock;return;}
+  if(spree&&!spree.end&&spree.who.streak>k.streak)return; // a longer run already holds the banner
+  spree={who:k,name:k.name,color:k.color,n:k.streak,t0:hudClock,nT:hudClock,prevN:0,end:null};
+}
+function spreeEnd(e,killer){
+  if(!spree||spree.who!==e||spree.end)return;
+  const by=killer&&killer!==e?(killer.isSpider?['THE SPIDER','#e8ecf2']:[killer.name,killer.color]):null;
+  spree.end={by,t:hudClock,n:spree.n};
+}
 function kill(e,src,dir){
   e.alive=false;e.respawn=2.8;e.deaths++;
   let killer=src;
   if((!killer||killer===e)&&e.lastHit&&world.time-e.lastHitT<5)killer=e.lastHit;
-  if(killer&&killer.isSpider){feed.unshift({t:4,text:`SPIDER ✕ ${e.name}`,color:'#e8ecf2'});}
-  else if(killer&&killer!==e&&allied(killer,e)){killer.kills=Math.max(0,killer.kills-1);feed.unshift({t:4,text:`${killer.name} ✕ ${e.name}  TEAMKILL`,color:'#ff3f5a'});}
-  else if(killer&&killer!==e){killer.kills++;if(killer===player&&!world.demo)sfx('killed');feed.unshift({t:4,text:`${killer.name} ⌁ ${e.name}`,color:killer.color});}
-  else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,text:`${e.name} ✕ self-destructed`,color:'#888'});}
+  // the kill feed (upper left): names in their own colours, and the killer's run of kills since their last death
+  const G='#8a93a8';
+  if(killer&&killer.isSpider){feed.unshift({t:4,segs:[['SPIDER','#e8ecf2'],[' ✕ ',G],[e.name,e.color]]});}
+  else if(killer&&killer!==e&&allied(killer,e)){killer.kills=Math.max(0,killer.kills-1);feed.unshift({t:4,segs:[[killer.name,killer.color],[' ✕ ',G],[e.name,e.color],['  TEAMKILL','#ff3f5a']]});}
+  else if(killer&&killer!==e){killer.kills++;killer.streak=(killer.streak||0)+1;if(killer===player&&!world.demo)sfx('killed');
+    const w=streakWord(killer.streak);feed.unshift({t:w?5:4,segs:[[killer.name,killer.color],[' ⌁ ',G],[e.name,e.color]].concat(w?[['  '+w,'#ffd23a']]:[])});
+    spreeKill(killer);}
+  else{e.kills=Math.max(0,e.kills-1);feed.unshift({t:4,segs:[[e.name,e.color],[' ✕ self-destructed',G]]});}
+  spreeEnd(e,killer);e.streak=0;
   // the special weapon in their hands stays where they fell
   {const dk=e.weapon==='shotgun'?'shotgun':e.weapon==='rifle'?'rifle':(e.weapon==='rocket'&&e.bigLauncher)?'launcher':null;
    if(dk&&!(TUT&&TUT.on)){const d=makeProp(e.x,e.y+8,e.z,dk);d.dropped=true;d.ttl=30;d.vy=140;d.vx=(rnd()-.5)*60;d.vz=(rnd()-.5)*60;props.push(d);}}
@@ -3209,7 +3240,7 @@ function wavePartner(e){
 function startWave(e){e.emote={kind:'wave',t:0,id:Math.random()};
   // bots that can see it think about it straight away (a short reaction, not their usual slow rhythm)
   for(const o of chars)if(o.ai&&o!==e&&Math.hypot(o.x-e.x,o.z-e.z)<700)o.ai.dipCD=Math.min(o.ai.dipCD||9,.25+rnd()*.45);
-if(e===player)feed.unshift({t:3.5,text:'YOU WAVE — an enemy who stands in front of you and presses T becomes your ally',color:'#ccd'});}
+if(e===player)feed.unshift({t:3.5,text:keyText('YOU WAVE — an enemy who stands in front of you and presses {wave} becomes your ally'),color:'#ccd'});}
 function startBow(init,resp){
   const face=(a,b)=>{a.yaw=a.bodyYaw=a.legYaw=Math.atan2(b.x-a.x,b.z-a.z);};
   face(init,resp);face(resp,init);
@@ -3658,6 +3689,23 @@ function rotUnfix(){
 
 // ---------- input ----------
 const keys={},pressed={};let mouseDown=false,mouseRight=false,locked=false;
+// ---------- controls: every action has one keyboard/mouse binding and one gamepad button (Options > Key bindings) ----------
+// keyboard tokens are lower-case KeyboardEvent.key values; mouse buttons are 'mouse0' (left), 'mouse1' (middle), 'mouse2' (right)…
+const ACTIONS=[['fwd','Move forward'],['back','Move back'],['left','Move left'],['right','Move right'],['jump','Jump / climb'],['sprint','Sprint'],
+  ['crouch','Crouch / cover'],['fire','Fire'],['aim','Aim'],['rocket','Rocket'],['reload','Reload'],['swap','Next weapon'],['kick','Kick'],
+  ['wave','Wave (alliance)'],['dodge','Dodge'],['w1','Pistol'],['w2','Launcher'],['w3','Shotgun'],['w4','Rifle']];
+const KB_DEF={fwd:'w',back:'s',left:'a',right:'d',jump:' ',sprint:'shift',crouch:'c',fire:'mouse0',aim:'mouse2',rocket:'mouse1',reload:'r',swap:'q',kick:'e',wave:'t',w1:'1',w2:'2',w3:'3',w4:'4'};
+const GP_DEF={jump:0,crouch:1,kick:2,swap:3,reload:4,aim:5,fire:6,rocket:7,sprint:10,dodge:11,wave:12,w1:-1,w2:-1,w3:-1,w4:-1};
+const KB_FIXED={dodge:'double-tap a direction'},GP_FIXED={fwd:'left stick',back:'left stick',left:'left stick',right:'left stick'};
+const kbOf=a=>SETTINGS.kb[a],gpOf=a=>SETTINGS.gp[a]===undefined?-1:SETTINGS.gp[a];
+const held=a=>!!(keys[kbOf(a)]||keys['pad:'+a]),hit=a=>!!(pressed[kbOf(a)]||pressed['pad:'+a]);
+const PAD_NAMES=['A','B','X','Y','LB','RB','LT','RT','BACK','START','L3','R3','D-PAD ↑','D-PAD ↓','D-PAD ←','D-PAD →'];
+function keyName(t){if(t===undefined)return '—';const M={' ':'SPACE',mouse0:'LMB',mouse1:'MMB',mouse2:'RMB',mouse3:'MOUSE 4',mouse4:'MOUSE 5',arrowup:'↑',arrowdown:'↓',arrowleft:'←',arrowright:'→',control:'CTRL',escape:'ESC'};return M[t]||t.toUpperCase();}
+function padName(i){return i<0?'—':PAD_NAMES[i]||'BUTTON '+i;}
+// the key (or pad button) for an action, as shown in prompts
+// {action} in a hint becomes the key bound to it
+function keyText(s){return String(s).replace(/\{(\w+)\}/g,(m,a)=>kbOf(a)!==undefined||gpOf(a)>=0?bindName(a):m);}
+function bindName(a){return SETTINGS.input==='gamepad'&&gpOf(a)>=0?padName(gpOf(a)):keyName(kbOf(a));}
 const SENS=.0024;
 // demo: switch the camera to the next / previous fighter
 function demoCycle(d){const l=chars.filter(c=>!c.isSpider);if(!l.length)return;const i=l.indexOf(player);player=l[((i<0?0:i)+d+l.length)%l.length];cam.yaw=player.yaw;}
@@ -3666,13 +3714,14 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k
   if(world.demo&&gameState==='play'&&!paused&&!e.repeat){if(k==='a'||k==='arrowleft')demoCycle(-1);if(k==='d'||k==='arrowright')demoCycle(1);}
   if(k==='escape'&&gameState==='play'&&!TUT.cardOpen){setPaused(!paused);}
   if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(world.demo?(SETTINGS.seed||'').trim()||undefined:undefined,{demo:world.demo});}
-  if(['w','a','s','d',' ','c','e','r','shift'].includes(k))e.preventDefault();});
+  if(gameState==='play'&&Object.values(SETTINGS.kb).includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 addEventListener('mousedown',e=>{if(gameState!=='play'||paused)return;
-  if(world.demo){if(e.button===0||e.button===2)demoCycle(e.button===2?-1:1);return;}if(e.button===0){mouseDown=true;pressed['lmb']=true;}if(e.button===2)mouseRight=true;if(e.button===1){pressed['mmb']=true;e.preventDefault();}
+  if(world.demo){if(e.button===0||e.button===2)demoCycle(e.button===2?-1:1);return;}
+  const t='mouse'+e.button;keys[t]=true;pressed[t]=true;if(e.button!==0)e.preventDefault();
   if(!locked&&cv.requestPointerLock){try{const r=cv.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(err){}}});
 addEventListener('wheel',e=>{if(gameState==='play'&&!paused){pressed['wheel']=true;e.preventDefault();}},{passive:false});
-addEventListener('mouseup',e=>{if(e.button===0)mouseDown=false;if(e.button===2)mouseRight=false;});
+addEventListener('mouseup',e=>{keys['mouse'+e.button]=false;});
 addEventListener('contextmenu',e=>e.preventDefault());
 function lockMouse(){try{const r=cv.requestPointerLock&&cv.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(e){}}
 // Esc while the mouse is captured only releases the capture (the key never reaches the page), so losing it mid-game pauses
@@ -3705,18 +3754,18 @@ addEventListener('mousemove',e=>{if(gameState!=='play'||paused)return;
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;mouseDown=mouseRight=false;});
 function playerInput(first){
   const c=player.ctl,fw=V(Math.sin(cam.yaw),0,Math.cos(cam.yaw)),rt=V(-Math.cos(cam.yaw),0,Math.sin(cam.yaw));
-  let f=(keys['w']?1:0)-(keys['s']?1:0),s=(keys['d']?1:0)-(keys['a']?1:0);
+  let f=held('fwd')-held('back'),s=held('right')-held('left');
   if(padMove){f=clamp(f+padMove.f,-1,1);s=clamp(s+padMove.s,-1,1);}
   let mx=fw.x*f+rt.x*s,mz=fw.z*f+rt.z*s;const l=Math.hypot(mx,mz);if(l>1){mx/=l;mz/=l;}
   c.mx=mx;c.mz=mz;
-  c.jump=first&&!!pressed[' '];c.jumpHeld=!!keys[' '];c.grab=!!keys[' '];
-  c.sprint=!!keys['shift']||(padSprint&&!!padMove);c.crouch=!!keys['c'];c.crouchPressed=first&&!!pressed['c'];
-  c.fire=mouseDown;c.fireClick=first&&!!pressed['lmb'];c.alt=false;c.aim=mouseRight;c.rocketClick=first&&!!pressed['mmb'];c.kick=first&&!!pressed['e'];c.reload=first&&!!pressed['r'];
-  c.swap=first&&!!(pressed['wheel']||pressed['q']);c.select=first?(pressed['1']?'pistol':pressed['2']?'rocket':pressed['3']?'shotgun':pressed['4']?'rifle':null):null;
-  // double-tap S / A / D: dodge
-  const tap=k=>{if(!(first&&pressed[k]))return false;const t=performance.now()/1000,l=dblTap[k]||-9;dblTap[k]=t;if(t-l<.3){dblTap[k]=-9;return true;}return false;};
-  c.dodge=tap('s')?'back':tap('a')?'left':tap('d')?'right':tap('w')?'fwd':null;if(first&&padDodge)c.dodge=padDodge;
-  c.wave=first&&!!pressed['t'];
+  c.jump=first&&hit('jump');c.jumpHeld=held('jump');c.grab=held('jump');
+  c.sprint=held('sprint')||(padSprint&&!!padMove);c.crouch=held('crouch');c.crouchPressed=first&&hit('crouch');
+  c.fire=held('fire');c.fireClick=first&&hit('fire');c.alt=false;c.aim=held('aim');c.rocketClick=first&&hit('rocket');c.kick=first&&hit('kick');c.reload=first&&hit('reload');
+  c.swap=first&&!!(pressed['wheel']||hit('swap'));c.select=first?(hit('w1')?'pistol':hit('w2')?'rocket':hit('w3')?'shotgun':hit('w4')?'rifle':null):null;
+  // double-tap a movement key: dodge that way
+  const tap=a=>{const k=kbOf(a);if(!(first&&pressed[k]))return false;const t=performance.now()/1000,l=dblTap[k]||-9;dblTap[k]=t;if(t-l<.3){dblTap[k]=-9;return true;}return false;};
+  c.dodge=tap('back')?'back':tap('left')?'left':tap('right')?'right':tap('fwd')?'fwd':null;if(first&&padDodge)c.dodge=padDodge;
+  c.wave=first&&hit('wave');
   c.aimYaw=cam.yaw;c.aimPitch=cam.pitch;
 }
 const dblTap={};
@@ -3861,6 +3910,50 @@ function drawCrosshair(c,p,cx,cy,sp,hm){
   }
   c.restore();
 }
+// the kill feed, upper left: each line is a row of coloured pieces (names in their fighters' colours); new lines slide in
+function drawFeed(c){
+  c.save();c.textAlign='left';c.font='bold 13px "Courier New",monospace';
+  feed.slice(0,6).forEach((f,i)=>{
+    const segs=f.segs||[[f.text,f.color]],age=(f.life||(f.life=f.t))-f.t,slide=Math.max(0,1-age*6);
+    c.globalAlpha=clamp(f.t,0,1)*(1-slide);let x=20-slide*40,y=30+i*19;
+    const wd=segs.reduce((a,s)=>a+c.measureText(s[0]).width,0);c.fillStyle='rgba(5,6,14,.55)';c.fillRect(x-6,y-14,wd+12,18);
+    for(const [t,col] of segs){c.fillStyle=col;c.shadowColor=col;c.shadowBlur=t.trim().length&&col!=='#8a93a8'?6:0;c.fillText(t,x,y);x+=c.measureText(t).width;}
+  });
+  c.restore();
+}
+// the kill-streak banner at the top: the name flies in from the left, the count from the right, they slam together at the
+// centre; each new kill knocks the old count away; when the run ends, "ENDED BY …" flies in, the name is struck through
+const backOut=u=>{u=clamp(u,0,1);const s=1.9;return 1+(s+1)*Math.pow(u-1,3)+s*Math.pow(u-1,2);};
+function drawSpree(c){
+  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y=94,F=32;
+  const endA=S.end?clamp(1-(T-S.end.t-3.2)/.6,0,1):1;if(endA<=0){spree=null;return;}
+  c.save();c.textBaseline='middle';c.font=`bold ${F}px "Courier New",monospace`;c.globalAlpha=endA;
+  const u0=T-S.t0,inL=backOut(u0/.45);
+  // the impact: a white flash and a shake as the two halves meet (and again for each new count)
+  const hit=Math.min(Math.max(0,u0-.32),S.end?T-S.end.t-.3:9,T-S.nT-.3),shake=hit>=0&&hit<.25?(1-hit/.25)*5:0;
+  const sx=(Math.random()-.5)*shake,sy=(Math.random()-.5)*shake;
+  // left: the name, ending just left of the centre
+  const nameW=c.measureText(S.name).width,lx=cx-16+(1-inL)*-(cx+nameW)+sx;
+  c.textAlign='right';c.fillStyle=S.color;c.shadowColor=S.color;c.shadowBlur=16;c.fillText(S.name,lx,y+sy);
+  if(S.end){const k=clamp((T-S.end.t-.15)/.3,0,1);if(k>0){c.strokeStyle='#ff3f5a';c.lineWidth=4;c.shadowColor='#ff3f5a';c.beginPath();c.moveTo(lx-nameW-6,y+sy+2);c.lineTo(lx-nameW-6+(nameW+12)*k,y+sy-2);c.stroke();}}
+  // right: the count (TRIPLE KILL first, then just the number), or who ended it
+  const right=(txt,col,t,size)=>{const u=backOut((T-t)/.4);c.font=`bold ${size}px "Courier New",monospace`;c.textAlign='left';c.fillStyle=col;c.shadowColor=col;c.shadowBlur=18;
+    c.fillText(txt,cx+16+(1-u)*(W-cx)+sx,y+sy);};
+  const label=n=>n===3?'TRIPLE KILL':String(n);
+  if(!S.end){
+    if(S.lastN!==S.n){S.prevN=S.lastN||0;S.lastN=S.n;}
+    if(S.prevN&&T-S.nT<.35){const k=(T-S.nT)/.35;c.save();c.globalAlpha*=1-k;c.font=`bold ${F}px "Courier New",monospace`;c.textAlign='left';c.fillStyle='#ffd23a';
+      c.fillText(label(S.prevN),cx+16-k*30,y-k*40);c.restore();}
+    right(label(S.n),'#ffd23a',S.nT,S.n===3?F:Math.round(F*1.25));
+  }else{
+    const by=S.end.by;right(by?`ENDED BY ${by[0]}`:'SELF-DESTRUCTED',by?by[1]:'#8a93a8',S.end.t,Math.round(F*.8));
+  }
+  // sparks at the meeting point
+  if(hit>=0&&hit<.3){const k=hit/.3;c.globalAlpha=endA*(1-k);c.strokeStyle='#fff';c.lineWidth=2;c.shadowColor='#fff';c.shadowBlur=10;c.beginPath();
+    for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.3,r0=8+k*30,r1=r0+10*(1-k);c.moveTo(cx+Math.cos(a)*r0,y+Math.sin(a)*r0*.6);c.lineTo(cx+Math.cos(a)*r1,y+Math.sin(a)*r1*.6);}c.stroke();
+    c.globalAlpha=endA*(1-k)*.35;c.fillStyle='#fff';c.fillRect(0,y-F*.7,W,F*1.4);}
+  c.restore();
+}
 function drawHUD(){
   const c=hctx,p=player;c.setTransform(DPR,0,0,DPR,0,0);c.clearRect(0,0,W,H);
   if(gameState==='menu')return;
@@ -3891,7 +3984,7 @@ function drawHUD(){
   const ready=world.rotCD<=0&&!world.rot;
   c.fillStyle=ready?'#ff3fa4':'#7a5068';c.fillText(ready?'◆ GRAVITY PANELS ARMED ◆':`GRAVITY PANELS RECHARGING ${world.rotCD.toFixed(1)}s`,W/2,26);
   c.font='11px "Courier New",monospace';c.fillStyle='#778';c.fillText(`ARENA TURNS: ${world.turns}`,W/2,42);
-  if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText('[E] KICK THE PANEL — TURN THE ARENA',W/2,H/2+70);c.globalAlpha=1;}}
+  if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText(`[${bindName('kick')}] KICK THE PANEL — TURN THE ARENA`,W/2,H/2+70);c.globalAlpha=1;}}
   // scoreboard + feed
   c.textAlign='right';c.font='bold 13px "Courier New",monospace';
   // one block per side: a team shows its averaged score, then its members
@@ -3907,8 +4000,8 @@ function drawHUD(){
   rows.forEach((r,i)=>{const y=48+i*18;
     if(r.team){c.fillStyle=r.col;c.textAlign='left';c.fillText(r.name,W-188,y);c.textAlign='right';c.fillText(r.score.toFixed(1),W-20,y);return;}
     const q=r.q;c.fillStyle=q.color;c.textAlign='left';c.fillText((q===p?'▶ ':'  ')+(r.sub?' ':'')+q.name,W-188,y);c.textAlign='right';c.fillText(`${q.kills}  ${q.deaths}`,W-20,y);});
-  c.font='12px "Courier New",monospace';
-  feed.slice(0,5).forEach((f,i)=>{c.globalAlpha=clamp(f.t,0,1);c.fillStyle=f.color;c.fillText(f.text,W-20,60+rows.length*18+i*16);});c.globalAlpha=1;}
+  }
+  drawFeed(c);drawSpree(c);
   // crosshair
   const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
   drawCrosshair(c,p,cx,cy,sp,hm);
@@ -3937,10 +4030,10 @@ function drawHUD(){
   // alliance prompts
   if(p.alive&&gameState==='play'&&!world.demo&&(!TUT.on||(TUT.cfg&&TUT.cfg.allyHud))){
     c.font='bold 14px "Courier New",monospace';c.textAlign='center';
-    if(p.emote&&p.emote.kind==='wave'){c.fillStyle='#ccd';c.fillText('WAVING — an enemy who stands in front of you and presses T joins you',W/2,H/2+96);}
+    if(p.emote&&p.emote.kind==='wave'){c.fillStyle='#ccd';c.fillText(keyText('WAVING — an enemy who stands in front of you and presses {wave} joins you'),W/2,H/2+96);}
     else if(p.emote&&p.emote.kind==='bow'){c.fillStyle=p.emote.partner.color;c.fillText(`⚑ FORMING AN ALLIANCE WITH ${p.emote.partner.name}…`,W/2,H/2+96);}
     else{let w=null;for(const o of chars)if(o!==p&&o.alive&&o.emote&&o.emote.kind==='wave'&&canAlly(o,p)&&Math.hypot(o.x-p.x,o.z-p.z)<500){w=o;break;}
-      if(w){c.fillStyle=w.color;c.globalAlpha=.65+.35*Math.sin(world.time*6);c.fillText(inFrontOf(w,p)?`[T] ACCEPT ${w.name}'S ALLIANCE`:`⚑ ${w.name} OFFERS AN ALLIANCE — stand in front of them and press T`,W/2,H/2+96);c.globalAlpha=1;}}
+      if(w){c.fillStyle=w.color;c.globalAlpha=.65+.35*Math.sin(world.time*6);c.fillText(inFrontOf(w,p)?`[${bindName('wave')}] ACCEPT ${w.name}'S ALLIANCE`:`⚑ ${w.name} OFFERS AN ALLIANCE — stand in front of them and press ${bindName('wave')}`,W/2,H/2+96);c.globalAlpha=1;}}
   }
   if(TUT.on)tutHUD(c);
   if(paused){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);}
@@ -3949,7 +4042,7 @@ function drawHUD(){
 }
 
 // ---------- settings (start screen) ----------
-const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50,padSeen:false,charStyle:'lines',speed:85};
+const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50,padSeen:false,charStyle:'lines',speed:85,kb:Object.assign({},KB_DEF),gp:Object.assign({},GP_DEF)};
 const playerName=()=>(SETTINGS.name||'').trim().toUpperCase().slice(0,12)||'YOU';
 const PLAYER_COLORS=['#29f0ff','#ff3fa4','#ffb020','#9dff3a','#b06bff','#ff5a3c','#ffffff','#3c8cff','#ffe23c','#00e0a0'];
 // a bot (or tutorial actor) that would share your colour gets the colour you gave up
@@ -3957,7 +4050,9 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(s.charStyle==='solid'||s.charStyle==='lines')SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;}}catch(e){}
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(s.charStyle==='solid'||s.charStyle==='lines')SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
+  if(s.kb)for(const a in KB_DEF)if(typeof s.kb[a]==='string'&&s.kb[a])SETTINGS.kb[a]=s.kb[a];
+  if(s.gp)for(const a in GP_DEF)if(Number.isInteger(s.gp[a])&&s.gp[a]>=-1&&s.gp[a]<20&&s.gp[a]!==9)SETTINGS.gp[a]=s.gp[a];}}catch(e){}
 function getSettings(){return SETTINGS;}
 function saveSettings(){try{localStorage.setItem('gravityShiftSettings',JSON.stringify(SETTINGS));}catch(e){}}
 function setupMenu(){
@@ -4001,7 +4096,7 @@ function newMatch(seed,opt){
   chars=[makeChar(playerName(),SETTINGS.color,false)];
   for(let i=0;i<cfg.bots;i++){const b=makeChar(roster[i][0],roster[i][1],true);b.skill=cfg.skill;chars.push(b);}fixColorClash();}
   player=chars[0];
-  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];spree=null;for(const q of chars||[])q.streak=0;
   spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');for(let i=4+(rnd()<.5?1:0);i>0;i--)spawnDrop('launcher');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;
@@ -4014,10 +4109,11 @@ function newMatch(seed,opt){
 // ---------- loop ----------
 let last=performance.now(),acc=0;const STEP=1/120;
 // real seconds since the last screen frame, for anything smoothed per frame (so it behaves the same at 30, 60 or 144 Hz)
-let frameDt=1/60;const perFrame=f=>1-Math.pow(1-f,frameDt*60);
+let frameDt=1/60,hudClock=0; // hudClock: real seconds, for HUD animations that ignore game speed
+const perFrame=f=>1-Math.pow(1-f,frameDt*60);
 function frame(now){
   // game time keeps pace with real time down to 10 fps (below that it slows rather than take huge leaps)
-  let dt=Math.min(.1,(now-last)/1000);last=now;frameDt=dt;
+  hudClock+=clamp((now-last)/1000,0,1);let dt=Math.min(.1,(now-last)/1000);last=now;frameDt=dt;
   fpsTick(now);
   if(window.VIEWER){if(R.ok)viewerFrame(dt);requestAnimationFrame(frame);return;} // the motion viewer (viewer.html) runs its own loop
   pollPad(dt);
@@ -4045,6 +4141,7 @@ function showMenu(page){
   gameState='menu';$('tut').style.display='none';$('ov').style.display='flex';
   for(const p of document.querySelectorAll('#ov .page'))p.classList.toggle('on',p.id===page);
   if(page==='pgGame')refreshGamePage();
+  if(rebind)endRebind();if(page==='pgKeys')buildKeyTable();refreshKeyCells();
   padFocus=-1;padHilite();
 }
 // the seed shown on the GAME page: the one from Arena settings, or a fresh random one
@@ -4176,6 +4273,11 @@ function pollPad(dt){
   // menus (any overlay open, or paused): D-pad / left stick moves, A selects, B backs out
   const menuOpen=gameState==='menu'||paused||TUT.cardOpen;
   if(menuOpen){
+    // waiting for a new gamepad button: the first press once everything is let go (START cancels)
+    if(rebind&&rebind.kind==='gp'){
+      if(!rebind.armed){if(!now.some(Boolean))rebind.armed=true;}
+      else{const i=now.findIndex(Boolean);if(i===9)endRebind();else if(i>=0)endRebind(i);}
+      padPrev=now;return;}
     padRep-=dt;let mv=0;
     if(down(12)||down(14))mv=-1;if(down(13)||down(15))mv=1;
     const sy=Math.abs(ly)>.6?Math.sign(ly):0;if(sy&&padRep<=0){mv=sy;padRep=.22;}if(!sy&&!now[12]&&!now[13])padRep=Math.min(padRep,0);
@@ -4193,10 +4295,10 @@ function pollPad(dt){
   if(SETTINGS.input!=='gamepad'){padPrev=now;return;}
   // look: right stick, eased so small tilts aim finely
   const k=3.1*(SETTINGS.sens/100)*(cam.zoom||1)*dt;
-  const S=SETTINGS.assist?SETTINGS.assistStr/100:0;
-  const A=S>0?assistTarget(down(5)?2.6:1):null;
+  const S=SETTINGS.assist?SETTINGS.assistStr/100:0,GA=gpOf('aim'),GF=gpOf('fire');
+  const A=S>0?assistTarget(down(GA)?2.6:1):null;
   // snap: pressing RB (aim) swings the crosshair onto the nearest enemy in a wide cone
-  if(A&&down(5)){const sn=(.35+.6*S)*.175;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
+  if(A&&down(GA)){const sn=(.35+.6*S)*.175;cam.yaw+=A.dy*sn;cam.pitch=clamp(cam.pitch+A.dp*sn,-1.35,1.25);}
   // friction: the look slows down a lot while the crosshair is over a target
   const fr=A?1-(.45+.45*S)*.175*(1-A.e*.6):1;
   cam.yaw-=rx*Math.abs(rx)*k*fr;cam.pitch=clamp(cam.pitch-ry*Math.abs(ry)*k*.75*fr,-1.35,1.25);
@@ -4204,21 +4306,16 @@ function pollPad(dt){
     // tracking: follow the target as it (or you) moves
     if(padTrk&&padTrk.t===A.t){const ddy=angDiff(A.ay,padTrk.ay),ddp=A.ap-padTrk.ap;if(Math.abs(ddy)<.3){const tk=(.5+.5*S)*.175;cam.yaw+=ddy*tk;cam.pitch=clamp(cam.pitch+ddp*tk,-1.35,1.25);}}
     // magnetism: pull onto the target while you move, look or shoot
-    if(rx||ry||lx||ly||now[6]||now[5]){const pull=Math.min(.6,(now[5]?2.45:1.6)*S*dt*(1.3-A.e*.6));
+    if(rx||ry||lx||ly||now[GF]||now[GA]){const pull=Math.min(.6,(now[GA]?2.45:1.6)*S*dt*(1.3-A.e*.6));
       cam.yaw+=A.dy*pull;cam.pitch=clamp(cam.pitch+A.dp*pull,-1.35,1.25);}
     padTrk={t:A.t,ay:A.ay,ap:A.ap};
   }else padTrk=null;
   // move: left stick; L3 latches sprint until the stick is let go
   if(lx||ly)padMove={f:-ly,s:lx};
-  if(down(10))padSprint=!padSprint;if(Math.hypot(lx,ly)<.3)padSprint=false;
+  if(down(gpOf('sprint')))padSprint=!padSprint;if(Math.hypot(lx,ly)<.3)padSprint=false;
   // buttons feed the same key / mouse state the keyboard does
-  const hold=(i,key)=>{if(down(i)){pressed[key]=true;keys[key]=true;}if(up(i))keys[key]=false;};
-  hold(0,' ');hold(1,'c');hold(2,'e');hold(4,'r');hold(12,'t');
-  if(down(3))pressed['q']=true;
-  if(down(6)){mouseDown=true;pressed['lmb']=true;}if(up(6))mouseDown=false;
-  if(down(5))mouseRight=true;if(up(5))mouseRight=false;
-  if(down(7))pressed['mmb']=true;
-  if(down(11))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):ly<-.3?'fwd':'back';
+  for(const [a] of ACTIONS){const i=gpOf(a);if(i<0||a==='sprint'||a==='dodge')continue;if(down(i)){pressed['pad:'+a]=true;keys['pad:'+a]=true;}if(up(i))keys['pad:'+a]=false;}
+  if(down(gpOf('dodge')))padDodge=Math.abs(lx)>Math.abs(ly)&&Math.abs(lx)>.3?(lx>0?'right':'left'):ly<-.3?'fwd':'back';
   padPrev=now;
 }
 // aim assist: the enemy closest to the crosshair, inside a cone that grows with the strength and with how near they are
@@ -4266,6 +4363,40 @@ function padBack(){
   if(b){b.click();padNav(1);}
 }
 wireMenu();
+// ---------- key bindings page ----------
+var rebind=null;
+// the help tables name the keys as currently bound (always the keyboard ones there)
+function refreshKeyCells(){if(!document.querySelectorAll)return;for(const td of document.querySelectorAll('td[data-k]'))td.textContent=td.dataset.k.replace(/\{(\w+)\}/g,(m,a)=>keyName(kbOf(a)));}
+function buildKeyTable(){
+  const t=$('keytab');if(!t||!t.querySelectorAll||typeof document.createElement('div').querySelectorAll!=='function')return;
+  let h='<tr><th></th><th>KEYBOARD / MOUSE</th><th>GAMEPAD</th></tr>';
+  for(const [a,label] of ACTIONS){
+    const kb=KB_FIXED[a]?`<span class="fix">${KB_FIXED[a]}</span>`:`<button class="opt" data-k="kb" data-a="${a}">${keyName(kbOf(a))}</button>`;
+    const gp=GP_FIXED[a]?`<span class="fix">${GP_FIXED[a]}</span>`:`<button class="opt" data-k="gp" data-a="${a}">${padName(gpOf(a))}</button>`;
+    h+=`<tr><td>${label}</td><td>${kb}</td><td>${gp}</td></tr>`;
+  }
+  t.innerHTML=h;
+  for(const b of t.querySelectorAll('button')){b.onclick=ev=>{ev.stopPropagation();
+    if(rebind)endRebind();rebind={kind:b.dataset.k,a:b.dataset.a,btn:b,t:performance.now(),armed:false};
+    b.classList.add('wait');b.textContent=b.dataset.k==='kb'?'press a key…':'press a button…';};}
+}
+// put the new binding on the action; whatever action had it before takes this one's old binding
+function endRebind(v){
+  const r=rebind;rebind=null;if(!r)return;
+  if(v!==undefined){const M=r.kind==='kb'?SETTINGS.kb:SETTINGS.gp,old=M[r.a];
+    for(const [a] of ACTIONS)if(a!==r.a&&M[a]===v&&!(r.kind==='kb'?KB_FIXED:GP_FIXED)[a])M[a]=old;
+    M[r.a]=v;saveSettings();}
+  buildKeyTable();if(padFocus>=0)padHilite();
+}
+addEventListener('keydown',e=>{if(!rebind)return;e.preventDefault();e.stopImmediatePropagation();
+  const k=e.key.toLowerCase();if(k==='escape'||rebind.kind!=='kb'){endRebind();return;}endRebind(k);},true);
+addEventListener('mousedown',e=>{if(!rebind||rebind.kind!=='kb'||performance.now()-rebind.t<150)return;e.preventDefault();e.stopImmediatePropagation();if(e.button===0)swallowClick=performance.now()+600;endRebind('mouse'+e.button);},true);
+addEventListener('mousedown',()=>{swallowClick=0;},true);
+// the click that finishes a mouse-button binding mustn't also press whatever is under the pointer
+let swallowClick=0;addEventListener('click',e=>{if(performance.now()<swallowClick){swallowClick=0;e.stopImmediatePropagation();e.preventDefault();}},true);
+addEventListener('auxclick',e=>{if(rebind)e.preventDefault();},true);
+if($('keyreset'))$('keyreset').onclick=()=>{SETTINGS.kb=Object.assign({},KB_DEF);SETTINGS.gp=Object.assign({},GP_DEF);saveSettings();endRebind();buildKeyTable();};
+buildKeyTable();
 // a click for every button in the menus
 document.addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('button');if(b&&AC)sfx('ui');},true);
 // the music volume follows whether the recorded loops have arrived yet
@@ -4412,12 +4543,12 @@ TUT_BUILD.trav=()=>{
   return {
     name:'ADVANCED TRAVERSAL',spawn:{x:3.5*T,y:fy,z:5*T},yaw:Math.PI/2,
     card:['ADVANCED TRAVERSAL',`<p>Follow the yellow arrows.</p>
-      <p>Hold <b>SHIFT</b> to sprint — the green bar under your health is stamina. While sprinting you <b>vault</b> over low barriers on your own.</p>
+      <p>Hold <b>{sprint}</b> to sprint — the green bar under your health is stamina. While sprinting you <b>vault</b> over low barriers on your own.</p>
       <p>Sprint and press <b>C</b> to <b>slide</b> under low gaps.</p>
-      <p>Walls are too high to jump onto: jump at the wall while <b>holding SPACE</b> — you catch the ledge, hang, and <b>pull yourself up</b>.</p>`],
-    obj:[{text:'Sprint (SHIFT) into the orange barriers to vault over them',short:'VAULT',n:0,need:2},
+      <p>Walls are too high to jump onto: jump at the wall while <b>holding {jump}</b> — you catch the ledge, hang, and <b>pull yourself up</b>.</p>`],
+    obj:[{text:'Sprint ({sprint}) into the orange barriers to vault over them',short:'VAULT',n:0,need:2},
          {text:'Sprint, then press C to slide under the magenta beam',short:'SLIDE'},
-         {text:'Jump at the wall holding SPACE: catch the ledge, pull up — twice',short:'PULL-UP',n:0,need:2},
+         {text:'Jump at the wall holding {jump}: catch the ledge, pull up — twice',short:'PULL-UP',n:0,need:2},
          {text:'Sprint-jump the gap — the far side is too high, grab its ledge',short:'LEDGE GRAB'},
          {text:'Stand on the green pad',short:'FINISH'}],
     onState(a,b,p){
@@ -4545,10 +4676,10 @@ TUT_BUILD.shift=()=>{
   floorRect(31.2*T,15.5*T,33.8*T,21.5*T,15*T,MKC.grn,4);
   return {
     name:'ARENA SHIFT',spawn:{x:4.2*T,y:15*T,z:18.5*T},yaw:Math.PI/2,hud:{gravity:true},
-    card:['ARENA SHIFT',`<p><b style="color:#ff3fa4">Magenta panels</b> turn the whole arena 90°. Walk up to one, <b>face it</b> and press <b>E</b>: that wall becomes your floor.</p>
+    card:['ARENA SHIFT',`<p><b style="color:#ff3fa4">Magenta panels</b> turn the whole arena 90°. Walk up to one, <b>face it</b> and press <b>{kick}</b>: that wall becomes your floor.</p>
       <p>Each section of this corridor is missing the floor you're standing on. Kick the panel at the end of each section to walk on the wall, then the ceiling, then the other wall — all the way round to the exit.</p>
       <p>Fall into a pit and you're put back at the last checkpoint.</p>`],
-    obj:[{text:'Face the magenta panel (turn right) and press E',short:'SHIFT 1'},{text:'Walk on the wall to the next panel and kick it',short:'SHIFT 2'},
+    obj:[{text:'Face the magenta panel (turn right) and press {kick}',short:'SHIFT 1'},{text:'Walk on the wall to the next panel and kick it',short:'SHIFT 2'},
          {text:'Now the ceiling is your floor — kick the next panel',short:'SHIFT 3'},{text:'Last panel — kick it to come back to the floor',short:'SHIFT 4'},
          {text:'Reach the exit',short:'EXIT'}],
     snap:true,
@@ -4605,8 +4736,8 @@ TUT_BUILD.ally=()=>{
       <p>Allies don't target each other (friendly fire still hurts), the team's score is its members' frags averaged, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
       <p>Follow the yellow line. Stop at each blue marker and watch, then do it yourself.</p>`],
     obj:[{text:'Walk to the first blue marker and watch VOLT and NYX',short:'WATCH'},
-         {text:'Second marker: face RAZOR and press T to wave — he comes over and accepts',short:'ASK'},
-         {text:'Third marker: KAI comes to you and waves — face him and press T',short:'ACCEPT'},
+         {text:'Second marker: face RAZOR and press {wave} to wave — he comes over and accepts',short:'ASK'},
+         {text:'Third marker: KAI comes to you and waves — face him and press {wave}',short:'ACCEPT'},
          {text:'Walk with your team to the green area',short:'FINISH'}],
     update(dt,p){
       const o=TUT.cfg.obj;TUT.stage=TUT.stage||0;
@@ -4614,9 +4745,9 @@ TUT_BUILD.ally=()=>{
       if(TUT.stage===1){const a=A(),b=B();
         if(a.emote&&a.emote.kind==='bow')say('s1b','NYX stood in front of VOLT and pressed T — they bow…');
         if(a.team&&a.team===b.team){say('s1c','VOLT took NYX\'s colour — they are allies now','#ffb020');objDone(0,'✓ WATCHED');TUT.stage=2;}}
-      if(TUT.stage===2&&p.x>15.5*T)say('s2','Your turn: face RAZOR and press T to wave','#9dff3a');
+      if(TUT.stage===2&&p.x>15.5*T)say('s2',keyText('Your turn: face RAZOR and press {wave} to wave'),'#9dff3a');
       if(TUT.stage===2&&p.team&&p.team===C().team){say('s2b','RAZOR accepted — you took his colour. He follows you now','#9dff3a');objDone(1,'✓ ALLIANCE');TUT.stage=3;}
-      if(TUT.stage===3&&p.x>22.5*T)say('s3','KAI wants to join you — face him and press T when he waves',D().color);
+      if(TUT.stage===3&&p.x>22.5*T)say('s3',keyText('KAI wants to join you — face him and press {wave} when he waves'),D().color);
       if(TUT.stage===3&&D().team&&D().team===p.team){say('s3b','KAI joined your team. Walk to the green area together',p.color);objDone(2,'✓ NEW MEMBER');TUT.stage=4;}
       if(TUT.stage===4){const inG=e=>e.x>30.6*T&&e.x<35.4*T&&e.z>8*T&&e.z<15*T;
         if(inG(p)&&inG(C())&&inG(D())){o[3].done=true;TUT.result='Your team: '+sideName(p).split('+').join(' · ');tutComplete();}}
@@ -4661,7 +4792,7 @@ function startTutorial(id){
   // scripted actors (they don't think for themselves: the room drives them)
   for(const a of cfg.actors||[]){const b=makeChar(a.name,a.color,true);b.script=a.script;b.actor=a;chars.push(b);}
   fixColorClash();
-  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];feed=[];spiders=[];
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];feed=[];spree=null;spiders=[];
   if(cfg.props)cfg.props();
   if(cfg.spawn)setCp(cfg.spawn.x,cfg.spawn.y,cfg.spawn.z,cfg.yaw);
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
@@ -4726,7 +4857,7 @@ function tutHUD(c){
   obj.forEach((o,i)=>{const yy=y+40+i*19;
     c.fillStyle=o.done?'#3dff7a':i===cur?'#ffffff':'#667';
     const n=('n' in o)&&!o.done&&o.need?` (${o.n}/${o.need})`:'';
-    c.fillText((o.done?'✓ ':i===cur?'▶ ':'· ')+o.text+n,x+12,yy);});
+    c.fillText((o.done?'✓ ':i===cur?'▶ ':'· ')+keyText(o.text)+n,x+12,yy);});
   if(cfg.hud&&cfg.hud.shots){c.fillStyle='#889';c.textAlign='right';c.fillText(`shots ${TUT.shots}`,x+w-10,y+20);}
   // toasts
   c.textAlign='center';
@@ -4743,7 +4874,7 @@ function tutHUD(c){
 function showCard(title,html,buttons){
   TUT.cardOpen=true;paused=true;for(const k in keys)keys[k]=false;mouseDown=mouseRight=false;
   if(document.pointerLockElement===cv&&document.exitPointerLock)document.exitPointerLock();
-  const el=document.getElementById('card');document.getElementById('cardT').textContent=title;document.getElementById('cardB').innerHTML=html;
+  const el=document.getElementById('card');document.getElementById('cardT').textContent=title;document.getElementById('cardB').innerHTML=keyText(html);
   const bw=document.getElementById('cardBtns');bw.innerHTML='';
   for(const b of buttons){const e=document.createElement('button');e.textContent=b.label;if(b.primary)e.className='primary';e.onclick=b.fn;bw.appendChild(e);}
   el.style.display='flex';
@@ -4816,28 +4947,43 @@ void main(){
   vec3 n=normalize(vNor);
   float dif=max(dot(n,uSun),0.0),hemi=n.y*0.5+0.5;
   vec3 fill=vec3(0.035,0.04,0.065)*(0.6+0.5*hemi+0.5*dif)+uLine*0.05;
-  ${deriv?'vec3 w=fwidth(vB)*1.35;':'vec3 w=vec3(0.06);'}
+  ${deriv?'vec3 w=fwidth(vB)*'+LINE_W.toFixed(2)+';':'vec3 w=vec3(0.03);'}
   vec3 a=smoothstep(vec3(0.0),w,vB);float edge=1.0-min(min(a.x,a.y),a.z);
   vec3 col=mix(fill,uLine*1.25+vec3(0.12),edge);
   {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=fill*uLC*la*la*1.5;}
   float f=exp(-pow(vD*uFogD,2.0));
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
 }`;}
-function buildLineMesh(gl,u8,vOff,ni,idx,q){
-  const nv=ni;const out=new Uint8Array(nv*24),pos=i=>{const o=vOff+i*20,d=new DataView(u8.buffer,u8.byteOffset);return [d.getInt16(o,true),d.getInt16(o+2,true),d.getInt16(o+4,true)];};
+// LINE_ANGLE: how sharp a crease must be to draw (higher = fewer lines). A line is kept only if its mirror twin on the
+// other side of the body (x → -x) is a line too, so the pattern is symmetric even where the two sides are triangulated differently.
+const LINE_ANGLE=42,LINE_W=.6;
+function buildLineMesh(gl,u8,vOff,ni,idx){
+  const d=new DataView(u8.buffer,u8.byteOffset),pos=i=>{const o=vOff+i*20;return [d.getInt16(o,true),d.getInt16(o+2,true),d.getInt16(o+4,true)];};
   const key=p=>p[0]+','+p[1]+','+p[2],nt=ni/3,N=[],edges=new Map(),mat=i=>u8[vOff+i*20+11];
+  const uniq=new Map();for(let k=0;k<ni;k++){const p=pos(idx[k]);uniq.set(key(p),p);}
+  // mirror partner of every distinct position: the nearest one to (-x,y,z), within a small tolerance
+  const C=96,grid=new Map(),cell=p=>Math.floor(p[0]/C)+','+Math.floor(p[1]/C)+','+Math.floor(p[2]/C);
+  for(const [k,p] of uniq){const c=cell(p);if(!grid.has(c))grid.set(c,[]);grid.get(c).push(k);}
+  const mir=new Map();
+  for(const [k,p] of uniq){const q=[-p[0],p[1],p[2]],cx=Math.floor(q[0]/C),cy=Math.floor(q[1]/C),cz=Math.floor(q[2]/C);let best=null,bd=C*C;
+    for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)for(let c=-1;c<=1;c++){const l=grid.get((cx+a)+','+(cy+b)+','+(cz+c));if(!l)continue;
+      for(const k2 of l){const r=uniq.get(k2),dd=(r[0]-q[0])**2+(r[1]-q[1])**2+(r[2]-q[2])**2;if(dd<bd){bd=dd;best=k2;}}}
+    if(best)mir.set(k,best);}
+  const ek=(a,b)=>a<b?a+'|'+b:b+'|'+a;
   for(let t=0;t<nt;t++){const a=pos(idx[t*3]),b=pos(idx[t*3+1]),c=pos(idx[t*3+2]);
     const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]],n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],l=Math.hypot(...n)||1;N.push(n.map(x=>x/l));
     const ks=[key(a),key(b),key(c)];
-    for(let k=0;k<3;k++){const e=[ks[(k+1)%3],ks[(k+2)%3]].sort().join('|');if(!edges.has(e))edges.set(e,[]);edges.get(e).push(t);}}
-  const sharp=(t,k)=>{const ks=[0,1,2].map(j=>key(pos(idx[t*3+j]))),e=[ks[(k+1)%3],ks[(k+2)%3]].sort().join('|'),l=edges.get(e);
-    if(l.length!==2)return true;const o=l[0]===t?l[1]:l[0],a=N[t],b=N[o];
-    if(mat(idx[t*3])!==mat(idx[o*3]))return true;
-    return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]<Math.cos(28*Math.PI/180);};
-  for(let t=0;t<nt;t++){const vis=[sharp(t,0),sharp(t,1),sharp(t,2)];
+    for(let k=0;k<3;k++){const e=ek(ks[(k+1)%3],ks[(k+2)%3]);if(!edges.has(e))edges.set(e,[]);edges.get(e).push(t);}}
+  const cosA=Math.cos(LINE_ANGLE*Math.PI/180),raw=new Set();
+  for(const [e,l] of edges){let sh;if(l.length!==2)sh=true;else{const a=N[l[0]],b=N[l[1]];
+      sh=mat(idx[l[0]*3])!==mat(idx[l[1]*3])||a[0]*b[0]+a[1]*b[1]+a[2]*b[2]<cosA;}
+    if(sh)raw.add(e);}
+  const sharpE=new Set();for(const e of raw){const [a,b]=e.split('|'),ma=mir.get(a),mb=mir.get(b);if(ma&&mb&&raw.has(ek(ma,mb)))sharpE.add(e);}
+  const out=new Uint8Array(ni*24);
+  for(let t=0;t<nt;t++){const ks=[0,1,2].map(j=>key(pos(idx[t*3+j]))),vis=[0,1,2].map(k=>sharpE.has(ek(ks[(k+1)%3],ks[(k+2)%3])));
     for(let j=0;j<3;j++){const src=vOff+idx[t*3+j]*20,dst=(t*3+j)*24;out.set(u8.subarray(src,src+20),dst);
       for(let k=0;k<3;k++)out[dst+20+k]=(j===k||!vis[k])?255:0;}}
-  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,out,gl.STATIC_DRAW);return {b,n:nv};
+  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,out,gl.STATIC_DRAW);return {b,n:ni,lines:sharpE.size,raw:raw.size};
 }
 async function loadModel(){
   try{
@@ -4866,7 +5012,7 @@ async function loadModel(){
       const ll={};for(const a of ['aPos','aNor','aJ','aW','aB'])ll[a]=gl.getAttribLocation(lp,a);
       for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uLine'])ll[u]=gl.getUniformLocation(lp,u);
       const u8=new Uint8Array(buf),idx=new Uint16Array(buf.slice(iOff,iOff+meta.ni*2));
-      SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx,meta.q);SKN.lp=lp;SKN.ll=ll;
+      SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx);SKN.lp=lp;SKN.ll=ll;
     }catch(err){console.warn('line style unavailable:',err);}
     // rest skeleton
     SKN.bones=meta.bones.map(b=>({name:b.name,head:V(b.head[0],b.head[1],b.head[2]),parent:b.parent}));
