@@ -9,7 +9,7 @@ html,body{margin:0;height:100%;background:#05060c;overflow:hidden;font-family:'C
 canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #hud{pointer-events:none}
 #c{cursor:crosshair}
-#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,10,40,.85),rgba(3,4,10,.96));z-index:2;overflow:auto}
+#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(12,6,26,.72),rgba(3,4,10,.5) 70%,rgba(3,4,10,.8));z-index:2;overflow:auto}
 #ov .box{max-width:660px;padding:28px 34px;border:1px solid #29f0ff55;background:#0a0d1acc;box-shadow:0 0 40px #29f0ff22,inset 0 0 30px #ff3fa411;margin:16px}
 #ov h1{margin:0 0 4px;font-size:40px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff,0 0 30px #ff3fa4}
 #ov h1 span{color:#ff3fa4}
@@ -58,6 +58,9 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #cardBtns button:hover{background:#18233a;border-color:#29f0ff}
 #cardBtns button.primary{background:#29f0ff;color:#05060c;font-weight:bold;box-shadow:0 0 16px #29f0ff88}
 #cardBtns button.primary:hover{background:#ff3fa4;box-shadow:0 0 16px #ff3fa4}
+#endopts{position:fixed;left:50%;top:calc(50% + 50px);transform:translateX(-50%);display:none;flex-direction:column;gap:8px;z-index:3;min-width:300px}
+#endopts button{font:bold 15px "Courier New",monospace;letter-spacing:2px;color:#e8ecf2;background:#0a0d1acc;border:1px solid #29f0ff55;padding:10px 18px;cursor:pointer;display:flex;justify-content:space-between;gap:20px}
+#endopts button:hover,#endopts button.pf{background:#29f0ff;color:#05060c}#endopts small{opacity:.6}
 #pause{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:3}
 #pause .box{min-width:300px;text-align:center;padding:26px 30px;border:1px solid #29f0ff55;background:#0a0d1aee;box-shadow:0 0 40px #29f0ff22}
 #pause h2{margin:0 0 18px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff}
@@ -101,6 +104,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </head>
 <body>
 <canvas id="c"></canvas><canvas id="hud"></canvas>
+<div id="endopts"><button id="endSame">PLAY THIS ARENA AGAIN <small>ENTER</small></button><button id="endRnd">RANDOM ARENA <small>R</small></button><button id="endMenu">MAIN MENU <small>ESC</small></button></div>
 <div id="pause"><div class="box">
 <h2>PAUSED</h2>
 <button id="resume">RESUME</button>
@@ -114,7 +118,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </div></div>
 <div id="ov"><div class="box menu">
 <h1>GRAVITY<span>SHIFT</span></h1>
-<div class="sub">ARENA 7 // CONSTRUCTION SECTOR // DEATHMATCH</div>
+<div class="sub">DEATHMATCH EVOLVED</div>
 <div class="page" id="pgMain">
 <button class="mi" data-go="pgGame">GAME</button>
 <button class="mi" data-go="pgSet">ARENA SETTINGS</button>
@@ -125,10 +129,10 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </div>
 <div class="page" id="pgGame">
 <div class="ptitle">GAME</div>
-<button class="mi arena" data-seed="0001">ARENA 1 <small>seed 0001</small></button>
-<button class="mi arena" data-seed="0002">ARENA 2 <small>seed 0002</small></button>
-<button class="mi arena" data-seed="0003">ARENA 3 <small>seed 0003</small></button>
-<button class="mi arena" data-seed="0004">ARENA 4 <small>seed 0004</small></button>
+<button class="mi arena" data-seed="57426">ARENA 1</button>
+<button class="mi arena" data-seed="5967">ARENA 2</button>
+<button class="mi arena" data-seed="0003">ARENA 3</button>
+<button class="mi arena" data-seed="0004">ARENA 4</button>
 <div class="rndrow"><button class="mi" id="go">RANDOM ARENA</button><input id="seedRnd" maxlength="40" title="arena seed — type a number or a word"><button class="opt" id="reroll" title="new random seed">⟳</button></div>
 <div class="setsum" id="setsum"></div>
 <button class="mi back" data-go="pgMain">BACK</button>
@@ -3745,6 +3749,7 @@ const cv=document.getElementById('c'),hud=document.getElementById('hud'),hctx=hu
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k]=true;keys[k]=true;
   if(world.demo&&gameState==='play'&&!paused&&!e.repeat){if(k==='a'||k==='arrowleft')demoCycle(-1);if(k==='d'||k==='arrowright')demoCycle(1);}
   if(k==='escape'&&gameState==='play'&&!TUT.cardOpen){setPaused(!paused);}
+  if(gameState==='over'&&world.fixedArena&&!world.demo&&!TUT.on){if(k==='enter')endChoice('same');else if(k==='r')endChoice('random');else if(k==='escape')endChoice('menu');return;}
   if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(world.demo?(SETTINGS.seed||'').trim()||undefined:undefined,{demo:world.demo});}
   if(gameState==='play'&&Object.values(SETTINGS.kb).includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
@@ -3918,7 +3923,8 @@ function render(){
   }
   pickupGlows(add);
   drawParticles(alpha,false);drawParticles(add,true);
-  drawHUD();drawFPS(hctx);
+  if(gameState==='menu')hctx.clearRect(0,0,W,H);else drawHUD();
+  drawFPS(hctx);
 }
 // a crosshair per weapon, in that weapon's colour, so you can tell at a glance what's in your hands
 function drawCrosshair(c,p,cx,cy,sp,hm){
@@ -4077,7 +4083,7 @@ function drawHUD(){
   }
   if(TUT.on)tutHUD(c);
   if(paused){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);}
-  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(!world.demo&&(winner===p||allied(winner,p))?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
+  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(!world.demo&&(winner===p||allied(winner,p))?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on&&!world.fixedArena)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
   if(world.flash>0){c.fillStyle=`rgba(255,63,164,${world.flash*.3})`;c.fillRect(0,0,W,H);}
 }
 
@@ -4118,12 +4124,16 @@ function seedNumber(label){
   if(/^\d+$/.test(t))return Number(t)%4294967296;
   let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;
 }
+// the menu's four arenas: their seeds stay hidden, and when one ends you choose: same arena / random / main menu
+const FIXED_ARENAS=['57426','5967','0003','0004'];
 function newMatch(seed,opt){
   opt=opt||{};world.demo=!!opt.demo;world.demoT=0;world.fragLimit=world.demo?10:(SETTINGS.frags||FRAG_LIMIT);
   TUT.on=false;drones=[];
   // the seed decides the level, its decoration, furniture and starting spots; gameplay stays random
   const label=seed!==undefined&&seed!==null&&String(seed).trim()!==''?String(seed).trim():String((Math.random()*1e6)|0);
-  world.seedLabel=label;
+  world.seedLabel=label;world.fixedArena=!opt.demo&&FIXED_ARENAS.includes(label);
+  {const sr=document.getElementById('seedrow');if(sr)sr.style.display=world.fixedArena?'none':'';}
+  menuBg=null;
   let s=seedNumber(label);
   rnd=mulberry32(s^0x5bd1e995);
   for(let tries=0;tries<20;tries++){genLevel(s);if(levelOK())break;s=(s*1103515245+12345)>>>0;}
@@ -4151,6 +4161,46 @@ let last=performance.now(),acc=0;const STEP=1/120;
 // real seconds since the last screen frame, for anything smoothed per frame (so it behaves the same at 30, 60 or 144 Hz)
 let frameDt=1/60,hudClock=0; // hudClock: real seconds, for HUD animations that ignore game speed
 const perFrame=f=>1-Math.pow(1-f,frameDt*60);
+// ---------- the menu's background: one of the four arenas, empty, seen through a slowly drifting camera ----------
+let menuBg=null;
+const gridSig=()=>{let s=0;for(let i=0;i<grid.length;i+=97)s=(s*31+grid[i])|0;return s;};
+function menuBgBuild(){
+  const seed=FIXED_ARENAS[Math.random()*FIXED_ARENAS.length|0];
+  let s=seedNumber(seed);rnd=mulberry32(s^0x5bd1e995);
+  for(let tries=0;tries<20;tries++){genLevel(s);if(levelOK())break;s=(s*1103515245+12345)>>>0;}
+  nav=null;buildNav();buildLevelMesh();genDeco();buildDecoMesh();
+  chars=[];player=makeChar(playerName(),SETTINGS.color,false);player.alive=false;
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];spree=null;spiders=[];drones=[];
+  spawnFurniture();for(let i=0;i<3;i++)spawnDrop(['launcher','shotgun','rifle'][i]);spawnDrop('medkit');
+  rnd=Math.random;
+  Object.assign(world,{rot:null,timeScale:1,time:0,flash:0,shake:0,hitstop:0,xflash:null});
+  menuBg={shot:null,sig:gridSig()};
+}
+// a shot: a straight, slow drift through open air at roughly eye height, with a clear view ahead, the view turning slightly
+function menuShot(){
+  for(let tries=0;tries<400;tries++){
+    const p=V((2+Math.random()*(N-4))*T,(2+Math.random()*(N-4))*T,(2+Math.random()*(N-4))*T);
+    if(tries<300&&rayVoxel(p,V(0,-1,0),170).t>=170)continue; // a floor not far below
+    const my=Math.random()*Math.PI*2,dir=V(Math.sin(my),0,Math.cos(my)),len=230;
+    let ok=true;
+    for(let d=-30;d<=len+30&&ok;d+=12){const q=vadd(p,vscale(dir,d));
+      for(const o of [[0,0,0],[26,0,0],[-26,0,0],[0,26,0],[0,-26,0],[0,0,26],[0,0,-26]])if(solid(tileAt(q.x+o[0],q.y+o[1],q.z+o[2]))){ok=false;break;}}
+    if(!ok)continue;
+    const yaw=my+(Math.random()<.5?1:-1)*(.4+Math.random()*1.1);
+    if(rayVoxel(p,fwdOf(yaw,-.1),700).t<320)continue; // something to look at, not a wall in the face
+    return {p,dir,len,yaw,spin:(Math.random()<.5?-1:1)*(.015+Math.random()*.02),t:0,dur:14};
+  }
+  return {p:V(L/2,L/2,L/2),dir:V(1,0,0),len:0,yaw:0,spin:.03,t:0,dur:14};
+}
+function menuFrame(dt){
+  if(!menuBg||menuBg.sig!==gridSig())menuBgBuild();
+  const M=menuBg;if(!M.shot||M.shot.t>M.shot.dur)M.shot=menuShot();
+  const S=M.shot;S.t+=dt;world.time+=dt;
+  cam.pos=vadd(S.p,vscale(S.dir,S.len*S.t/S.dur));cam.yaw=S.yaw+S.spin*S.t;cam.pitch=-.1+.04*Math.sin(S.t*.35);
+  cam.fwd=fwdOf(cam.yaw,cam.pitch);cam.zoom=1;cam.back=150;
+  render();
+  const fa=clamp(Math.max(1-S.t/1.2,(S.t-(S.dur-1.2))/1.2),0,1);if(fa>0){hctx.fillStyle=`rgba(0,0,0,${fa})`;hctx.fillRect(0,0,W,H);}
+}
 function frame(now){
   // game time keeps pace with real time down to 10 fps (below that it slows rather than take huge leaps)
   hudClock+=clamp((now-last)/1000,0,1);let dt=Math.min(.1,(now-last)/1000);last=now;frameDt=dt;
@@ -4168,7 +4218,7 @@ function frame(now){
     if(world.hitstop<=0)for(const e of chars)updatePose(e,sdt);
   }
   if(gameState!=='menu'&&R.ok){updateCamera();render();}
-  else if(R.ok){const gl=R.gl;gl.viewport(0,0,cv.width,cv.height);gl.clearColor(.05,.03,.1,1);gl.clear(gl.COLOR_BUFFER_BIT);}
+  else if(R.ok)menuFrame(dt);
   requestAnimationFrame(frame);
 }
 if(!initGL(cv)){document.getElementById('nogl').style.display='block';}
@@ -4328,7 +4378,8 @@ function pollPad(dt){
     if(down(9)&&paused&&gameState==='play'){setPaused(false);}
     padPrev=now;return;
   }
-  if(gameState==='over'&&down(0)&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(undefined,{demo:world.demo});}
+  if(endOptsOn()){if(down(0))endChoice('same');else if(down(2))endChoice('random');else if(down(1)||down(9))endChoice('menu');}
+  else if(gameState==='over'&&down(0)&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(undefined,{demo:world.demo});}
   if(gameState!=='play'){padPrev=now;return;}
   if(down(9)){setPaused(true);padPrev=now;return;}
   if(world.demo){if(down(6)||down(15))demoCycle(1);if(down(5)||down(14))demoCycle(-1);padPrev=now;return;}
@@ -4453,6 +4504,21 @@ if(document.body)(function(){const h=document.createElement('div');h.id='sndhint
   h.style.cssText='position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;font:12px monospace;letter-spacing:.08em;color:#29f0ff;background:rgba(5,8,20,.8);border:1px solid #29f0ff55;padding:6px 12px;pointer-events:none;display:none';
   document.body.appendChild(h);
   setInterval(()=>{const blocked=!AC||AC.state!=='running';h.style.display=blocked&&(SETTINGS.fx>0||SETTINGS.music>0)&&!window.VIEWER?'block':'none';},500);})();
+
+// ---------- end of a match on one of the four arenas: play it again, a random arena, or the main menu ----------
+function endOptsOn(){return gameState==='over'&&world.fixedArena&&!world.demo&&!TUT.on&&!TUT.cardOpen;}
+function endChoice(c){
+  if(!endOptsOn())return;
+  if(c==='same')newMatch(world.seedLabel);else if(c==='random')newMatch();
+  else{gameState='menu';showMenu('pgMain');}
+  if(c!=='menu'&&SETTINGS.input!=='gamepad')lockMouse();
+}
+if(document.body&&$('endopts')){
+  $('endSame').onclick=()=>endChoice('same');$('endRnd').onclick=()=>endChoice('random');$('endMenu').onclick=()=>endChoice('menu');
+  let was=false;
+  setInterval(()=>{const on=endOptsOn();if(on!==was){was=on;$('endopts').style.display=on?'flex':'none';
+    if(on&&document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();}},100);
+}
 
 // =====================================================================
 //  TUTORIAL — practice rooms built into the same voxel grid as the arena

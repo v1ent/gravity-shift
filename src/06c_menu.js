@@ -152,7 +152,8 @@ function pollPad(dt){
     if(down(9)&&paused&&gameState==='play'){setPaused(false);}
     padPrev=now;return;
   }
-  if(gameState==='over'&&down(0)&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(undefined,{demo:world.demo});}
+  if(endOptsOn()){if(down(0))endChoice('same');else if(down(2))endChoice('random');else if(down(1)||down(9))endChoice('menu');}
+  else if(gameState==='over'&&down(0)&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(undefined,{demo:world.demo});}
   if(gameState!=='play'){padPrev=now;return;}
   if(down(9)){setPaused(true);padPrev=now;return;}
   if(world.demo){if(down(6)||down(15))demoCycle(1);if(down(5)||down(14))demoCycle(-1);padPrev=now;return;}
@@ -277,3 +278,18 @@ if(document.body)(function(){const h=document.createElement('div');h.id='sndhint
   h.style.cssText='position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;font:12px monospace;letter-spacing:.08em;color:#29f0ff;background:rgba(5,8,20,.8);border:1px solid #29f0ff55;padding:6px 12px;pointer-events:none;display:none';
   document.body.appendChild(h);
   setInterval(()=>{const blocked=!AC||AC.state!=='running';h.style.display=blocked&&(SETTINGS.fx>0||SETTINGS.music>0)&&!window.VIEWER?'block':'none';},500);})();
+
+// ---------- end of a match on one of the four arenas: play it again, a random arena, or the main menu ----------
+function endOptsOn(){return gameState==='over'&&world.fixedArena&&!world.demo&&!TUT.on&&!TUT.cardOpen;}
+function endChoice(c){
+  if(!endOptsOn())return;
+  if(c==='same')newMatch(world.seedLabel);else if(c==='random')newMatch();
+  else{gameState='menu';showMenu('pgMain');}
+  if(c!=='menu'&&SETTINGS.input!=='gamepad')lockMouse();
+}
+if(document.body&&$('endopts')){
+  $('endSame').onclick=()=>endChoice('same');$('endRnd').onclick=()=>endChoice('random');$('endMenu').onclick=()=>endChoice('menu');
+  let was=false;
+  setInterval(()=>{const on=endOptsOn();if(on!==was){was=on;$('endopts').style.display=on?'flex':'none';
+    if(on&&document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();}},100);
+}

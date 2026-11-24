@@ -9,7 +9,7 @@ html,body{margin:0;height:100%;background:#05060c;overflow:hidden;font-family:'C
 canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #hud{pointer-events:none}
 #c{cursor:crosshair}
-#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,10,40,.85),rgba(3,4,10,.96));z-index:2;overflow:auto}
+#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(12,6,26,.72),rgba(3,4,10,.5) 70%,rgba(3,4,10,.8));z-index:2;overflow:auto}
 #ov .box{max-width:660px;padding:28px 34px;border:1px solid #29f0ff55;background:#0a0d1acc;box-shadow:0 0 40px #29f0ff22,inset 0 0 30px #ff3fa411;margin:16px}
 #ov h1{margin:0 0 4px;font-size:40px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff,0 0 30px #ff3fa4}
 #ov h1 span{color:#ff3fa4}
@@ -58,6 +58,9 @@ canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #cardBtns button:hover{background:#18233a;border-color:#29f0ff}
 #cardBtns button.primary{background:#29f0ff;color:#05060c;font-weight:bold;box-shadow:0 0 16px #29f0ff88}
 #cardBtns button.primary:hover{background:#ff3fa4;box-shadow:0 0 16px #ff3fa4}
+#endopts{position:fixed;left:50%;top:calc(50% + 50px);transform:translateX(-50%);display:none;flex-direction:column;gap:8px;z-index:3;min-width:300px}
+#endopts button{font:bold 15px "Courier New",monospace;letter-spacing:2px;color:#e8ecf2;background:#0a0d1acc;border:1px solid #29f0ff55;padding:10px 18px;cursor:pointer;display:flex;justify-content:space-between;gap:20px}
+#endopts button:hover,#endopts button.pf{background:#29f0ff;color:#05060c}#endopts small{opacity:.6}
 #pause{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:3}
 #pause .box{min-width:300px;text-align:center;padding:26px 30px;border:1px solid #29f0ff55;background:#0a0d1aee;box-shadow:0 0 40px #29f0ff22}
 #pause h2{margin:0 0 18px;letter-spacing:6px;color:#29f0ff;text-shadow:0 0 12px #29f0ff}
@@ -101,6 +104,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </head>
 <body>
 <canvas id="c"></canvas><canvas id="hud"></canvas>
+<div id="endopts"><button id="endSame">PLAY THIS ARENA AGAIN <small>ENTER</small></button><button id="endRnd">RANDOM ARENA <small>R</small></button><button id="endMenu">MAIN MENU <small>ESC</small></button></div>
 <div id="pause"><div class="box">
 <h2>PAUSED</h2>
 <button id="resume">RESUME</button>
@@ -114,7 +118,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </div></div>
 <div id="ov"><div class="box menu">
 <h1>GRAVITY<span>SHIFT</span></h1>
-<div class="sub">ARENA 7 // CONSTRUCTION SECTOR // DEATHMATCH</div>
+<div class="sub">DEATHMATCH EVOLVED</div>
 <div class="page" id="pgMain">
 <button class="mi" data-go="pgGame">GAME</button>
 <button class="mi" data-go="pgSet">ARENA SETTINGS</button>
@@ -125,10 +129,10 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </div>
 <div class="page" id="pgGame">
 <div class="ptitle">GAME</div>
-<button class="mi arena" data-seed="0001">ARENA 1 <small>seed 0001</small></button>
-<button class="mi arena" data-seed="0002">ARENA 2 <small>seed 0002</small></button>
-<button class="mi arena" data-seed="0003">ARENA 3 <small>seed 0003</small></button>
-<button class="mi arena" data-seed="0004">ARENA 4 <small>seed 0004</small></button>
+<button class="mi arena" data-seed="57426">ARENA 1</button>
+<button class="mi arena" data-seed="5967">ARENA 2</button>
+<button class="mi arena" data-seed="0003">ARENA 3</button>
+<button class="mi arena" data-seed="0004">ARENA 4</button>
 <div class="rndrow"><button class="mi" id="go">RANDOM ARENA</button><input id="seedRnd" maxlength="40" title="arena seed — type a number or a word"><button class="opt" id="reroll" title="new random seed">⟳</button></div>
 <div class="setsum" id="setsum"></div>
 <button class="mi back" data-go="pgMain">BACK</button>

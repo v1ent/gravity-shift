@@ -89,6 +89,7 @@ const cv=document.getElementById('c'),hud=document.getElementById('hud'),hctx=hu
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k]=true;keys[k]=true;
   if(world.demo&&gameState==='play'&&!paused&&!e.repeat){if(k==='a'||k==='arrowleft')demoCycle(-1);if(k==='d'||k==='arrowright')demoCycle(1);}
   if(k==='escape'&&gameState==='play'&&!TUT.cardOpen){setPaused(!paused);}
+  if(gameState==='over'&&world.fixedArena&&!world.demo&&!TUT.on){if(k==='enter')endChoice('same');else if(k==='r')endChoice('random');else if(k==='escape')endChoice('menu');return;}
   if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(world.demo?(SETTINGS.seed||'').trim()||undefined:undefined,{demo:world.demo});}
   if(gameState==='play'&&Object.values(SETTINGS.kb).includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
@@ -262,7 +263,8 @@ function render(){
   }
   pickupGlows(add);
   drawParticles(alpha,false);drawParticles(add,true);
-  drawHUD();drawFPS(hctx);
+  if(gameState==='menu')hctx.clearRect(0,0,W,H);else drawHUD();
+  drawFPS(hctx);
 }
 // a crosshair per weapon, in that weapon's colour, so you can tell at a glance what's in your hands
 function drawCrosshair(c,p,cx,cy,sp,hm){
@@ -421,7 +423,7 @@ function drawHUD(){
   }
   if(TUT.on)tutHUD(c);
   if(paused){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);}
-  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(!world.demo&&(winner===p||allied(winner,p))?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
+  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(!world.demo&&(winner===p||allied(winner,p))?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on&&!world.fixedArena)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
   if(world.flash>0){c.fillStyle=`rgba(255,63,164,${world.flash*.3})`;c.fillRect(0,0,W,H);}
 }
 
@@ -462,12 +464,16 @@ function seedNumber(label){
   if(/^\d+$/.test(t))return Number(t)%4294967296;
   let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;
 }
+// the menu's four arenas: their seeds stay hidden, and when one ends you choose: same arena / random / main menu
+const FIXED_ARENAS=['57426','5967','0003','0004'];
 function newMatch(seed,opt){
   opt=opt||{};world.demo=!!opt.demo;world.demoT=0;world.fragLimit=world.demo?10:(SETTINGS.frags||FRAG_LIMIT);
   TUT.on=false;drones=[];
   // the seed decides the level, its decoration, furniture and starting spots; gameplay stays random
   const label=seed!==undefined&&seed!==null&&String(seed).trim()!==''?String(seed).trim():String((Math.random()*1e6)|0);
-  world.seedLabel=label;
+  world.seedLabel=label;world.fixedArena=!opt.demo&&FIXED_ARENAS.includes(label);
+  {const sr=document.getElementById('seedrow');if(sr)sr.style.display=world.fixedArena?'none':'';}
+  menuBg=null;
   let s=seedNumber(label);
   rnd=mulberry32(s^0x5bd1e995);
   for(let tries=0;tries<20;tries++){genLevel(s);if(levelOK())break;s=(s*1103515245+12345)>>>0;}
@@ -495,6 +501,46 @@ let last=performance.now(),acc=0;const STEP=1/120;
 // real seconds since the last screen frame, for anything smoothed per frame (so it behaves the same at 30, 60 or 144 Hz)
 let frameDt=1/60,hudClock=0; // hudClock: real seconds, for HUD animations that ignore game speed
 const perFrame=f=>1-Math.pow(1-f,frameDt*60);
+// ---------- the menu's background: one of the four arenas, empty, seen through a slowly drifting camera ----------
+let menuBg=null;
+const gridSig=()=>{let s=0;for(let i=0;i<grid.length;i+=97)s=(s*31+grid[i])|0;return s;};
+function menuBgBuild(){
+  const seed=FIXED_ARENAS[Math.random()*FIXED_ARENAS.length|0];
+  let s=seedNumber(seed);rnd=mulberry32(s^0x5bd1e995);
+  for(let tries=0;tries<20;tries++){genLevel(s);if(levelOK())break;s=(s*1103515245+12345)>>>0;}
+  nav=null;buildNav();buildLevelMesh();genDeco();buildDecoMesh();
+  chars=[];player=makeChar(playerName(),SETTINGS.color,false);player.alive=false;
+  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];spree=null;spiders=[];drones=[];
+  spawnFurniture();for(let i=0;i<3;i++)spawnDrop(['launcher','shotgun','rifle'][i]);spawnDrop('medkit');
+  rnd=Math.random;
+  Object.assign(world,{rot:null,timeScale:1,time:0,flash:0,shake:0,hitstop:0,xflash:null});
+  menuBg={shot:null,sig:gridSig()};
+}
+// a shot: a straight, slow drift through open air at roughly eye height, with a clear view ahead, the view turning slightly
+function menuShot(){
+  for(let tries=0;tries<400;tries++){
+    const p=V((2+Math.random()*(N-4))*T,(2+Math.random()*(N-4))*T,(2+Math.random()*(N-4))*T);
+    if(tries<300&&rayVoxel(p,V(0,-1,0),170).t>=170)continue; // a floor not far below
+    const my=Math.random()*Math.PI*2,dir=V(Math.sin(my),0,Math.cos(my)),len=230;
+    let ok=true;
+    for(let d=-30;d<=len+30&&ok;d+=12){const q=vadd(p,vscale(dir,d));
+      for(const o of [[0,0,0],[26,0,0],[-26,0,0],[0,26,0],[0,-26,0],[0,0,26],[0,0,-26]])if(solid(tileAt(q.x+o[0],q.y+o[1],q.z+o[2]))){ok=false;break;}}
+    if(!ok)continue;
+    const yaw=my+(Math.random()<.5?1:-1)*(.4+Math.random()*1.1);
+    if(rayVoxel(p,fwdOf(yaw,-.1),700).t<320)continue; // something to look at, not a wall in the face
+    return {p,dir,len,yaw,spin:(Math.random()<.5?-1:1)*(.015+Math.random()*.02),t:0,dur:14};
+  }
+  return {p:V(L/2,L/2,L/2),dir:V(1,0,0),len:0,yaw:0,spin:.03,t:0,dur:14};
+}
+function menuFrame(dt){
+  if(!menuBg||menuBg.sig!==gridSig())menuBgBuild();
+  const M=menuBg;if(!M.shot||M.shot.t>M.shot.dur)M.shot=menuShot();
+  const S=M.shot;S.t+=dt;world.time+=dt;
+  cam.pos=vadd(S.p,vscale(S.dir,S.len*S.t/S.dur));cam.yaw=S.yaw+S.spin*S.t;cam.pitch=-.1+.04*Math.sin(S.t*.35);
+  cam.fwd=fwdOf(cam.yaw,cam.pitch);cam.zoom=1;cam.back=150;
+  render();
+  const fa=clamp(Math.max(1-S.t/1.2,(S.t-(S.dur-1.2))/1.2),0,1);if(fa>0){hctx.fillStyle=`rgba(0,0,0,${fa})`;hctx.fillRect(0,0,W,H);}
+}
 function frame(now){
   // game time keeps pace with real time down to 10 fps (below that it slows rather than take huge leaps)
   hudClock+=clamp((now-last)/1000,0,1);let dt=Math.min(.1,(now-last)/1000);last=now;frameDt=dt;
@@ -512,7 +558,7 @@ function frame(now){
     if(world.hitstop<=0)for(const e of chars)updatePose(e,sdt);
   }
   if(gameState!=='menu'&&R.ok){updateCamera();render();}
-  else if(R.ok){const gl=R.gl;gl.viewport(0,0,cv.width,cv.height);gl.clearColor(.05,.03,.1,1);gl.clear(gl.COLOR_BUFFER_BIT);}
+  else if(R.ok)menuFrame(dt);
   requestAnimationFrame(frame);
 }
 if(!initGL(cv)){document.getElementById('nogl').style.display='block';}
