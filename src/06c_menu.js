@@ -76,7 +76,7 @@ const MUS_ROOTS=[45,41,48,43],MUS_ARP=[[0,3,7,12],[0,4,7,12],[0,4,7,12],[0,4,7,1
 const mtof=n=>440*Math.pow(2,(n-69)/12);
 function musicStart(){
   if(!AC||musicOn)return;musicOn=true;
-  if(!musicG){musicG=AC.createGain();musicG.connect(AC.destination);}
+  if(!musicG){musicG=AC.createGain();musicG.connect(AC.bus||AC.destination);}
   applyVolumes();musicNext=AC.currentTime+.1;musicStepI=0;
   musicTimer=setInterval(musicSchedule,40);
 }
@@ -293,3 +293,40 @@ if(document.body&&$('endopts')){
   setInterval(()=>{const on=endOptsOn();if(on!==was){was=on;$('endopts').style.display=on?'flex':'none';
     if(on&&document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();}},100);
 }
+
+// ---------- audio watchdog ----------
+// On some Windows set-ups the browser's connection to the sound device silently dies (moving the system volume slider
+// brings it back). Twice a second: is the audio clock still moving, and is the output sane (no NaN; some signal while
+// the music should be playing)? If not: pause and resume the audio (makes the browser reopen the device); if that
+// doesn't help, rebuild the whole audio graph (the decoded recordings are kept and reused).
+const AUDLOG=[];let audW={t:0,ct:0,bad:0,quiet:0,lastFix:-99,tries:0};
+function audioRebuild(why){
+  AUDLOG.push((performance.now()/1000).toFixed(1)+' rebuild: '+why);
+  const old=AC;try{if(musicTimer)clearInterval(musicTimer);}catch(e){}
+  musicTimer=null;musicOn=false;musTrack=null;musicG=null;AC=null;
+  try{old&&old.close();}catch(e){}
+  initAudio();if(AC){if(AC.state!=='running')AC.resume().catch(()=>{});applyVolumes();musicStart();}
+}
+function audioWatch(){
+  if(!AC||document.hidden)return;
+  const now=performance.now()/1000,ct=AC.currentTime,rt=now-audW.t;
+  if(AC.state==='interrupted'||(AC.state==='suspended'&&navigator.userActivation&&navigator.userActivation.hasBeenActive)){AC.resume().catch(()=>{});}
+  let problem='';
+  const active=navigator.userActivation?navigator.userActivation.hasBeenActive:true;
+  if(AC.state!=='running'&&AC.state!=='closed'&&active)problem='audio stuck '+AC.state;
+  if(AC.state==='running'&&audW.t&&rt>.4&&ct-audW.ct<rt*.25)problem='audio clock stalled';
+  if(AC.an&&AC.state==='running'){
+    const buf=new Float32Array(AC.an.fftSize);AC.an.getFloatTimeDomainData(buf);let e=0;
+    for(let i=0;i<buf.length;i++){const v=buf[i];if(!isFinite(v)){problem='output is NaN';break;}e+=v*v;}
+    const expect=musTrack&&SETTINGS.music>0&&musicG&&musicG.gain.value>.01;
+    audW.quiet=expect&&e<1e-9?audW.quiet+rt:0;if(audW.quiet>2.5)problem='silent while music should play';
+  }
+  audW.t=now;audW.ct=ct;
+  if(!problem){audW.bad=0;audW.tries=0;return;}
+  if(++audW.bad<2)return; // twice in a row
+  audW.bad=0;audW.quiet=0;
+  if(audW.tries===0&&problem!=='output is NaN'){audW.tries=1;AUDLOG.push(now.toFixed(1)+' '+problem+': suspend/resume');
+    AC.suspend().then(()=>AC.resume()).catch(()=>{});return;}
+  if(now-audW.lastFix<4)return;audW.lastFix=now;audW.tries=0;audioRebuild(problem);
+}
+setInterval(audioWatch,500);

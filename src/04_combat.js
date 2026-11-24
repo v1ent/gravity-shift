@@ -57,7 +57,9 @@ function updateParts(dt){
 
 // ---------- audio ----------
 let AC=null,noiseBuf=null,master=null;
-function initAudio(){try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=.5*SETTINGS.fx/100;master.connect(AC.destination);
+function initAudio(){try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=.5*SETTINGS.fx/100;
+  // everything (effects and music) goes through one bus with an analyser on it, so the audio watchdog can hear the output
+  AC.bus=AC.createGain();AC.an=AC.createAnalyser();AC.an.fftSize=1024;AC.bus.connect(AC.an);AC.an.connect(AC.destination);master.connect(AC.bus);
   noiseBuf=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;loadSamples();}catch(e){AC=null;}}
 // ---------- recorded sounds (src/04e_sound_data.js): decoded once the audio context exists ----------
 // files named name_00, name_01… form a group that is picked from at random
