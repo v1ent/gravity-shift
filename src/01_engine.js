@@ -51,6 +51,8 @@ precision mediump float;
 varying vec3 vNor;varying vec3 vCol;varying vec4 vUV;varying float vEm;varying vec3 vW;varying float vD;
 uniform vec4 uLP;uniform vec3 uLC;
 uniform vec3 uTint;uniform float uUseTint;uniform vec3 uEmis;uniform float uAlpha;uniform float uTime;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uEdge;uniform vec3 uEdgeCol;
+uniform vec3 uPanel; // x: grid offline (static) 0..1, y: hit glitch 0..1, z: grid health 0..1
+float hsh(vec2 p){p=fract(mod(p,289.0)*vec2(0.1031,0.1030));p+=dot(p,p.yx+33.33);return fract((p.x+p.y)*p.x);}
 void main(){
   vec3 base=mix(vCol,uTint,uUseTint);
   vec3 n=normalize(vNor);
@@ -72,9 +74,41 @@ void main(){
   if(vEm>5.5){ec*=0.35;}
   if(vEm>1.5&&vEm<2.5){ec=vec3(1.0,0.75,0.25);}
   col+=ec*(edge*0.9+sm*0.35);
-  if(vEm>0.5&&vEm<1.5){ // live gravity panel
-    float p=0.55+0.45*sin(uTime*5.0);float ch=step(0.5,fract(v*1.0-uTime*1.2+abs(fract(u)-0.5)));
-    col=mix(vec3(0.35,0.02,0.22),vec3(1.0,0.25,0.65),0.35+0.4*ch*p)+vec3(1.0,0.3,0.7)*edge*1.2;
+  if(vEm>0.5&&vEm<1.5){ // live gravity panel: a screen
+    float t=uTime,gl=uPanel.y;
+    // hit glitch: rows slide sideways
+    float uu=u+(hsh(vec2(floor(v*14.0),floor(t*30.0)))-0.5)*gl*0.6;
+    vec2 q=vec2(uu,v),cl=fract(q)-0.5;
+    vec3 pc=vec3(1.0,0.25,0.65);
+    vec3 c2=mix(vec3(0.13,0.0,0.08),vec3(0.36,0.02,0.22),clamp(v/max(h,1.0),0.0,1.0));
+    // fine grid
+    vec2 f4=abs(fract(q*4.0)-0.5);c2+=pc*max(smoothstep(0.44,0.5,f4.x),smoothstep(0.44,0.5,f4.y))*0.1;
+    // chevrons climbing: soft fill plus a bright outline
+    float cv=fract(v*1.0-t*1.2+abs(fract(uu)-0.5));
+    c2+=pc*step(0.5,cv)*0.16*(0.6+0.4*sin(t*5.0));c2+=pc*(1.0-smoothstep(0.0,0.05,abs(cv-0.5)))*0.55;
+    // a rotating dashed ring and a pulsing core on every block
+    float r=length(cl),a=atan(cl.y,cl.x);
+    float ring=(1.0-smoothstep(0.012,0.035,abs(r-0.3)))*step(0.38,fract(a/6.2832*10.0+t*0.35));
+    float ring2=(1.0-smoothstep(0.006,0.02,abs(r-0.21)))*step(0.6,fract(-a/6.2832*4.0+t*0.6));
+    float core=(1.0-smoothstep(0.03,0.07,r))*(0.6+0.4*sin(t*6.0+floor(q.x)*1.7+floor(q.y)*2.3));
+    c2+=vec3(1.0,0.55,0.85)*(ring*0.9+ring2*0.6+core*0.9);
+    // a light sweep, scanlines, sparkle
+    c2+=pc*exp(-pow((fract(v/max(h,1.0)*0.5-t*0.22)-0.5)*7.0,2.0))*0.35;
+    c2*=0.84+0.16*sin(gl_FragCoord.y*1.7);
+    c2+=vec3(1.0,0.7,0.9)*step(0.985,hsh(floor(q*24.0)+floor(t*7.0)))*0.5;
+    // weakened grid: blocks drop out and flicker
+    float hp=uPanel.z;c2*=1.0-step(hsh(floor(q)+floor(t*9.0)),(1.0-hp)*0.45)*0.75;
+    // frame and corner brackets
+    float cb=(1.0-smoothstep(0.0,0.07,e))*step(min(u,w-u),0.35)*step(min(v,h-v),0.35);
+    c2+=pc*edge*1.1+vec3(1.0,0.8,0.95)*cb*1.2;
+    c2=mix(c2,c2*vec3(1.3,0.6,1.4),gl*0.5);
+    col=c2;
+    if(uPanel.x>0.0){ // offline: TV static with a rolling bar
+      float n=hsh(floor(gl_FragCoord.xy*0.5)+vec2(floor(t*24.0)*7.0,floor(t*24.0)*13.0));
+      float roll=smoothstep(0.0,0.1,abs(fract(v*0.3-t*0.5)-0.5));
+      vec3 st=vec3(n)*vec3(0.72,0.68,0.8)*(0.3+0.7*roll)*0.7+vec3(0.35,0.03,0.18)*0.15+vec3(0.6,0.15,0.35)*edge*0.3;
+      col=mix(c2,st,uPanel.x);
+    }
   }
   if(vEm>2.5&&vEm<3.5){ // dormant gravity panel
     float ch=step(0.5,fract(v+abs(fract(u)-0.5)));col=mix(col,vec3(0.22,0.07,0.2),0.6)+vec3(0.5,0.1,0.35)*ch*0.12;
@@ -147,6 +181,7 @@ function beginMain(){
 function drawLevelMesh(){
   if(!R.levelN)return;const gl=R.gl,L=R.main.loc;
   bindMain(R.level);gl.uniformMatrix4fv(L.uModel,false,M4.ident());gl.uniform1f(L.uUseTint,0);
+  if(L.uPanel){const W2=world,off=W2.panelOff>0?(W2.panelOff>PANEL_OFF-.8?(Math.random()<.5?1:.35):Math.min(1,W2.panelOff/.5)):0;gl.uniform3f(L.uPanel,off,W2.panelGlitch||0,W2.panelHP===undefined?1:W2.panelHP/PANEL_HP);}
   gl.uniform1f(L.uEdge,.05);gl.uniform3f(L.uEdgeCol,.16,.85,1.0);
   gl.drawArrays(gl.TRIANGLES,0,R.levelN);
   if(R.decoN){bindMain(R.deco);gl.uniform1f(L.uEdge,.012);gl.drawArrays(gl.TRIANGLES,0,R.decoN);}

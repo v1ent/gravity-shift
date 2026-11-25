@@ -189,7 +189,7 @@ function step(dt,first){
     if(world.hitstop<=0&&world.pendingRot){const p=world.pendingRot;world.pendingRot=null;if(p.kicker.alive)doRotate(p.key,p.kicker,p.stop);}
     return;
   }
-  world.time+=dt;
+  world.time+=dt;panelTick(dt);
   if(world.rotCD>0&&!world.rot)world.rotCD-=dt;
   world.medT-=dt;
   if(world.medT<=0){world.medT=13+rnd()*9;if(props.filter(b=>b.kind==='medkit'&&!b.dead).length<3)spawnDrop('medkit');}
@@ -228,7 +228,7 @@ function render(){
    FR.light=k>0?{p:f.p,r:f.r,c:f.col.map(v=>v*k*1.35)}:null;}
   FR.vp=M4.mul(proj,M4.lookAt(cam.pos,vadd(cam.pos,cam.fwd),V(0,1,0)));
   FR.fix=rotFix();FR.time=world.time;
-  beginMain();drawLevelMesh();
+  beginMain();drawLevelMesh();drawDecals();beginMain();
   cubeBegin();
   for(const b of props)drawProp(b);
   for(const s of spiders)drawSpider(s);
@@ -308,7 +308,7 @@ const easeIn=u=>{u=clamp(u,0,1);return u*u*u;};
 function segsW(c,segs){return segs.reduce((a,s)=>a+c.measureText(s[0]).width,0);}
 function drawSegs(c,segs,x,y,glow){for(const [t,col] of segs){c.fillStyle=col;c.shadowColor=col;c.shadowBlur=glow;c.fillText(t,x,y);x+=c.measureText(t).width;}}
 function drawSpree(c){
-  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y0=94,F=32,GAP=10,WH='#f2f4f8',GOLD='#ffd23a';
+  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y0=world.panelOff>0?118:94,F=32,GAP=10,WH='#f2f4f8',GOLD='#ffd23a';
   c.save();c.textBaseline='middle';c.textAlign='left';
   const font=sz=>c.font=`bold ${sz}px "Courier New",monospace`;
   const E=S.end?T-S.end.t:-1;
@@ -368,8 +368,16 @@ function drawHUD(){
   // gravity status
   c.textAlign='center';if(!TH||TH.gravity){
   const ready=world.rotCD<=0&&!world.rot;
+  if(world.panelOff>0){ // the grid is down: a big countdown
+    const s=Math.ceil(world.panelOff),last=world.panelOff<5.5,pulse=last?.6+.4*Math.abs(Math.sin(world.panelOff*Math.PI)):1;
+    c.font='bold 13px "Courier New",monospace';c.fillStyle='#c0a8b8';c.fillText('▚ GRAVITY GRID OFFLINE ▞',W/2,20);
+    c.save();c.font='bold 46px "Courier New",monospace';c.textBaseline='middle';c.globalAlpha=pulse;c.fillStyle=last?'#ff3fa4':'#e8ecf2';c.shadowColor=c.fillStyle;c.shadowBlur=last?18:8;
+    const jx=(Math.random()-.5)*(world.panelOff>PANEL_OFF-1?8:1.2);c.fillText(String(s).padStart(2,'0'),W/2+jx,52);c.restore();
+  }else{
   c.fillStyle=ready?'#ff3fa4':'#7a5068';c.fillText(ready?'◆ GRAVITY PANELS ARMED ◆':`GRAVITY PANELS RECHARGING ${world.rotCD.toFixed(1)}s`,W/2,26);
   c.font='11px "Courier New",monospace';c.fillStyle='#778';c.fillText(`ARENA TURNS: ${world.turns}`,W/2,42);
+  if(world.panelHP<PANEL_HP){const n=Math.ceil(world.panelHP);c.fillStyle=n<=2?'#ff3f5a':'#ff8fc8';c.fillText('GRID '+'▰'.repeat(n)+'▱'.repeat(PANEL_HP-n),W/2,56);}
+  }
   if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText(`[${bindName('kick')}] KICK THE PANEL — TURN THE ARENA`,W/2,H/2+70);c.globalAlpha=1;}}
   // scoreboard + feed
   c.textAlign='right';c.font='bold 13px "Courier New",monospace';
@@ -490,7 +498,7 @@ function newMatch(seed,opt){
   spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');for(let i=4+(rnd()<.5?1:0);i>0;i--)spawnDrop('launcher');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;
-  Object.assign(world,{rotCD:2,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],arQ:[],lnQ:[],noises:[]});
+  Object.assign(world,{rotCD:2,rot:null,timeScale:1,lastKicker:null,lastKickT:-99,time:0,flash:0,shake:0,turns:0,hitstop:0,pendingRot:null,medT:12,barrelQ:[],sgQ:[],arQ:[],lnQ:[],noises:[],panelHP:PANEL_HP,panelOff:0,panelGlitch:0,panelHitT:-99});
   cam.yaw=player.yaw;cam.pitch=-.12;
   gameState='play';winner=null;paused=false;{const pm=document.getElementById('pause');if(pm)pm.style.display='none';}
   const so=document.getElementById('seedOut');if(so)so.value=world.seedLabel;
@@ -513,7 +521,7 @@ function menuBgBuild(){
   props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];spree=null;spiders=[];drones=[];
   spawnFurniture();for(let i=0;i<3;i++)spawnDrop(['launcher','shotgun','rifle'][i]);spawnDrop('medkit');
   rnd=Math.random;
-  Object.assign(world,{rot:null,timeScale:1,time:0,flash:0,shake:0,hitstop:0,xflash:null});
+  Object.assign(world,{rot:null,timeScale:1,time:0,flash:0,shake:0,hitstop:0,xflash:null,panelHP:PANEL_HP,panelOff:0,panelGlitch:0});
   menuBg={shot:null,sig:gridSig()};
 }
 // a shot: a straight, slow drift through open air at roughly eye height, with a clear view ahead, the view turning slightly

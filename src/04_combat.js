@@ -114,6 +114,9 @@ function sfx(kind,at){
   if(kind==='shot'){env(.35,.14);noise(.14,2000,.8);osc('square',200,55,.09);}
   else if(kind==='rocket'){g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.4*vol,t+.05);g.gain.exponentialRampToValueAtTime(.001,t+.7);noise(.7,700,.6);osc('sawtooth',90,180,.6);}
   else if(kind==='hit'){env(.25,.1);osc('square',900,200,.1);}
+  else if(kind==='pzap'){env(.3,.18);osc('sawtooth',1400,300,.16);noise(.12,3500,2);}             // a shot into a gravity panel
+  else if(kind==='pdown'){g.gain.setValueAtTime(.55,t);g.gain.exponentialRampToValueAtTime(.001,t+2.2);osc('sawtooth',420,28,2.1);osc('square',210,18,1.6);noise(1.4,900,.7);} // the grid dies
+  else if(kind==='pup'){g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.4,t+.6);g.gain.exponentialRampToValueAtTime(.001,t+1.6);osc('sawtooth',40,520,1.5);osc('sine',80,1040,1.5);} // back online
   else if(kind==='kick'){env(.8,.5);osc('sine',140,35,.5);noise(.2,400,1,'lowpass');}
   else if(kind==='rotate'){g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.6,t+.1);g.gain.exponentialRampToValueAtTime(.001,t+1.3);osc('sawtooth',55,26,1.3);noise(1.3,180,1,'lowpass');}
   else if(kind==='land'){env(.25,.12);noise(.12,300,1,'lowpass');}
@@ -244,7 +247,7 @@ function updateBullets(dt){
     if(!b.flew&&player&&player.alive&&b.owner!==player){const h=headPos(player);if(Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z)<90){b.flew=true;sfx('flyby',b);}}
     for(let s=0;s<steps&&!dead;s++){
       b.x+=sx;b.y+=sy;b.z+=sz;
-      if(solid(tileAt(b.x,b.y,b.z))){dead=true;sparkAt(b.x-sx,b.y-sy,b.z-sz,b.col);break;}
+      if(solid(tileAt(b.x,b.y,b.z))){dead=true;sparkAt(b.x-sx,b.y-sy,b.z-sz,b.col);panelShot(b.x,b.y,b.z,1,b);break;}
       for(const e of chars){
         if(e===b.owner||!e.alive)continue;
         if(Math.abs(b.x-e.x)<e.w/2+2&&Math.abs(b.z-e.z)<e.w/2+2&&b.y>e.y&&b.y<e.y+e.h){
@@ -268,6 +271,28 @@ function updateBullets(dt){
     }
     if(dead)bullets.splice(n,1);
   }
+}
+// ---------- shooting the gravity panels ----------
+// The live panels share one grid: every bullet into one costs it 1, a rocket 4. It mends slowly when nobody shoots it;
+// at zero every panel in the arena goes offline (static) for PANEL_OFF seconds and nobody can turn the arena.
+const PANEL_HP=8,PANEL_OFF=59;
+function panelShot(x,y,z,n,src){
+  const i=Math.floor(x/T),j=Math.floor(y/T),k=Math.floor(z/T);if(!isLiveK(i,j,k)||world.panelOff>0||world.rot)return;
+  world.panelHP=(world.panelHP===undefined?PANEL_HP:world.panelHP)-n;world.panelHitT=world.time;world.panelGlitch=1;
+  for(let q=0;q<6;q++)addPart(x,y,z,(rnd()-.5)*380,rnd()*260,(rnd()-.5)*380,.25+rnd()*.3,[1,.3,.75],2.5,'spark');
+  sfx('pzap',src);
+  if(world.panelHP<=0){
+    world.panelOff=PANEL_OFF;world.panelHP=PANEL_HP;world.rotCD=Math.max(world.rotCD,PANEL_OFF);world.panelBy=src&&src.owner;
+    sfx('pdown');world.flash=Math.max(world.flash,.35);
+    const who=src&&src.owner?src.owner.name:'SOMEONE';feed.unshift({t:5,segs:[[who,'#fff'],[' SHOT THE GRAVITY GRID OFFLINE','#fff']]});
+  }
+}
+// every step: the outage counts down (and holds the turn cooldown with it); the grid mends after 5 s without hits
+function panelTick(dt){
+  world.panelGlitch=Math.max(0,(world.panelGlitch||0)-dt*3);
+  if(world.panelOff>0){world.panelOff-=dt;world.rotCD=Math.max(world.rotCD,world.panelOff);
+    if(world.panelOff<=0){world.panelOff=0;world.rotCD=Math.min(world.rotCD,.5);sfx('pup');feed.unshift({t:4,segs:[['GRAVITY GRID BACK ONLINE','#fff']]});}}
+  else if(world.panelHP<PANEL_HP&&world.time-(world.panelHitT||-99)>5)world.panelHP=Math.min(PANEL_HP,world.panelHP+dt/2.5);
 }
 function sparkAt(x,y,z,col){for(let k=0;k<5;k++)addPart(x,y,z,(rnd()-.5)*300,rnd()*220,(rnd()-.5)*300,.3,col,3,'spark');}
 
@@ -331,7 +356,7 @@ function updateRockets(dt){
     const dist=r.sp*dt,steps=Math.max(1,Math.ceil(dist/5));let boom=r.life<=0;
     for(let s=0;s<steps&&!boom;s++){
       r.x+=r.d.x*dist/steps;r.y+=r.d.y*dist/steps;r.z+=r.d.z*dist/steps;
-      if(solid(tileAt(r.x,r.y,r.z))){r.x-=r.d.x*4;r.y-=r.d.y*4;r.z-=r.d.z*4;boom=true;break;}
+      if(solid(tileAt(r.x,r.y,r.z))){panelShot(r.x,r.y,r.z,4,r);r.x-=r.d.x*4;r.y-=r.d.y*4;r.z-=r.d.z*4;boom=true;break;}
       for(const e of chars){if(e===r.owner||!e.alive)continue;
         if(Math.abs(r.x-e.x)<e.w/2+4&&Math.abs(r.z-e.z)<e.w/2+4&&r.y>e.y-2&&r.y<e.y+e.h+2){boom=true;r.hit=e;break;}}
       if(boom)break;

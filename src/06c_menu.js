@@ -329,4 +329,4 @@ function audioWatch(){
     AC.suspend().then(()=>AC.resume()).catch(()=>{});return;}
   if(now-audW.lastFix<4)return;audW.lastFix=now;audW.tries=0;audioRebuild(problem);
 }
-setInterval(audioWatch,500);
+if(typeof document!=="undefined"&&document.body&&!window.__headless)setInterval(audioWatch,500);

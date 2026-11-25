@@ -365,7 +365,7 @@ function startTutorial(id){
   TUT.on=true;TUT.id=id;TUT.t=0;TUT.toast=[];TUT.complete=false;TUT.cp=null;TUT.cardDelay=-1;TUT.prevState='normal';TUT.overSeen=false;TUT.shots=0;
   for(const k of ['v1','v2','p1','p2','slid','result','stage','st0','said'])delete TUT[k];
   drones=[];rnd=Math.random;
-  grid.fill(1);stairO.fill(0);deco=[];
+  grid.fill(1);stairO.fill(0);deco=[];decals=[];
   const cfg=TUT_BUILD[id]();TUT.cfg=cfg;
   for(const o of cfg.obj){o.done=false;if('n' in o)o.n=0;}
   nav=null;buildNav();buildLevelMesh();buildDecoMesh();
@@ -400,7 +400,7 @@ function tutSnap(pos,yaw){
 function tutRespawn(){
   const p=player,cp=TUT.cp;tsfx('fail');
   if(TUT.cfg.snap&&TUT.snap){
-    grid=TUT.snap.grid.slice();deco=TUT.snap.deco.map(d=>({c:V(d.c.x,d.c.y,d.c.z),s:d.s.slice(),col:d.col,em:d.em}));
+    grid=TUT.snap.grid.slice();deco=TUT.snap.deco.map(d=>({c:V(d.c.x,d.c.y,d.c.z),s:d.s.slice(),col:d.col,em:d.em}));decals=[];
     buildLevelMesh();buildDecoMesh();buildNav();world.turns=TUT.snap.turns;world.rot=null;world.rotCD=0;world.pendingRot=null;world.hitstop=0;
   }
   Object.assign(p,{x:cp.x,y:cp.y,z:cp.z,vx:0,vy:0,vz:0,state:'normal',h:STAND_H,crouch:false,knocked:false,stun:0,grounded:true,runJump:false,rocketJump:false,ba:0,bav:0,fallStart:cp.y,visX:0,visY:0,visZ:0});
