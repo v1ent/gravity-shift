@@ -148,6 +148,17 @@ function playerInput(first){
 const dblTap={};
 
 // ---------- camera ----------
+// keep the camera at least r away from every wall, floor and ceiling: the near clipping plane is only 2 units
+// from the eye, so a camera that skims a surface at a shallow angle would otherwise see through it
+function camPushOut(p,r){
+  const q=[p.x,p.y,p.z];
+  for(let pass=0;pass<2;pass++)for(let a=0;a<3;a++)for(const s of [1,-1]){
+    const t=q.slice();t[a]+=s*r;if(!solid(tileAt(t[0],t[1],t[2])))continue;
+    const wall=s>0?Math.floor(t[a]/T)*T:(Math.floor(t[a]/T)+1)*T;  // the face of the block we'd poke into
+    q[a]=wall-s*r;
+  }
+  return V(q[0],q[1],q[2]);
+}
 function updateCamera(){
   // demo: the camera looks where the followed bot looks
   if(world.demo&&player){cam.yaw+=angDiff(player.yaw,cam.yaw)*perFrame(.12);cam.pitch+=(clamp((player.pitch||0)*.6-.12,-.8,.6)-cam.pitch)*perFrame(.08);}
@@ -162,7 +173,7 @@ function updateCamera(){
   const r=rayVoxel(pivot,vscale(fw,-1),back+8);if(r.t<back+8)back=Math.max(8,r.t-8);
   // keep the shoulder pivot itself out of walls
   let pv=pivot;if(solid(tileAt(pv.x,pv.y,pv.z)))pv=head;
-  let pos=vadd(pv,vscale(fw,-back));
+  let pos=camPushOut(vadd(pv,vscale(fw,-back)),7);
   if(world.shake>0)pos=vadd(pos,V((rnd()-.5)*world.shake*.6,(rnd()-.5)*world.shake*.6,(rnd()-.5)*world.shake*.6));
   cam.pos=pos;cam.fwd=fw;cam.back=back;
   // aim point: what's under the crosshair (in world coordinates, also while the arena turns)
@@ -205,7 +216,7 @@ function step(dt,first){
   for(const e of chars)charProps(e);
   if(props.some(b=>b.dead))props=props.filter(b=>!b.dead);
   updateSpiders(dt);
-  updateBullets(dt);updateRockets(dt);updateDolls(dt);updateCorpses(dt);updateGibs(dt);updateFires(dt);updateParts(dt);
+  updateBullets(dt);updateRockets(dt);updateHardFX(dt);updateDolls(dt);updateCorpses(dt);updateGibs(dt);updateFires(dt);updateParts(dt);
   if(TUT.on)tutStep(dt);
 }
 
@@ -262,7 +273,7 @@ function render(){
     else alpha.push({x:p.x,y:p.y,z:p.z,r:p.col[0],g:p.col[1],b:p.col[2],a:a*(p.type==='smoke'?.55:.45),s:p.size*(1.6-a*.6)});
   }
   pickupGlows(add);
-  drawParticles(alpha,false);drawParticles(add,true);
+  drawParticles(alpha,false);drawParticles(add,true);drawHardFX();
   if(gameState==='menu')hctx.clearRect(0,0,W,H);else drawHUD();
   drawFPS(hctx);
 }
@@ -441,7 +452,7 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(['solid','lines','shiny'].includes(s.charStyle))SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(['solid','lines','shiny','ink','inkShiny'].includes(s.charStyle))SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
   if(s.kb)for(const a in KB_DEF)if(typeof s.kb[a]==='string'&&s.kb[a])SETTINGS.kb[a]=s.kb[a];
   if(s.gp)for(const a in GP_DEF)if(Number.isInteger(s.gp[a])&&s.gp[a]>=-1&&s.gp[a]<20&&s.gp[a]!==9)SETTINGS.gp[a]=s.gp[a];}}catch(e){}
 function getSettings(){return SETTINGS;}
@@ -476,7 +487,7 @@ function newMatch(seed,opt){
   TUT.on=false;drones=[];
   // the seed decides the level, its decoration, furniture and starting spots; gameplay stays random
   const label=seed!==undefined&&seed!==null&&String(seed).trim()!==''?String(seed).trim():String((Math.random()*1e6)|0);
-  world.seedLabel=label;world.fixedArena=!opt.demo&&FIXED_ARENAS.includes(label);
+  world.seedLabel=label;if(typeof audioReopen==='function'&&!opt.demo)audioReopen('new match');world.fixedArena=!opt.demo&&FIXED_ARENAS.includes(label);
   {const sr=document.getElementById('seedrow');if(sr)sr.style.display=world.fixedArena?'none':'';}
   menuBg=null;
   let s=seedNumber(label);
@@ -491,7 +502,7 @@ function newMatch(seed,opt){
   chars=[makeChar(playerName(),SETTINGS.color,false)];
   for(let i=0;i<cfg.bots;i++){const b=makeChar(roster[i][0],roster[i][1],true);b.skill=cfg.skill;chars.push(b);}fixColorClash();}
   player=chars[0];
-  props=[];bullets=[];rockets=[];parts=[];dolls=[];corpses=[];gibs=[];feed=[];spree=null;for(const q of chars||[])q.streak=0;
+  props=[];bullets=[];rockets=[];parts=[];hardFX=[];dolls=[];corpses=[];gibs=[];feed=[];spree=null;for(const q of chars||[])q.streak=0;
   spawnFurniture();spawnDrop('medkit');spawnDrop('medkit');for(let i=4+(rnd()<.5?1:0);i>0;i--)spawnDrop('launcher');spawnDrop('shotgun');spawnDrop('shotgun');spawnDrop('rifle');
   for(const e of chars){e.alive=false;e.respawn=0;spawn(e);}
   rnd=Math.random;spiders=[];world.spiderT=14;
@@ -541,7 +552,7 @@ function menuFrame(dt){
   if(!menuBg||menuBg.sig!==gridSig())menuBgBuild();
   const M=menuBg;if(!M.shot||M.shot.t>M.shot.dur)M.shot=menuShot();
   const S=M.shot;S.t+=dt;world.time+=dt;
-  cam.pos=vadd(S.p,vscale(S.dir,S.len*S.t/S.dur));cam.yaw=S.yaw+S.spin*S.t;cam.pitch=-.1+.04*Math.sin(S.t*.35);
+  cam.pos=vadd(S.p,vscale(S.dir,S.len*S.t/S.dur));cam.yaw=S.yaw+S.spin*S.t;cam.pitch=S.pitch!==undefined?S.pitch:-.1+.04*Math.sin(S.t*.35);
   cam.fwd=fwdOf(cam.yaw,cam.pitch);cam.zoom=1;cam.back=150;
   render();
   const fa=clamp(Math.max(1-S.t/1.2,(S.t-(S.dur-1.2))/1.2),0,1);if(fa>0){hctx.fillStyle=`rgba(0,0,0,${fa})`;hctx.fillRect(0,0,W,H);}

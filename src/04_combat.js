@@ -316,23 +316,13 @@ function fireRocket(e){
 // a dust ring along the surface, debris (barrel shards that burn / chunks of the wall), a scorch mark, and fire left burning after a barrel
 function explosionFX(c,RAD,o){
   const vc=offSurface(c,26),n=vlen(vsub(vc,c))>1?vnorm(vsub(vc,c)):V(0,1,0),barrel=!!o.barrel;
-  world.xflash={p:vc,r:RAD*3.4,col:barrel?[1,.55,.2]:[1,.66,.32],t:world.time,dur:barrel?.7:.5};
+  world.xflash={p:vc,r:RAD*3.2,col:barrel?[1,.55,.2]:[1,.7,.35],t:world.time,dur:barrel?.4:.28};
   const free=p=>solid(tileAt(p.x,p.y,p.z))?vc:p,sph=k=>{const a=rnd()*Math.PI*2,b=Math.asin(rnd()*2-1);return V(Math.cos(a)*Math.cos(b)*k,Math.sin(b)*k,Math.sin(a)*Math.cos(b)*k);};
-  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.12,max:.12,col:[1,1,.9],size:RAD*1.1,type:'glow'});
-  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.3,max:.3,col:[1,.7,.3],size:RAD*1.9,type:'glow'});
-  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.55,max:.55,col:[.7,.2,.05],size:RAD*1.4,type:'glow'});
-  addPart(vc.x,vc.y,vc.z,0,0,0,.45,[1,.55,.15],RAD/6,'ring');
-  // fireball puffs pushed out of the centre
-  for(let i=0;i<18;i++){const v=sph(90+rnd()*220),p=free(vadd(vc,vscale(v,.08)));addPart(p.x,p.y,p.z,v.x+n.x*60,v.y+n.y*60+40,v.z+n.z*60,.35+rnd()*.35,rnd()<.4?[1,.85,.4]:rnd()<.5?[1,.5,.12]:[.9,.25,.05],20+rnd()*18,'flame');}
-  for(let i=0;i<50;i++){const v=sph(140+rnd()*560);addPart(vc.x,vc.y,vc.z,v.x+n.x*120,v.y+n.y*120+100,v.z+n.z*120,.35+rnd()*.5,rnd()<.5?[1,.8,.2]:[1,.35,.1],3,'spark');}
-  for(let i=0;i<24;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,1.4+rnd()*1.6,rnd()<.5?[1,.6,.15]:[1,.35,.08],2.2+rnd()*1.5,'ember');}
-  // smoke: dark billows that roll up and spread
-  for(let i=0;i<30;i++){const p=free(vadd(vc,sph(10+rnd()*40)));const v=sph(40+rnd()*110);
-    addPart(p.x,p.y,p.z,v.x+n.x*50,Math.abs(v.y)*.5+50+rnd()*70,v.z+n.z*50,1.6+rnd()*2.2,barrel?[.1,.08,.09]:[.2,.17,.22],18+rnd()*20,'smoke');}
-  // dust ring along the surface it hit
-  {const t1=vlen(vcross(n,V(0,1,0)))>.1?vnorm(vcross(n,V(0,1,0))):V(1,0,0),t2=vcross(n,t1);
-   for(let i=0;i<26;i++){const a=i/26*Math.PI*2,d=vadd(vscale(t1,Math.cos(a)),vscale(t2,Math.sin(a))),sp=260+rnd()*160,p=vadd(c,vscale(n,4));
-     addPart(p.x,p.y,p.z,d.x*sp,d.y*sp+20,d.z*sp,.6+rnd()*.4,[.5,.52,.6],10+rnd()*8,'dust');}}
+  // the sharp part: star flashes, a jagged fireball, shockwaves, spark streaks (src/04f_hardfx.js)
+  hardBlast(vc,n,RAD,barrel);
+  // a few glowing embers that linger, and a thin quick wisp of smoke
+  for(let i=0;i<10;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,.9+rnd()*1.1,rnd()<.5?[1,.6,.15]:[1,.35,.08],2+rnd()*1.2,'ember');}
+  for(let i=0;i<5;i++){const p=free(vadd(vc,sph(10+rnd()*20)));addPart(p.x,p.y,p.z,(rnd()-.5)*60+n.x*40,60+rnd()*40,(rnd()-.5)*60+n.z*40,.7+rnd()*.5,[.12,.1,.13],10+rnd()*8,'smoke');}
   // scorch on the surface
   {const p=offSurface(c,1.5);if(vlen(vsub(p,c))>.5)parts.push({x:p.x,y:p.y,z:p.z,vx:0,vy:0,vz:0,life:10,max:10,col:[.02,.015,.02],size:RAD*.55,type:'scorch'});}
   // debris: torn barrel shell that burns, or chips of the wall/floor

@@ -50,7 +50,7 @@ function wireMenu(){
     $('asdesc').textContent=pad?'slows the look on a target, tracks and pulls toward it · RB snaps on':'gamepad only — switch Controls to Gamepad to use it';};
   opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{
     SETTINGS.input=v;if(v==='gamepad'&&!SETTINGS.padSeen){SETTINGS.padSeen=true;SETTINGS.assist=true;SETTINGS.assistStr=50;$('asSl').value=50;}drawAssist();});
-  opts($('styleopt'),[['lines','LINES'],['solid','SOLID'],['shiny','SHINY']],()=>SETTINGS.charStyle,v=>{SETTINGS.charStyle=v;});
+  opts($('styleopt'),[['lines','LINES'],['solid','SOLID'],['shiny','SHINY'],['ink','INK'],['inkShiny','INK GLOSS']],()=>SETTINGS.charStyle,v=>{SETTINGS.charStyle=v;});
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
     sl.oninput=()=>{SETTINGS[key]=+sl.value;vv.textContent=fmt(+sl.value);saveSettings();if(after)after();};};
@@ -300,6 +300,14 @@ if(document.body&&$('endopts')){
 // the music should be playing)? If not: pause and resume the audio (makes the browser reopen the device); if that
 // doesn't help, rebuild the whole audio graph (the decoded recordings are kept and reused).
 const AUDLOG=[];let audW={t:0,ct:0,bad:0,quiet:0,lastFix:-99,tries:0};
+// re-open the connection to the sound device, as moving the system volume slider does: point the output at nothing,
+// then back at the default device (Chrome / Edge; elsewhere this does nothing)
+function audioReopen(why){
+  if(!AC||typeof AC.setSinkId!=='function')return false;
+  AUDLOG.push((performance.now()/1000).toFixed(1)+' reopen device: '+why);
+  try{AC.setSinkId({type:'none'}).then(()=>AC.setSinkId('')).then(()=>{if(AC.state!=='running')AC.resume().catch(()=>{});}).catch(()=>{});}catch(e){return false;}
+  return true;
+}
 function audioRebuild(why){
   AUDLOG.push((performance.now()/1000).toFixed(1)+' rebuild: '+why);
   const old=AC;try{if(musicTimer)clearInterval(musicTimer);}catch(e){}
@@ -325,8 +333,8 @@ function audioWatch(){
   if(!problem){audW.bad=0;audW.tries=0;return;}
   if(++audW.bad<2)return; // twice in a row
   audW.bad=0;audW.quiet=0;
-  if(audW.tries===0&&problem!=='output is NaN'){audW.tries=1;AUDLOG.push(now.toFixed(1)+' '+problem+': suspend/resume');
-    AC.suspend().then(()=>AC.resume()).catch(()=>{});return;}
+  if(audW.tries===0&&problem!=='output is NaN'){audW.tries=1;
+    if(!audioReopen(problem)){AUDLOG.push(now.toFixed(1)+' '+problem+': suspend/resume');AC.suspend().then(()=>AC.resume()).catch(()=>{});}return;}
   if(now-audW.lastFix<4)return;audW.lastFix=now;audW.tries=0;audioRebuild(problem);
 }
 if(typeof document!=="undefined"&&document.body&&!window.__headless)setInterval(audioWatch,500);

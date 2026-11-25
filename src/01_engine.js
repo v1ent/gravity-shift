@@ -53,6 +53,15 @@ uniform vec4 uLP;uniform vec3 uLC;
 uniform vec3 uTint;uniform float uUseTint;uniform vec3 uEmis;uniform float uAlpha;uniform float uTime;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uEdge;uniform vec3 uEdgeCol;
 uniform vec3 uPanel; // x: grid offline (static) 0..1, y: hit glitch 0..1, z: grid health 0..1
 uniform float uCount; // seconds left on a grid outage (shown on the panels)
+uniform float uSwitch; // seconds since the last arena turn: panels that just switched on/off animate, block by block
+// a TV switching on / off inside one block: 'a' is how far on (1 = picture, 0 = dark): the picture squeezes to a bright
+// line, the line to a dot, the dot fades
+vec3 tvBlock(vec2 cl,float a,vec3 pic,vec3 off){
+  if(a>=1.0)return pic;if(a<=0.0)return off;
+  if(a>0.4){float sy=(a-0.4)/0.6;return abs(cl.y)<0.5*sy?pic*(1.0+(1.0-sy)*2.0):off;}
+  if(a>0.15){float sx=(a-0.15)/0.25;return (abs(cl.y)<0.03&&abs(cl.x)<0.5*sx)?vec3(1.0,0.75,0.95)*1.6:off;}
+  float r=length(cl);return r<0.05*a/0.15+0.01?vec3(1.0,0.85,1.0)*1.8:off;
+}
 // a 7-segment digit (like a digital clock): 1 inside a lit segment, ~0.12 for unlit ones, with a soft glow
 float segMask(float d){if(d<0.5)return 63.0;if(d<1.5)return 6.0;if(d<2.5)return 91.0;if(d<3.5)return 79.0;if(d<4.5)return 102.0;
   if(d<5.5)return 109.0;if(d<6.5)return 125.0;if(d<7.5)return 7.0;if(d<8.5)return 127.0;return 111.0;}
@@ -96,7 +105,7 @@ void main(){
   if(vEm>5.5){ec*=0.35;}
   if(vEm>1.5&&vEm<2.5){ec=vec3(1.0,0.75,0.25);}
   col+=ec*(edge*0.9+sm*0.35);
-  if(vEm>0.5&&vEm<1.5){ // live gravity panel: a screen
+  if((vEm>0.5&&vEm<1.5)||(vEm>2.5&&vEm<3.5)){ // gravity panel: a screen when live, switched off on floors and ceilings
     float t=uTime,gl=uPanel.y;
     // hit glitch: rows slide sideways
     float uu=u+(hsh(vec2(floor(v*14.0),floor(t*30.0)))-0.5)*gl*0.6;
@@ -139,9 +148,13 @@ void main(){
       float bg=1.0-smoothstep(0.0,hh*0.25,max(abs(pp.x)-hh*1.55,abs(pp.y)-hh*1.3));
       col=mix(col,col*0.25,bg*0.8*uPanel.x);col+=led*lv*1.6*uPanel.x;
     }
-  }
-  if(vEm>2.5&&vEm<3.5){ // dormant gravity panel
-    float ch=step(0.5,fract(v+abs(fract(u)-0.5)));col=mix(col,vec3(0.22,0.07,0.2),0.6)+vec3(0.5,0.1,0.35)*ch*0.12;
+    // switched off: dark glass with the block seams and a faint magenta frame
+    vec3 offc=vec3(0.03,0.028,0.045)*(0.7+0.6*hemi+0.4*dif)+vec3(0.12,0.1,0.16)*sm*1.5+vec3(0.5,0.1,0.35)*edge*0.12;
+    bool live=vEm<1.5;
+    if(vCol.b>0.5){ // just switched: block by block, like old TV sets
+      float dly=hsh(floor(vec2(u,v))+vec2(3.1,7.7))*0.9,k=clamp((uSwitch-0.35-dly)/0.45,0.0,1.0);
+      col=tvBlock(fract(vec2(u,v))-0.5,live?k:1.0-k,col,offc);
+    }else if(!live)col=offc;
   }
   if(vEm>4.5&&vEm<5.5){ // neon strip / lamp / LED
     col=vCol*1.6;
@@ -211,7 +224,7 @@ function beginMain(){
 function drawLevelMesh(){
   if(!R.levelN)return;const gl=R.gl,L=R.main.loc;
   bindMain(R.level);gl.uniformMatrix4fv(L.uModel,false,M4.ident());gl.uniform1f(L.uUseTint,0);
-  if(L.uPanel){const W2=world,off=W2.panelOff>0?(W2.panelOff>PANEL_OFF-.8?(Math.random()<.5?1:.35):Math.min(1,W2.panelOff/.5)):0;gl.uniform3f(L.uPanel,off,W2.panelGlitch||0,W2.panelHP===undefined?1:W2.panelHP/PANEL_HP);if(L.uCount)gl.uniform1f(L.uCount,W2.panelOff||0);}
+  if(L.uPanel){const W2=world,off=W2.panelOff>0?(W2.panelOff>PANEL_OFF-.8?(Math.random()<.5?1:.35):Math.min(1,W2.panelOff/.5)):0;gl.uniform3f(L.uPanel,off,W2.panelGlitch||0,W2.panelHP===undefined?1:W2.panelHP/PANEL_HP);if(L.uCount)gl.uniform1f(L.uCount,W2.panelOff||0);if(L.uSwitch)gl.uniform1f(L.uSwitch,W2.time-(W2.panelSwitchT===undefined?-99:W2.panelSwitchT));}
   gl.uniform1f(L.uEdge,.05);gl.uniform3f(L.uEdgeCol,.16,.85,1.0);
   gl.drawArrays(gl.TRIANGLES,0,R.levelN);
   if(R.decoN){bindMain(R.deco);gl.uniform1f(L.uEdge,.012);gl.drawArrays(gl.TRIANGLES,0,R.decoN);}

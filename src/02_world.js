@@ -3,7 +3,8 @@ const PARTITIONS=false,STAIRS=false; // side-to-side walls and a mid floor split
 //  WORLD — voxel construction site, collision, 90° gravity turns, nav
 // =====================================================================
 const T=32,N=37,L=N*T,S6=6;
-// voxel types: 0 air, 1 concrete, 2 gravity panel, 3 steel, 4 hazard rim, 5 neon strip, 6 outer shell
+// voxel types: 0 air, 1 concrete, 2 gravity panel, 3 steel, 4 hazard rim, 5 neon strip, 6 outer shell,
+//   7 machinery (the ledges and curbs round the panels: solid like concrete, but drawn as pipes and devices — src/02b_deco.js)
 let grid=new Uint8Array(N*N*N);
 const gi=(i,j,k)=>i+N*(j+N*k);
 const tile=(i,j,k)=>(i<0||j<0||k<0||i>=N||j>=N||k>=N)?6:grid[gi(i,j,k)];
@@ -135,7 +136,7 @@ function genLevel(seed){
       // ledges (3 deep, 9 wide) under and over the panel
       for(const yy of [y0,y0+6]){if(yy>=N-1)continue;
         for(let d=1;d<=3;d++)for(let u=u0-2;u<=u0+6;u++){
-          if(face==='x0')setT(d,yy,u,1);else if(face==='x1')setT(N-1-d,yy,u,1);else if(face==='z0')setT(u,yy,d,1);else setT(u,yy,N-1-d,1);}}
+          if(face==='x0')setT(d,yy,u,7);else if(face==='x1')setT(N-1-d,yy,u,7);else if(face==='z0')setT(u,yy,d,7);else setT(u,yy,N-1-d,7);}}
     }
   }
   for(const face of ['y0','y1']){
@@ -144,7 +145,7 @@ function genLevel(seed){
       panels.push({face,u0,v0});
       // a 1-block curb around it: a step on the floor now, a ledge once the arena turns
       const y=face==='y0'?1:N-2;
-      for(let u=u0-1;u<=u0+5;u++)for(let v=v0-1;v<=v0+5;v++)if(u===u0-1||u===u0+5||v===v0-1||v===v0+5)setT(u,y,v,1);
+      for(let u=u0-1;u<=u0+5;u++)for(let v=v0-1;v<=v0+5;v++)if(u===u0-1||u===u0+5||v===v0-1||v===v0+5)setT(u,y,v,7);
     }
   }
   // ---- half-covers: low walls (one block high) on the walkable floors, straight or L-shaped,
@@ -177,11 +178,21 @@ function genLevel(seed){
       else if(p.face==='y0')setT(p.u0+u,0,p.v0+v-1,2);else setT(p.u0+u,N-1,p.v0+v-1,2);
     }
   }
+  // nothing solid may stand in front of a panel: clear 3 cells deep over its whole face
+  // (wall panels: rows y0+1..y0+5, between the ledges; floor / ceiling panels: inside the curb)
+  for(const p of panels)for(let u=0;u<5;u++)for(let v=1;v<=5;v++)for(let d=1;d<=3;d++){
+    if(p.face==='x0')setT(d,p.y0+v,p.u0+u,0);else if(p.face==='x1')setT(N-1-d,p.y0+v,p.u0+u,0);
+    else if(p.face==='z0')setT(p.u0+u,p.y0+v,d,0);else if(p.face==='z1')setT(p.u0+u,p.y0+v,N-1-d,0);
+    else if(p.face==='y0')setT(p.u0+u,d,p.v0+v-1,0);else setT(p.u0+u,N-1-d,p.v0+v-1,0);
+  }
 }
 
 // ---------------- mesh (greedy merge of coplanar faces) ----------------
 const TYPE_COL={1:hexRGB('#3b425c'),2:hexRGB('#5a1048'),3:hexRGB('#4b4d5e'),4:hexRGB('#3b425c'),5:hexRGB('#29f0ff'),6:hexRGB('#1d2133')};
+// live panels before the last arena turn (mapped through it), so the mesh can mark the ones that just switched
+let panelPrevLive=null,panelLiveNow=new Set(),panelSwitched=new Set();
 function buildLevelMesh(){
+  const liveNow=new Set();panelSwitched=new Set();
   if(!R.ok)return;
   const out=[];
   const dims=[N,N,N];
@@ -196,9 +207,10 @@ function buildLevelMesh(){
         let a=x[d]>=0?grid[gi(x[0],x[1],x[2])]:0;
         let b=x[d]<N-1?grid[gi(x[0]+q[0],x[1]+q[1],x[2]+q[2])]:0;if(a===STAIR)a=0;if(b===STAIR)b=0;
         let m=0;
-        const code=(t,i,j,k)=>t===2?(isLiveK(i,j,k)?20:21):t;
-        if(solid(a)&&!solid(b))m=code(a,x[0],x[1],x[2]);
-        else if(!solid(a)&&solid(b))m=-code(b,x[0]+q[0],x[1]+q[1],x[2]+q[2]);
+        const code=(t,i,j,k)=>{if(t!==2)return t;const lv=isLiveK(i,j,k),pv=panelPrevLive&&panelPrevLive.has(gi(i,j,k));
+          if(lv)liveNow.add(gi(i,j,k));if(panelPrevLive&&lv!==pv)panelSwitched.add(gi(i,j,k));return lv?(panelPrevLive&&!pv?22:20):(pv?23:21);};
+        if(solid(a)&&!solid(b))m=a===7?0:code(a,x[0],x[1],x[2]);
+        else if(!solid(a)&&solid(b))m=b===7?0:-code(b,x[0]+q[0],x[1]+q[1],x[2]+q[2]);
         mask[n++]=m;
       }
       x[d]++;
@@ -211,12 +223,13 @@ function buildLevelMesh(){
         while(j+h<N){for(let k=0;k<w;k++)if(mask[n+k+h*N]!==m){done=true;break;}if(done)break;h++;}
         // emit quad
         const t=Math.abs(m),sgn=m>0?1:-1;
-        const typ=t===20||t===21?2:t;
+        const typ=t>=20&&t<=23?2:t;
         let col=TYPE_COL[typ]||TYPE_COL[1];
         // live panels: the colour slot carries which way is up and right, for the countdown digits
-        if(t===20){const hax=d!==1?3-d-1:0,upIsU=d!==1?(u===1?1:0):(u===2?1:0),nd=[0,0,0];nd[d]=m>0?1:-1;
-          const r=d!==1?(hax===0?nd[2]:-nd[0]):1;col=[upIsU,r<0?1:0,0];}
-        const em=t===20?1:t===21?3:typ===3?2:typ===4?4:typ===5?5:typ===6?6:0;
+        if(t===20||t===22){const hax=d!==1?3-d-1:0,upIsU=d!==1?(u===1?1:0):(u===2?1:0),nd=[0,0,0];nd[d]=m>0?1:-1;
+          const r=d!==1?(hax===0?nd[2]:-nd[0]):1;col=[upIsU,r<0?1:0,t===22?1:0];}
+        if(t===21||t===23)col=[0,0,t===23?1:0];
+        const em=t===20||t===22?1:t===21||t===23?3:typ===3?2:typ===4?4:typ===5?5:typ===6?6:0;
         const p=[0,0,0];p[d]=x[d]*T;
         const corner=(cu,cv)=>{const r=p.slice();r[u]=cu*T;r[v]=cv*T;return r;};
         const c00=corner(i,j),c10=corner(i+w,j),c11=corner(i+w,j+h),c01=corner(i,j+h);
@@ -243,6 +256,7 @@ function buildLevelMesh(){
         if(sg>0){vert(0,0);vert(1,0);vert(1,1);vert(0,0);vert(1,1);vert(0,1);}else{vert(0,0);vert(1,1);vert(1,0);vert(0,0);vert(0,1);vert(1,1);}
       }
     }}}
+  panelLiveNow=liveNow;panelPrevLive=null;
   const gl=R.gl;gl.bindBuffer(gl.ARRAY_BUFFER,R.level);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(out),gl.STATIC_DRAW);R.levelN=out.length/STRIDE;
 }
 

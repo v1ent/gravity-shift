@@ -146,6 +146,21 @@ async function loadModel(){
       const u8=new Uint8Array(buf),idx=new Uint16Array(buf.slice(iOff,iOff+meta.ni*2));
       SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx);SKN.lp=lp;SKN.ll=ll;
     }catch(err){console.warn('line style unavailable:',err);}
+    // "ink" and "ink gloss": the solid / glossy shading with the same creases drawn as dark lines on top
+    if(SKN.lm)for(const [key,base] of [['ip',SKFS],['isp',SKFS_SHINY]])try{
+      const deriv=!!gl.getExtension('OES_standard_derivatives');
+      let fs=(deriv?'#extension GL_OES_standard_derivatives : enable\n':'')+base.replace('varying vec3 vW;','varying vec3 vW;varying vec3 vB;');
+      fs=fs.replace('gl_FragColor=vec4(mix(uFog,col,f),uAlpha);',
+        'vec3 wB='+(deriv?'fwidth(vB)*0.95':'vec3(0.035)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
+        'col=mix(col,vec3(0.012,0.01,0.018),ink*0.9);gl_FragColor=vec4(mix(uFog,col,f),uAlpha);');
+      const pr=gl.createProgram();
+      for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,fs]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
+        if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));gl.attachShader(pr,s);}
+      gl.linkProgram(pr);if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(pr));
+      const lc={};for(const a of ['aPos','aNor','aJ','aW','aB'])lc[a]=gl.getAttribLocation(pr,a);
+      for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uCam'])lc[u]=gl.getUniformLocation(pr,u);
+      SKN[key]=pr;SKN[key+'L']=lc;
+    }catch(err){console.warn('ink style unavailable:',err);}
     // rest skeleton
     SKN.bones=meta.bones.map(b=>({name:b.name,head:V(b.head[0],b.head[1],b.head[2]),parent:b.parent}));
     SKN.bi={};SKN.bones.forEach((b,i)=>SKN.bi[b.name]=i);
@@ -723,9 +738,16 @@ function corpsesToDolls(){
 }
 
 function drawPose(P,col,alpha,flash){
-  const lines=SETTINGS.charStyle==='lines'&&SKN.lp,shiny=!lines&&SETTINGS.charStyle==='shiny'&&SKN.sp,gl=R.gl,L=lines?SKN.ll:shiny?SKN.sl:SKN.loc;const H=writeMatrices(P),bi=SKN.bi;
-  gl.useProgram(lines?SKN.lp:shiny?SKN.sp:SKN.p);
-  if(shiny)gl.uniform3f(L.uCam,cam.pos.x,cam.pos.y,cam.pos.z);
+  // which look: lines (glowing creases), solid, shiny, ink (solid + dark creases), inkShiny (shiny + dark creases)
+  const st=SETTINGS.charStyle,gl=R.gl;
+  let prog=SKN.p,L=SKN.loc,unpacked=false,glowLines=false,camU=false;
+  if(st==='lines'&&SKN.lp){prog=SKN.lp;L=SKN.ll;unpacked=true;glowLines=true;}
+  else if(st==='shiny'&&SKN.sp){prog=SKN.sp;L=SKN.sl;camU=true;}
+  else if(st==='ink'&&SKN.ip){prog=SKN.ip;L=SKN.ipL;unpacked=true;}
+  else if(st==='inkShiny'&&SKN.isp){prog=SKN.isp;L=SKN.ispL;unpacked=true;camU=true;}
+  const lines=unpacked,H=writeMatrices(P),bi=SKN.bi;
+  gl.useProgram(prog);
+  if(camU)gl.uniform3f(L.uCam,cam.pos.x,cam.pos.y,cam.pos.z);
   for(let a=0;a<8;a++)gl.disableVertexAttribArray(a);
   const ST=lines?24:20;
   if(lines)gl.bindBuffer(gl.ARRAY_BUFFER,SKN.lm.b);else{gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);}
@@ -733,7 +755,7 @@ function drawPose(P,col,alpha,flash){
   gl.enableVertexAttribArray(L.aNor);gl.vertexAttribPointer(L.aNor,4,gl.BYTE,true,ST,8);
   gl.enableVertexAttribArray(L.aJ);gl.vertexAttribPointer(L.aJ,4,gl.UNSIGNED_BYTE,false,ST,12);
   gl.enableVertexAttribArray(L.aW);gl.vertexAttribPointer(L.aW,4,gl.UNSIGNED_BYTE,true,ST,16);
-  if(lines){gl.enableVertexAttribArray(L.aB);gl.vertexAttribPointer(L.aB,3,gl.UNSIGNED_BYTE,true,ST,20);gl.uniform3f(L.uLine,col[0],col[1],col[2]);}
+  if(lines){gl.enableVertexAttribArray(L.aB);gl.vertexAttribPointer(L.aB,3,gl.UNSIGNED_BYTE,true,ST,20);if(glowLines)gl.uniform3f(L.uLine,col[0],col[1],col[2]);}
   const draw=()=>{if(lines)gl.drawArrays(gl.TRIANGLES,0,SKN.lm.n);else gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);};
   gl.uniformMatrix4fv(L.uVP,false,FR.vp);gl.uniformMatrix4fv(L.uWorldFix,false,FR.fix);
   gl.uniformMatrix4fv(L.uB,false,SKN.mats);gl.uniform1f(L.uQ,SKN.meta.q);

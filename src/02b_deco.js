@@ -113,7 +113,7 @@ function genDeco(){
     else continue;
     made++;
   }
-  genPanelDressing();
+  genPanelDressing();genMachinery();
   if(typeof genDecals==='function')genDecals(); // stencils, signs, graffiti, dirt (src/02c_decals.js)
 }
 // ---------- dressing round the gravity panels (looks only: no collision) ----------
@@ -123,7 +123,7 @@ function genDeco(){
 let panelSpots=[]; // centre and facing of every panel (handy for tests and cameras)
 function genPanelDressing(){
   panelSpots=[];
-  const R=rnd,seen=new Set(),PM=hexRGB('#ff3fa4'),DARK=hexRGB('#232836'),STEEL=hexRGB('#4a5268'),CAB=[DC.cable,hexRGB('#b0202c'),hexRGB('#d8a41c'),hexRGB('#1d6f86'),hexRGB('#2a2d38')];
+  const R=rnd,seen=new Set(),PM=hexRGB('#ff3fa4'),DARK=hexRGB('#232836'),STEEL=hexRGB('#4a5268'),CAB=[DC.cable,hexRGB('#2a2d38'),hexRGB('#1c2230'),hexRGB('#33303a'),hexRGB('#151820')];
   for(let k0=0;k0<N;k0++)for(let j0=0;j0<N;j0++)for(let i0=0;i0<N;i0++){
     if(tile(i0,j0,k0)!==2||seen.has(gi(i0,j0,k0)))continue;
     // the panel: all type-2 blocks connected to this one
@@ -197,52 +197,84 @@ function genPanelDressing(){
       // both sides of the panel, between the ledges
       band((s,c,h,ss,cs,hs,col,em)=>box(-ha-t-c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(-ha-t-c,s));
       band((s,c,h,ss,cs,hs,col,em)=>box(ha+t+c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(ha+t+c,s));
-      // hanging under the top ledge, along the wall
-      band((s,c,h,ss,cs,hs,col,em)=>box(s,hb-h,2+c,ss,hs,cs,col,em),-ha-T2,ha+T2,0,T*.9,12,()=>true);
-      // along the foot of the wall on the bottom ledge (kept low)
-      band((s,c,h,ss,cs,hs,col,em)=>box(s,-hb+h,1+c,ss,hs,cs,col,em),-ha-T2,ha+T2,0,12,6,()=>true);
-    }else{
-      // on top of the curb round floor / ceiling panels (kept low)
-      for(const sg of [-1,1]){
-        band((s,c,h,ss,cs,hs,col,em)=>box(s,sg*(hb+2+c),T+h,ss,cs,hs,col,em),-ha-T,ha+T,0,T-4,7,()=>true);
-        band((s,c,h,ss,cs,hs,col,em)=>box(sg*(ha+2+c),s,T+h,cs,ss,hs,col,em),-hb,hb,0,T-4,7,()=>true);
-      }
     }
-    // cable bundles running off along the wall from the corner units, turning once
-    for(let q=0;q<4;q++){
-      const sa=q<2?-1:1,sb=q%2?1:-1;let pa=sa*(ha+T*2+4),pb=sb*(hb-6);const nC=2+(R()*3|0),out=[];
-      let dir=[sa,0],len=0,turned=false;
-      for(let s=0;s<40;s++){const na2=pa+dir[0]*8,nb2=pb+dir[1]*8;
-        if(!onWall(na2,nb2)){if(turned||!wall)break;turned=true;dir=[0,R()<.5?1:-1];continue;}
-        pa=na2;pb=nb2;len++;out.push([pa,pb,dir.slice()]);
-        if(!turned&&len>4+R()*14){turned=true;dir=[0,sb];}}
-      if(out.length<3)continue;
-      // merge the steps into straight runs, one box per run per cable
-      let run=[out[0]];const flush=()=>{const a0=run[0],a1=run[run.length-1],d=a0[2],L2=run.length*8;
-        for(let c=0;c<nC;c++){const off=(c-(nC-1)/2)*2.6,cc=CAB[(q+c)%CAB.length];
-          if(d[0])box((a0[0]+a1[0])/2,a0[1]+off,1.6+c*.2,L2+2.6,1.8,1.8,cc,6);else box(a0[0]+off,(a0[1]+a1[1])/2,1.6+c*.2,1.8,L2+2.6,1.8,cc,6);}
-        // a clip every so often
-        box(a1[0],a1[1],1.4,d[0]?2:nC*2.6+3,d[0]?nC*2.6+3:2,3.4,DC.tray);};
-      for(let s=1;s<out.length;s++){if(out[s][2][0]===run[0][2][0]&&out[s][2][1]===run[0][2][1])run.push(out[s]);else{flush();run=[out[s]];}}flush();
-    }
-    if(wall){
-      // the ledges: front edge 3 blocks out — a conduit, junction boxes, amber warning lights; a lamp under the top ledge
-      for(const [pb,top] of [[-hb-T/2,false],[hb+T/2,true]]){
-        const fr=3*T,span=ha+2*T-4;
-        box(0,pb+(top?-6:6),fr+2.5,2*span,4,4,DC.pipeG);
-        for(let x=-span+18;x<span-10;x+=46+R()*20){box(x,pb,fr+3,12,14,6,R()<.5?DC.ebox:DARK);box(x,pb+3,fr+6.2,3,3,.8,DC.ledA,7);}
-        box(-span+6,pb,fr+2,6,T-6,4,DC.stripe);box(span-6,pb,fr+2,6,T-6,4,DC.stripe);
-        if(top){box(0,hb-2,T*1.2,2*ha-10,3,6,DC.lampC,5);box(0,hb-.6,T*1.2,2*ha,1.2,10,DARK);
-          box(0,hb-3,T*2.6,2*ha+20,3,3,DC.cable,6);}
-      }
-    }else{
-      // floor / ceiling panels: lamp strips along the inside of the curb
-      for(const sa of [-1,1]){box(sa*(ha+T-2),0,T*.5,2.5,2*hb,4,PM,5);box(0,sa*(hb+T-2),T*.5,2*ha,2.5,4,PM,5);}
+    if(wall){ // a lamp under the top ledge, shining on the panel
+      box(0,hb-2,T*1.2,2*ha-10,3,6,DC.lampC,5);box(0,hb-.6,T*1.2,2*ha,1.2,10,DARK);
     }
   }
 }
+// ---------- machinery: the ledges and curbs round the panels (voxel type 7) ----------
+// Collision is the plain block; what you see is built from smaller parts: a dark core, plates and grates on top,
+// and on the sides and undersides pipes that run on unbroken along the whole ledge plus a row of mixed devices.
+function genMachinery(){
+  const R=rnd,AX=[V(1,0,0),V(0,1,0),V(0,0,1)],NS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const CORE=hexRGB('#151925'),STEEL=hexRGB('#4a5268'),PLATE=[hexRGB('#3c4459'),hexRGB('#454e66'),hexRGB('#363d50')],DARK=hexRGB('#232836');
+  const comp=new Map();let nComp=0;
+  const isM=(i,j,k)=>tile(i,j,k)===7;
+  // components (one per ledge / curb), each with its own pipe layout per facing
+  for(let k0=0;k0<N;k0++)for(let j0=0;j0<N;j0++)for(let i0=0;i0<N;i0++){if(!isM(i0,j0,k0)||comp.has(gi(i0,j0,k0)))continue;
+    const id=nComp++,st=[[i0,j0,k0]];comp.set(gi(i0,j0,k0),id);
+    while(st.length){const [i,j,k]=st.pop();for(const n of NS){const q=[i+n[0],j+n[1],k+n[2]];if(isM(...q)&&!comp.has(gi(...q))){comp.set(gi(...q),id);st.push(q);}}}}
+  const layouts=new Map();
+  const layout=(id,fi)=>{const key=id*6+fi;if(layouts.has(key))return layouts.get(key);
+    const pipes=[],np=1+(R()*3|0);let c=-T/2+3;
+    for(let q=0;q<np&&c<-2;q++){const d=[3,4,5.5,7][R()*4|0];pipes.push({c:c+d/2,d,col:[DC.pipeG,DC.pipeT,DC.pipeC,STEEL,DC.flange][R()*5|0],wrap:R()<.3});c+=d+1+R()*2;}
+    const L2={pipes,devLo:Math.max(c,-4),devHi:T/2-2};layouts.set(key,L2);return L2;};
+  const bx=(c,s,col,em)=>addD(c,s.x,s.y,s.z,col,em);
+  for(let k=0;k<N;k++)for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+    if(!isM(i,j,k))continue;const id=comp.get(gi(i,j,k)),cc=V((i+.5)*T,(j+.5)*T,(k+.5)*T);
+    const exp=NS.map(n=>!solid(tile(i+n[0],j+n[1],k+n[2])));
+    // the core, pulled in 2.5 from every open face
+    {let lo=[-T/2,-T/2,-T/2],hi=[T/2,T/2,T/2];NS.forEach((n,f)=>{if(!exp[f])return;const a=n.findIndex(x=>x!==0);if(n[a]>0)hi[a]-=2.5;else lo[a]+=2.5;});
+      bx(V(cc.x+(lo[0]+hi[0])/2,cc.y+(lo[1]+hi[1])/2,cc.z+(lo[2]+hi[2])/2),V(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2]),CORE,6);}
+    NS.forEach((n,f)=>{
+      if(!exp[f])return;
+      const na=n.findIndex(x=>x!==0),tg=[0,1,2].filter(x=>x!==na);
+      // the run: the face direction along which this ledge continues
+      const runA=tg.find(a=>{const e=[0,0,0];e[a]=1;return isM(i+e[0],j+e[1],k+e[2])||isM(i-e[0],j-e[1],k-e[2]);});
+      const ra=runA===undefined?tg[0]:runA,ca=tg.find(x=>x!==ra);
+      const nv=V(n[0],n[1],n[2]),rv=AX[ra],cv=AX[ca];
+      const fc=vadd(cc,vscale(nv,T/2));
+      // a part on this face: s along the run, c across, from depth 'in' below the face to 'out' above it
+      const part=(s,c,ss,cs,inn,out,col,em)=>{const p=vadd(vadd(vadd(fc,vscale(rv,s)),vscale(cv,c)),vscale(nv,(out-inn)/2));
+        const sz=[0,0,0];sz[ra]=ss;sz[ca]=cs;sz[na]=out+inn;bx(p,V(sz[0],sz[1],sz[2]),col,em);};
+      const up=n[1]===1&&na===1; // a top you walk on (as generated)
+      if(up){
+        // plates, grates and the odd hatch, flush with the top
+        for(const a of [-1,1])for(const b of [-1,1]){const r=R(),sc=a*T/4,cc2=b*T/4;
+          if(r<.2){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.2,DARK);for(let q=-5;q<=5;q+=2.5)part(sc,cc2+q,T/2-3,.9,.2,.45,STEEL);}
+          else if(r<.27){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[0]);part(sc,cc2,T/2-6,T/2-6,.1,.5,STEEL);part(sc+4,cc2+4,1.6,1.6,0,.7,[DC.ledG,DC.ledA][R()*2|0],7);}
+          else part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[R()*3|0]);}
+        // a lip along any open edge: a steel nosing with yellow tape
+        return;
+      }
+      const LY=layout(id,f);
+      // pipes, unbroken from cell to cell
+      for(const P of LY.pipes){part(0,P.c,T+.4,P.d,2.5,P.d-1.5,P.col);
+        if(P.wrap)part(0,P.c,5,P.d+1.2,2.5,P.d-.9,DC.pipeW);
+        else if(R()<.35)part((R()-.5)*T*.7,P.c,2.6,P.d+2.6,2.5,P.d-.4,DC.flange);}
+      // devices along the rest of the face
+      let s=-T/2+.6;
+      while(s<T/2-3){const w=Math.min(T/2-.6-s,5+R()*14);if(w<3)break;const xc=s+w/2;
+        const lo=LY.devLo,hi=LY.devHi,ch=Math.max(4,(hi-lo)*(.55+R()*.45)),c0=lo+(hi-lo-ch)*R()+ch/2,out=.3+R()*1.6;
+        const r=R();
+        if(r<.12){part(xc,c0,w-.4,ch,2.5,.1,CORE);}  // a gap
+        else{part(xc,c0,w-.4,ch,2.5,out,[DARK,STEEL,DC.ebox,DC.vent][R()*4|0]);
+          const f2=out+.35,k2=R()*5|0;
+          if(k2===0)for(let y=-ch/2+1.6;y<ch/2-1;y+=2)part(xc,c0+y,w-2,.7,0,f2,DC.slat);
+          else if(k2===1)for(let q=0;q<Math.min(4,w/3|0);q++)part(xc-w/2+2+q*2.8,c0+ch/2-1.8,1.3,1.3,0,f2+.2,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);
+          else if(k2===2&&w>6)part(xc,c0,w-3,Math.min(ch-2,6),0,f2,[DC.lampC,DC.ledG][R()*2|0],5);
+          else if(k2===3)part(xc,c0+ch/2-1.2,w-.4,1.6,0,f2,DC.stripe);
+          else part(xc,c0,w*.45,ch*.45,0,f2+.3,DC.flange);}
+        s+=w;}
+    });
+  }
+}
 function rotateDeco(key){
-  const r=ROT[key];if(typeof rotateDecals==='function')rotateDecals(key);
+  const r=ROT[key];
+  // which panels were live, in the turned arena's coordinates: the mesh animates the ones that switch on or off
+  {const s=new Set();for(const id of panelLiveNow){const i=id%N,j=Math.floor(id/N)%N,k=Math.floor(id/(N*N)),q=r.pt((i+.5)*T,(j+.5)*T,(k+.5)*T);
+    s.add(gi(Math.floor(q[0]/T),Math.floor(q[1]/T),Math.floor(q[2]/T)));}panelPrevLive=s;world.panelSwitchT=world.time;}if(typeof rotateDecals==='function')rotateDecals(key);
   for(const d of deco){const q=r.pt(d.c.x,d.c.y,d.c.z);d.c=V(q[0],q[1],q[2]);if(key[1]==='x'){const t=d.s[0];d.s[0]=d.s[1];d.s[1]=t;}else{const t=d.s[2];d.s[2]=d.s[1];d.s[1]=t;}}
 }
 function buildDecoMesh(){
