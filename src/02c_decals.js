@@ -4,23 +4,16 @@
 //  of concrete / steel / shell blocks a hair in front of the surface. Like the pipes (src/02b_deco.js) they are placed
 //  from the level's seed and turned with the arena.
 // =====================================================================
-let decals=[]; // {c:V centre, n:V normal, u:V right, v:V up, w, h (world units), r:[x,y,w,h] sheet rect 0..1, col:[r,g,b,a], em}
-const DSHEET=1024,DCELL=256;
-// the designs: sheet cell (x,y,w,h in 256 px cells), what it is, where it may go
-const DECAL_KINDS={
-  stencilA:{cell:[0,0,2,1],type:'text',wall:true},       // big stencilled sector code
-  stencilB:{cell:[2,0,2,1],type:'text',wall:true},
-  jpNoEntry:{cell:[0,1,2,1],type:'text',wall:true},      // 立入禁止 — no entry
-  krDanger:{cell:[2,1,2,1],type:'text',wall:true},       // 위험 구역 — danger zone
-  jpSeven:{cell:[0,2,1,1],type:'glyph',wall:true},       // 七 — seven
-  krThree:{cell:[1,2,1,1],type:'glyph',wall:true},       // 삼 — three
-  jpFour:{cell:[2,2,1,1],type:'glyph',wall:true},        // 第四 — the fourth
-  fox:{cell:[3,2,1,1],type:'graffiti',wall:true},        // a spray-painted fox mask
-  dirt:{cell:[0,3,1,1],type:'dirt',wall:true,floor:true},
-  splat:{cell:[1,3,1,1],type:'splat',wall:true,floor:true},
-  chevron:{cell:[2,3,1,1],type:'chevron',wall:true,floor:true},
-  drip:{cell:[3,3,1,1],type:'drip',wall:true},
-};
+let decals=[]; // {kind, c:V centre, n:V normal, u:V right, v:V up, w, h (world units), r:[x,y,w,h] sheet rect 0..1, col:[r,g,b,a], em}
+const DSHEET=2048,DCELL=256,DGRID=8;
+// the designs: sheet cell (x,y,w,h in 256 px cells of an 8x8 sheet)
+const KR_NUM=['일','이','삼','사','오','육','칠','팔','구','십'];
+const AR_NUM2=['07','13','24','36','42','51','09','88'],AR_NUM1=['3','5','8','1'];
+const DECAL_KINDS={};
+KR_NUM.forEach((g,i)=>DECAL_KINDS['kr'+i]={cell:i<8?[i,0,1,1]:[i-8,1,1,1],type:'kr',txt:g});
+AR_NUM2.forEach((t,i)=>DECAL_KINDS['n'+t]={cell:i<3?[2+i*2,1,2,1]:i<7?[(i-3)*2,2,2,1]:[4,3,2,1],type:'num2',txt:t});
+AR_NUM1.forEach((t,i)=>DECAL_KINDS['d'+t]={cell:[i,3,1,1],type:'num1',txt:t});
+DECAL_KINDS.stain0={cell:[0,4,4,4],type:'stain'};DECAL_KINDS.stain1={cell:[4,4,4,4],type:'stain'};
 // ---- the sheet ----
 function drawDecalSheet(){
   const cv=document.createElement('canvas');cv.width=cv.height=DSHEET;const c=cv.getContext('2d');
@@ -29,105 +22,69 @@ function drawDecalSheet(){
   // wear: knock specks and scratches out of whatever was just drawn
   const wear=(W,H,n,big)=>{c.save();c.globalCompositeOperation='destination-out';
     for(let i=0;i<n;i++){c.globalAlpha=.3+R2()*.7;c.beginPath();c.arc(R2()*W,R2()*H,R2()*(big||3)+.5,0,7);c.fill();}
-    c.lineWidth=1.2;for(let i=0;i<n/12;i++){c.globalAlpha=.6;c.beginPath();const x=R2()*W,y=R2()*H;c.moveTo(x,y);c.lineTo(x+(R2()-.5)*60,y+(R2()-.5)*14);c.stroke();}
+    c.lineWidth=1.4;for(let i=0;i<n/10;i++){c.globalAlpha=.6;c.beginPath();const x=R2()*W,y=R2()*H;c.moveTo(x,y);c.lineTo(x+(R2()-.5)*70,y+(R2()-.5)*16);c.stroke();}
     c.restore();};
-  const CJK="'Yu Gothic','Meiryo','MS Gothic','Malgun Gothic','Noto Sans CJK JP','Noto Sans CJK KR','Noto Sans CJK TC','Noto Sans CJK SC',sans-serif";
-  const stencil=(txt,W,H)=>{c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';
-    c.font=`900 ${H*.78}px Impact,'Arial Black','Franklin Gothic Heavy',sans-serif`;let s=Math.min(1,(W*.92)/c.measureText(txt).width);
-    c.save();c.translate(W/2,H/2+H*.04);c.scale(s,1);c.fillText(txt,0,0);c.restore();
-    // stencil bridges: thin gaps cut through the letters
-    c.save();c.globalCompositeOperation='destination-out';c.fillStyle='#000';
-    for(let i=1;i<8;i++){c.fillRect(W*i/8-2,H*.1,4,H*.8);}c.restore();
-    wear(W,H,420,2.6);};
-  cell('stencilA',(W,H)=>stencil('A-03',W,H));
-  cell('stencilB',(W,H)=>stencil('B-17',W,H));
-  const sign=(txt,W,H,frame)=>{c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';
-    c.font=`900 ${H*.6}px ${CJK}`;const s=Math.min(1,(W*.86)/c.measureText(txt).width);
-    c.save();c.translate(W/2,H/2);c.scale(s,1);c.fillText(txt,0,0);c.restore();
-    if(frame){c.strokeStyle='#fff';c.lineWidth=10;c.strokeRect(14,14,W-28,H-28);}
-    wear(W,H,300,2.2);};
-  cell('jpNoEntry',(W,H)=>sign('立入禁止',W,H,true));
-  cell('krDanger',(W,H)=>sign('위험 구역',W,H,true));
-  // big brushed numerals: drawn several times with jitter so the edges look painted
-  const brush=(txt,W,H,font)=>{c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.font=font;
-    for(let i=0;i<6;i++){c.globalAlpha=.35;c.fillText(txt,W/2+(R2()-.5)*6,H/2+(R2()-.5)*6);}c.globalAlpha=1;c.fillText(txt,W/2,H/2);
-    // paint runs from the bottom of the strokes
-    for(let i=0;i<7;i++){const x=W*.25+R2()*W*.5,y=H*.62+R2()*H*.15,l=20+R2()*60;c.fillRect(x,y,3+R2()*3,l);c.beginPath();c.arc(x+2.5,y+l,3.5,0,7);c.fill();}
-    wear(W,H,160,2);};
-  cell('jpSeven',(W,H)=>brush('七',W,H,`900 ${H*.82}px ${CJK}`));
-  cell('krThree',(W,H)=>brush('삼',W,H,`900 ${H*.78}px ${CJK}`));
-  cell('jpFour',(W,H)=>brush('第四',W,H,`900 ${H*.5}px ${CJK}`));
-  // the fox mask: sprayed outlines (soft wide stroke under a sharp one)
-  cell('fox',(W,H)=>{c.lineCap='round';c.lineJoin='round';
-    const path=()=>{c.beginPath();
-      c.moveTo(W*.5,H*.86);c.lineTo(W*.2,H*.5);c.lineTo(W*.16,H*.12);c.lineTo(W*.38,H*.3);c.lineTo(W*.5,H*.26);c.lineTo(W*.62,H*.3);c.lineTo(W*.84,H*.12);c.lineTo(W*.8,H*.5);c.closePath();
-      c.moveTo(W*.3,H*.48);c.lineTo(W*.44,H*.52);c.moveTo(W*.7,H*.48);c.lineTo(W*.56,H*.52); // eyes
-      c.moveTo(W*.42,H*.72);c.lineTo(W*.5,H*.78);c.lineTo(W*.58,H*.72); // snout
-      c.moveTo(W*.24,H*.2);c.lineTo(W*.3,H*.36);c.moveTo(W*.76,H*.2);c.lineTo(W*.7,H*.36);};
-    c.strokeStyle='rgba(255,255,255,.25)';c.lineWidth=16;path();c.stroke();
-    c.strokeStyle='#fff';c.lineWidth=6;path();c.stroke();
-    for(let i=0;i<260;i++){c.globalAlpha=R2()*.6;c.fillStyle='#fff';c.fillRect(W*.5+(R2()-.5)*W*.8,H*.5+(R2()-.5)*H*.8,1.5,1.5);} // overspray
-    c.globalAlpha=1;});
-  // dirt: soft blotches with grain
-  cell('dirt',(W,H)=>{for(let i=0;i<46;i++){const x=W*.5+(R2()-.5)*W*.55,y=H*.5+(R2()-.5)*H*.55,r=10+R2()*48;
-      const g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(255,255,255,.34)');g.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=g;c.beginPath();c.arc(x,y,r,0,7);c.fill();}
-    c.fillStyle='#fff';for(let i=0;i<900;i++){const a=R2()*7,d=Math.pow(R2(),.7)*W*.42;c.globalAlpha=R2()*.35;c.fillRect(W/2+Math.cos(a)*d,H/2+Math.sin(a)*d,1.5,1.5);}c.globalAlpha=1;});
-  // paint splatter: a splash, flung droplets
-  cell('splat',(W,H)=>{c.fillStyle='#fff';c.beginPath();
-    for(let i=0;i<=40;i++){const a=i/40*Math.PI*2,r=W*(.17+R2()*.09)+(i%5===0?W*.1*R2():0);i?c.lineTo(W/2+Math.cos(a)*r,H/2+Math.sin(a)*r):c.moveTo(W/2+r,H/2);}c.fill();
-    for(let i=0;i<40;i++){const a=R2()*7,d=W*(.25+R2()*.22),r=1.5+R2()*6;c.beginPath();c.arc(W/2+Math.cos(a)*d,H/2+Math.sin(a)*d,r,0,7);c.fill();}});
-  // chevrons, painted
-  cell('chevron',(W,H)=>{c.fillStyle='#fff';for(let i=0;i<3;i++){const x=W*.12+i*W*.26;c.beginPath();c.moveTo(x,H*.22);c.lineTo(x+W*.16,H*.22);c.lineTo(x+W*.32,H*.5);c.lineTo(x+W*.16,H*.78);c.lineTo(x,H*.78);c.lineTo(x+W*.16,H*.5);c.fill();}wear(W,H,200,2.5);});
-  // rust / grime streaks running down from a line
-  cell('drip',(W,H)=>{for(let i=0;i<22;i++){const x=W*.1+R2()*W*.8,l=H*(.25+R2()*.7),w=2+R2()*7,g=c.createLinearGradient(0,0,0,l);
-      g.addColorStop(0,'rgba(255,255,255,.75)');g.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=g;c.fillRect(x,0,w,l);}
-    c.fillStyle='rgba(255,255,255,.55)';c.fillRect(0,0,W,7);});
+  const CJK="'Malgun Gothic','Noto Sans CJK KR','Noto Sans KR','Apple SD Gothic Neo','Noto Sans CJK TC',sans-serif";
+  const text=(txt,W,H,font,stencil)=>{c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.font=font;
+    const s=Math.min(1,(W*.9)/c.measureText(txt).width);c.save();c.translate(W/2,H/2+H*.03);c.scale(s,1);c.fillText(txt,0,0);c.restore();
+    if(stencil){c.save();c.globalCompositeOperation='destination-out';const n=Math.round(W/H*2);for(let i=1;i<n;i++)c.fillRect(W*i/n-3,H*.08,6,H*.84);c.restore();}
+    wear(W,H,Math.round(W*H/180),2.6);};
+  for(const [k,K] of Object.entries(DECAL_KINDS)){
+    if(K.type==='kr')cell(k,(W,H)=>text(K.txt,W,H,`900 ${H*.86}px ${CJK}`));
+    else if(K.type==='num2'||K.type==='num1')cell(k,(W,H)=>text(K.txt,W,H,`900 ${H*.9}px Impact,'Arial Black','Franklin Gothic Heavy',sans-serif`,true));
+  }
+  // stains: big soft irregular blotches with mottled insides
+  for(const k of ['stain0','stain1'])cell(k,(W,H)=>{
+    for(let i=0;i<70;i++){const a=R2()*7,d=Math.pow(R2(),1.4)*W*.3,x=W/2+Math.cos(a)*d,y=H/2+Math.sin(a)*d*.85,r=W*(.06+R2()*.16);
+      const g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(255,255,255,.34)');g.addColorStop(.7,'rgba(255,255,255,.18)');g.addColorStop(1,'rgba(255,255,255,0)');
+      c.fillStyle=g;c.beginPath();c.arc(x,y,r,0,7);c.fill();}
+    c.save();c.globalCompositeOperation='destination-out';
+    for(let i=0;i<120;i++){const x=R2()*W,y=R2()*H,r=W*(.01+R2()*.04),g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(0,0,0,.35)');g.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=g;c.beginPath();c.arc(x,y,r,0,7);c.fill();}
+    c.restore();
+    // a fade to nothing at the cell edge so no square ever shows
+    c.save();c.globalCompositeOperation='destination-in';const g=c.createRadialGradient(W/2,H/2,W*.25,W/2,H/2,W*.5);g.addColorStop(0,'#000');g.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=g;c.fillRect(0,0,W,H);c.restore();
+  });
   return cv;
 }
-// ---- placement (seeded by the level) ----
-const DECAL_TINT={
-  text:[[.92,.92,.9,.55],[1,.82,.2,.6],[1,.25,.65,.6],[.25,.95,1,.5],[.85,.86,.9,.35]],
-  glyph:[[1,.24,.6,.85],[.25,.95,1,.8],[.95,.95,.95,.6],[1,.8,.2,.75]],
-  graffiti:[[1,.25,.65,.9],[.25,.95,1,.85]],
-  dirt:[[0,0,0,1],[.03,.02,.01,.95]],
-  splat:[[1,.24,.6,.75],[.25,.95,1,.7],[1,.8,.2,.7],[.9,.9,.9,.55]],
-  chevron:[[1,.8,.2,.7],[1,.25,.65,.65]],
-  drip:[[.35,.16,.06,.6],[.03,.02,.02,.65]],
-};
-const DECAL_MIX=[['dirt',16],['drip',8],['splat',7],['chevron',5],['stencilA',5],['stencilB',5],['jpNoEntry',6],['krDanger',6],['jpSeven',4],['krThree',4],['jpFour',4],['fox',4]];
+// ---- placement (seeded by the level): big stains first, then the numbers over them ----
 function genDecals(){
   decals=[];
-  const Rn=rnd,NS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]],tot=DECAL_MIX.reduce((a,m)=>a+m[1],0);
+  const Rn=rnd,NS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
   const ok=(t)=>t===1||t===3||t===6;
   const exposed=(i,j,k,n)=>ok(tile(i,j,k))&&!solid(tile(i+n[0],j+n[1],k+n[2]));
-  // every exposed face of paintable blocks, so picks don't waste time on air or buried blocks
   const faces=[];for(let k=0;k<N;k++)for(let j=0;j<N;j++)for(let i=0;i<N;i++){if(!ok(tile(i,j,k)))continue;for(const n of NS)if(!solid(tile(i+n[0],j+n[1],k+n[2])))faces.push([i,j,k,n]);}
   if(!faces.length)return;
-  for(let tries=0;tries<3000&&decals.length<95;tries++){
-    let r=Rn()*tot,kind='dirt';for(const [k,wt] of DECAL_MIX)if((r-=wt)<0){kind=k;break;}
-    const K=DECAL_KINDS[kind],[i,j,k,n]=faces[Rn()*faces.length|0];
-    const wall=n[1]===0;if(wall?!K.wall:!K.floor)continue;
-    // the face's axes: on walls "up" is up; on floors and ceilings pick a heading
-    const N3=V(n[0],n[1],n[2]);let up,rt;
-    if(wall){up=V(0,1,0);rt=V(n[2],0,-n[0]);} // the right-hand direction for someone facing the wall
-    else{const a=(Rn()*4|0)*Math.PI/2;up=V(Math.round(Math.sin(a)),0,Math.round(Math.cos(a)));rt=V(up.z*n[1],0,-up.x*n[1]);}
-    // size in tiles
-    const [cw,ch]=[K.cell[2],K.cell[3]];
-    const big=K.type==='text'?(kind.startsWith('stencil')?2.2+Rn()*2.4:1.6+Rn()*1.4):K.type==='glyph'||K.type==='graffiti'?1.3+Rn()*1.5:1+Rn()*2;
-    let w=big*T*(cw/Math.max(cw,ch))*(cw>ch?1.6:1),h=w*ch/cw;
-    // centre on the face, nudged off-grid; the whole footprint must be exposed wall of the same plane
-    const fc=V((i+.5+n[0]*.5)*T,(j+.5+n[1]*.5)*T,(k+.5+n[2]*.5)*T);
-    const c=vadd(vadd(fc,vscale(rt,(Rn()-.5)*T)),vscale(up,(Rn()-.5)*T*(wall?.6:1)));
-    const fits=()=>{for(let a=-.5;a<=.5;a+=.25)for(let b=-.5;b<=.5;b+=.25){
-      const p=vadd(vadd(c,vscale(rt,a*w*.98)),vscale(up,b*h*.98)),q=vsub(p,vscale(N3,T*.5));
-      if(!exposed(Math.floor(q.x/T),Math.floor(q.y/T),Math.floor(q.z/T),n))return false;}return true;};
-    let fine=fits();for(let s=0;s<3&&!fine&&w>T*.9;s++){w*=.75;h*=.75;fine=fits();} // too big for this wall: try smaller
-    if(!fine)continue;
-    if(decals.some(d=>{const dd=vlen(vsub(d.c,c));return dd<(Math.max(d.w,d.h)+Math.max(w,h))*.5||(d.kind===kind&&dd<T*9);}))continue; // no overlaps; the same design not repeated close by
-    const tints=DECAL_TINT[K.type],col=tints[Rn()*tints.length|0].slice();col[3]*=.8+Rn()*.25;
-    const [cx,cy,cww,chh]=K.cell;
-    decals.push({kind,c:vadd(c,vscale(N3,.35+decals.length*.004)),n:N3,u:rt,v:up,w,h,r:[cx/4,cy/4,cww/4,chh/4],col,em:(K.type==='glyph'||K.type==='graffiti')&&col[3]>.7?.5:0,mirror:K.type==='dirt'||K.type==='splat'?Rn()<.5:false});
-  }
+  const KR=Object.keys(DECAL_KINDS).filter(k=>DECAL_KINDS[k].type==='kr'),N2=Object.keys(DECAL_KINDS).filter(k=>DECAL_KINDS[k].type==='num2'),N1=Object.keys(DECAL_KINDS).filter(k=>DECAL_KINDS[k].type==='num1');
+  const place=(kind,tilesMin,tilesMax,want,allowFloor)=>{
+    const K=DECAL_KINDS[kind],[cx,cy,cw,ch]=K.cell;
+    for(let tries=0;tries<40;tries++){
+      const [i,j,k,n]=faces[Rn()*faces.length|0],wall=n[1]===0;if(!wall&&!allowFloor)continue;
+      const N3=V(n[0],n[1],n[2]);let up,rt;
+      if(wall){up=V(0,1,0);rt=V(n[2],0,-n[0]);}
+      else{const a=(Rn()*4|0)*Math.PI/2;up=V(Math.round(Math.sin(a)),0,Math.round(Math.cos(a)));rt=V(-up.z*n[1],0,up.x*n[1]);}
+      let w=(tilesMin+Rn()*(tilesMax-tilesMin))*T,h=w*ch/cw;
+      const fc=V((i+.5+n[0]*.5)*T,(j+.5+n[1]*.5)*T,(k+.5+n[2]*.5)*T);
+      const c=vadd(vadd(fc,vscale(rt,(Rn()-.5)*T)),vscale(up,(Rn()-.5)*T));
+      const stain=K.type==='stain',lim=stain?.62:.98; // a stain fades out well inside its square, so only its middle must lie on the surface
+      const fits=()=>{for(let a=-.5;a<=.5;a+=.125)for(let b=-.5;b<=.5;b+=.125){
+        const p=vadd(vadd(c,vscale(rt,a*w*lim)),vscale(up,b*h*lim)),q=vsub(p,vscale(N3,T*.5));
+        if(!exposed(Math.floor(q.x/T),Math.floor(q.y/T),Math.floor(q.z/T),n))return false;}return true;};
+      let fine=fits();for(let s=0;s<6&&!fine&&w>tilesMin*T*.45;s++){w*=.8;h*=.8;fine=fits();}
+      if(!fine)continue;
+      if(decals.some(d=>{const sd=d.kind.startsWith('stain');if(sd!==stain)return false;const dd=vlen(vsub(d.c,c));
+        return dd<(Math.max(d.w,d.h)+Math.max(w,h))*(stain?.3:.5)||(!stain&&d.kind===kind&&dd<T*10);}))continue;
+      let col;if(stain){col=[0,0,0,.42+Rn()*.2];}else{const g=.78+Rn()*.22;col=[g,g,g*.98,.32+Rn()*.3];}
+      const mirror=stain&&Rn()<.5;
+      decals.push({kind,c:vadd(c,vscale(N3,.35+decals.length*.004)),n:N3,u:rt,v:up,w,h,r:[cx/DGRID,cy/DGRID,cw/DGRID,ch/DGRID],col,em:0,mirror});
+      return true;
+    }
+    return false;
+  };
+  for(let q=0;q<30;q++)place(Rn()<.5?'stain0':'stain1',3.5,9,q,true);
+  for(let q=0;q<46;q++){const r=Rn();
+    if(r<.5)place(KR[Rn()*KR.length|0],2.5,6,q,true);
+    else if(r<.85)place(N2[Rn()*N2.length|0],4,9,q,true);
+    else place(N1[Rn()*N1.length|0],2.5,6,q,true);}
 }
 function rotateDecals(key){
   const r=ROT[key],tv=v=>{const q=r.vec(v.x,v.y,v.z);return V(q[0],q[1],q[2]);};

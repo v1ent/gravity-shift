@@ -52,6 +52,28 @@ varying vec3 vNor;varying vec3 vCol;varying vec4 vUV;varying float vEm;varying v
 uniform vec4 uLP;uniform vec3 uLC;
 uniform vec3 uTint;uniform float uUseTint;uniform vec3 uEmis;uniform float uAlpha;uniform float uTime;uniform vec3 uSun;uniform vec3 uFog;uniform float uFogD;uniform float uEdge;uniform vec3 uEdgeCol;
 uniform vec3 uPanel; // x: grid offline (static) 0..1, y: hit glitch 0..1, z: grid health 0..1
+uniform float uCount; // seconds left on a grid outage (shown on the panels)
+// a 7-segment digit (like a digital clock): 1 inside a lit segment, ~0.12 for unlit ones, with a soft glow
+float segMask(float d){if(d<0.5)return 63.0;if(d<1.5)return 6.0;if(d<2.5)return 91.0;if(d<3.5)return 79.0;if(d<4.5)return 102.0;
+  if(d<5.5)return 109.0;if(d<6.5)return 125.0;if(d<7.5)return 7.0;if(d<8.5)return 127.0;return 111.0;}
+float segBox(vec2 p,vec2 c,vec2 hs){vec2 q=abs(p-c)-hs;return length(max(q,0.0))+min(max(q.x,q.y),0.0);}
+float digit7(vec2 p,float dg,float hh){ // p: digit space, height 2*hh, width hh
+  float hw=hh*0.5,t=hh*0.16,m=segMask(dg),lit=0.0,ghost=0.0,glow=0.0;
+  for(int i=0;i<7;i++){
+    vec2 c,hs;
+    if(i==0){c=vec2(0.0,hh-t*0.5);hs=vec2(hw-t*0.8,t*0.5);}
+    else if(i==1){c=vec2(hw-t*0.5,hh*0.5);hs=vec2(t*0.5,hh*0.5-t*0.8);}
+    else if(i==2){c=vec2(hw-t*0.5,-hh*0.5);hs=vec2(t*0.5,hh*0.5-t*0.8);}
+    else if(i==3){c=vec2(0.0,-hh+t*0.5);hs=vec2(hw-t*0.8,t*0.5);}
+    else if(i==4){c=vec2(-hw+t*0.5,-hh*0.5);hs=vec2(t*0.5,hh*0.5-t*0.8);}
+    else if(i==5){c=vec2(-hw+t*0.5,hh*0.5);hs=vec2(t*0.5,hh*0.5-t*0.8);}
+    else{c=vec2(0.0,0.0);hs=vec2(hw-t*0.8,t*0.5);}
+    float dd=segBox(vec2(p.x-p.y*0.12,p.y),c,hs),on=mod(floor(m/exp2(float(i))),2.0);
+    float shape=1.0-smoothstep(-t*0.08,t*0.08,dd);
+    lit=max(lit,shape*on);ghost=max(ghost,shape);glow=max(glow,on*exp(-max(dd,0.0)/(t*0.9)));
+  }
+  return max(max(lit,ghost*0.1),glow*0.45);
+}
 float hsh(vec2 p){p=fract(mod(p,289.0)*vec2(0.1031,0.1030));p+=dot(p,p.yx+33.33);return fract((p.x+p.y)*p.x);}
 void main(){
   vec3 base=mix(vCol,uTint,uUseTint);
@@ -108,6 +130,14 @@ void main(){
       float roll=smoothstep(0.0,0.1,abs(fract(v*0.3-t*0.5)-0.5));
       vec3 st=vec3(n)*vec3(0.72,0.68,0.8)*(0.3+0.7*roll)*0.7+vec3(0.35,0.03,0.18)*0.15+vec3(0.6,0.15,0.35)*edge*0.3;
       col=mix(c2,st,uPanel.x);
+      // the countdown, two big digital-clock digits across the panel, upright and reading left to right
+      vec2 pp=vec2(u-w*0.5,v-h*0.5);if(vCol.r>0.5)pp=pp.yx;if(vCol.g>0.5)pp.x=-pp.x;
+      float hh=min(w,h)*0.3,cs=floor(max(uCount,0.0)+0.999);
+      float d1=floor(cs/10.0),d0=cs-d1*10.0;
+      float lv=max(digit7(pp-vec2(-hh*0.68,0.0),d1,hh),digit7(pp-vec2(hh*0.68,0.0),d0,hh));
+      vec3 led=uCount<5.5?vec3(1.0,0.2,0.45):vec3(1.0,0.32,0.7);
+      float bg=1.0-smoothstep(0.0,hh*0.25,max(abs(pp.x)-hh*1.55,abs(pp.y)-hh*1.3));
+      col=mix(col,col*0.25,bg*0.8*uPanel.x);col+=led*lv*1.6*uPanel.x;
     }
   }
   if(vEm>2.5&&vEm<3.5){ // dormant gravity panel
@@ -181,7 +211,7 @@ function beginMain(){
 function drawLevelMesh(){
   if(!R.levelN)return;const gl=R.gl,L=R.main.loc;
   bindMain(R.level);gl.uniformMatrix4fv(L.uModel,false,M4.ident());gl.uniform1f(L.uUseTint,0);
-  if(L.uPanel){const W2=world,off=W2.panelOff>0?(W2.panelOff>PANEL_OFF-.8?(Math.random()<.5?1:.35):Math.min(1,W2.panelOff/.5)):0;gl.uniform3f(L.uPanel,off,W2.panelGlitch||0,W2.panelHP===undefined?1:W2.panelHP/PANEL_HP);}
+  if(L.uPanel){const W2=world,off=W2.panelOff>0?(W2.panelOff>PANEL_OFF-.8?(Math.random()<.5?1:.35):Math.min(1,W2.panelOff/.5)):0;gl.uniform3f(L.uPanel,off,W2.panelGlitch||0,W2.panelHP===undefined?1:W2.panelHP/PANEL_HP);if(L.uCount)gl.uniform1f(L.uCount,W2.panelOff||0);}
   gl.uniform1f(L.uEdge,.05);gl.uniform3f(L.uEdgeCol,.16,.85,1.0);
   gl.drawArrays(gl.TRIANGLES,0,R.levelN);
   if(R.decoN){bindMain(R.deco);gl.uniform1f(L.uEdge,.012);gl.drawArrays(gl.TRIANGLES,0,R.decoN);}

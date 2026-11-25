@@ -145,20 +145,72 @@ function genPanelDressing(){
     const t=6;
     box(0,hb+t/2,2,2*ha+2*t,t,4,STEEL);box(0,-hb-t/2,2,2*ha+2*t,t,4,STEEL);box(ha+t/2,0,2,t,2*hb,4,STEEL);box(-ha-t/2,0,2,t,2*hb,4,STEEL);
     box(0,hb+t*.5,4.3,2*ha+2*t-4,1.2,.8,PM,5);box(0,-hb-t*.5,4.3,2*ha+2*t-4,1.2,.8,PM,5);box(ha+t*.5,0,4.3,1.2,2*hb,.8,PM,5);box(-ha-t*.5,0,4.3,1.2,2*hb,.8,PM,5);
-    // corner units: a housing, vent slats, an LED, a small lamp
-    for(const sa of [-1,1])for(const sb of [-1,1]){
-      const pa=sa*(ha+t+7),pb=sb*(hb-10);
-      box(pa,pb,4,14,18,8,DARK);for(let q=0;q<4;q++)box(pa,pb-6+q*3.6,8.2,10,1.2,.6,DC.slat);
-      box(pa+sa*-3,pb+sb*7,8.4,2.4,2.4,.8,[DC.ledG,DC.ledR,DC.ledA][R()*3|0],7);
-      box(pa,pb-sb*11,3,6,4,6,DC.ebox);
+    // ---- the border: bands packed with devices, pipes and cables ----
+    // put(s,c,h,ss,cs,hs,col,em): a box in a band — s along it, c across it, h out from its mounting surface
+    const band=(put,s0,s1,c0,c1,maxH,ok)=>{
+      const W2=c1-c0;
+      // pipes running the length of the band: round, square, flat duct, insulated, ribbed
+      const np=1+(R()*3|0);
+      for(let q=0;q<np;q++){
+        const style=R()*5|0,d=style===2?3:[3.5,5,6.5,8][R()*4|0],cw=style===2?10+R()*8:d,cc=c0+cw/2+2+R()*Math.max(0,W2-cw-4),hh=maxH*(.25+R()*.55);
+        const col=[DC.pipeT,DC.pipeG,DC.pipeC,DC.pipeW,STEEL][R()*5|0],len=s1-s0;
+        if(!ok((s0+s1)/2,cc))continue;
+        put((s0+s1)/2,cc,hh,len,cw,d,col);
+        if(style===3)for(let x=s0+6;x<s1-4;x+=10)put(x,cc,hh,5,cw+1.4,d+1.4,DC.pipeW);          // insulation wraps
+        else if(style===4)for(let x=s0+3;x<s1-2;x+=6)put(x,cc,hh,1.6,cw+1.6,d+1.6,DC.flange);   // ribbed
+        else for(let x=s0+10+R()*20;x<s1-6;x+=26+R()*34){put(x,cc,hh,3,cw+3.5,d+3.5,DC.flange);
+          if(R()<.25){put(x+6,cc,hh+d/2+3,2,2,5,DC.flange);put(x+6,cc,hh+d/2+5,9,9,1.2,DC.ledR);}} // flanges, now and then a valve wheel
+        // where it meets the wall: elbows into the surface at both ends
+        put(s0+2,cc,hh/2,d,cw,hh,col);put(s1-2,cc,hh/2,d,cw,hh,col);
+      }
+      // devices packed along the band
+      for(let x=s0+2;x<s1-6;){
+        const w=Math.min(s1-2-x,8+R()*22);if(w<6)break;
+        if(R()<.82){
+          const cw=Math.min(W2-2,10+R()*(W2-8)),cc=c0+1+cw/2+R()*Math.max(0,W2-2-cw),hd=Math.min(maxH,4+R()*maxH*.8),xc=x+w/2;
+          if(ok(xc,cc)){
+            put(xc,cc,hd/2,w,cw,hd,[DARK,STEEL,DC.ebox,DC.vent][R()*4|0]);
+            const kind=R()*6|0,f=hd+.4;
+            if(kind===0)for(let y=-cw/2+3;y<cw/2-2;y+=3.2)put(xc,cc+y,f,w-4,1.1,.8,DC.slat);                        // vent bank
+            else if(kind===1){const n=2+(R()*4|0);for(let q=0;q<n;q++)put(xc-w/2+3+q*(w-6)/Math.max(1,n-1),cc+cw/2-3,f,1.8,1.8,.8,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);} // LED row
+            else if(kind===2)put(xc,cc,f,w-5,Math.min(cw-5,10),.6,[DC.lampC,DC.ledG,hexRGB('#ff3fa4')][R()*3|0],5);            // little screen
+            else if(kind===3){put(xc,cc,f,w-3,2.2,.6,DC.stripe);put(xc,cc-cw/4,f,w-3,2.2,.6,DC.stripe);}                   // warning stripes
+            else if(kind===4){put(xc,cc,f+1.5,2,cw*.6,3,DC.tray);put(xc,cc,f+.2,5,5,.6,DC.pipeW,5);}                       // handle + gauge
+            else{put(xc,cc,f,w*.5,cw*.5,1.2,DC.flange);put(xc+w*.3,cc+cw*.3,f+.6,2,2,.6,DC.ledG,7);}                       // hatch + LED
+            if(R()<.35)put(xc,cc,hd+2,2,2,4,DC.tray);                                                                     // antenna stub / connector
+          }
+        }
+        x+=w+1+R()*6;
+      }
+      // cables: thin, in colours, sagging between clips
+      const nc=2+(R()*3|0);
+      for(let q=0;q<nc;q++){
+        const cc=c0+2+R()*(W2-4),col=CAB[R()*CAB.length|0],d=1.4+R()*1.2,hh=1+R()*2,sag=3+R()*6;let x=s0;
+        while(x<s1-4){const span=30+R()*40,e=Math.min(s1,x+span),n=Math.max(2,Math.round((e-x)/11));
+          for(let k=0;k<n;k++){const a0=x+(e-x)*k/n,a1=x+(e-x)*(k+1)/n,m=(k+.5)/n,off=sag*4*m*(1-m);
+            if(ok((a0+a1)/2,cc-off))put((a0+a1)/2,cc-off,hh,a1-a0+.8,d,d,col,6);}
+          put(e,cc,hh,2,d+3,d+2,DC.tray);x=e;}
+      }
+    };
+    const T2=T*2-2;
+    if(wall){
+      // both sides of the panel, between the ledges
+      band((s,c,h,ss,cs,hs,col,em)=>box(-ha-t-c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(-ha-t-c,s));
+      band((s,c,h,ss,cs,hs,col,em)=>box(ha+t+c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(ha+t+c,s));
+      // hanging under the top ledge, along the wall
+      band((s,c,h,ss,cs,hs,col,em)=>box(s,hb-h,2+c,ss,hs,cs,col,em),-ha-T2,ha+T2,0,T*.9,12,()=>true);
+      // along the foot of the wall on the bottom ledge (kept low)
+      band((s,c,h,ss,cs,hs,col,em)=>box(s,-hb+h,1+c,ss,hs,cs,col,em),-ha-T2,ha+T2,0,12,6,()=>true);
+    }else{
+      // on top of the curb round floor / ceiling panels (kept low)
+      for(const sg of [-1,1]){
+        band((s,c,h,ss,cs,hs,col,em)=>box(s,sg*(hb+2+c),T+h,ss,cs,hs,col,em),-ha-T,ha+T,0,T-4,7,()=>true);
+        band((s,c,h,ss,cs,hs,col,em)=>box(sg*(ha+2+c),s,T+h,cs,ss,hs,col,em),-hb,hb,0,T-4,7,()=>true);
+      }
     }
-    // pipes down both sides, with flanges
-    if(wall){const col=[DC.pipeT,DC.pipeG,DC.pipeC][R()*3|0];
-      for(const sa of [-1,1])for(const off of [24,31]){const pa=sa*(ha+off);if(!onWall(pa,0))continue;
-        box(pa,0,4,4.5,2*hb-4,4.5,col);for(let y=-hb+14;y<hb-6;y+=34)box(pa,y,4,7,3,7,DC.flange);}}
     // cable bundles running off along the wall from the corner units, turning once
     for(let q=0;q<4;q++){
-      const sa=q<2?-1:1,sb=q%2?1:-1;let pa=sa*(ha+t+14),pb=sb*(hb-6);const nC=2+(R()*3|0),out=[];
+      const sa=q<2?-1:1,sb=q%2?1:-1;let pa=sa*(ha+T*2+4),pb=sb*(hb-6);const nC=2+(R()*3|0),out=[];
       let dir=[sa,0],len=0,turned=false;
       for(let s=0;s<40;s++){const na2=pa+dir[0]*8,nb2=pb+dir[1]*8;
         if(!onWall(na2,nb2)){if(turned||!wall)break;turned=true;dir=[0,R()<.5?1:-1];continue;}

@@ -308,7 +308,7 @@ const easeIn=u=>{u=clamp(u,0,1);return u*u*u;};
 function segsW(c,segs){return segs.reduce((a,s)=>a+c.measureText(s[0]).width,0);}
 function drawSegs(c,segs,x,y,glow){for(const [t,col] of segs){c.fillStyle=col;c.shadowColor=col;c.shadowBlur=glow;c.fillText(t,x,y);x+=c.measureText(t).width;}}
 function drawSpree(c){
-  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y0=world.panelOff>0?118:94,F=32,GAP=10,WH='#f2f4f8',GOLD='#ffd23a';
+  const S=spree;if(!S)return;const T=hudClock,cx=W/2,y0=94,F=32,GAP=10,WH='#f2f4f8',GOLD='#ffd23a';
   c.save();c.textBaseline='middle';c.textAlign='left';
   const font=sz=>c.font=`bold ${sz}px "Courier New",monospace`;
   const E=S.end?T-S.end.t:-1;
@@ -368,11 +368,8 @@ function drawHUD(){
   // gravity status
   c.textAlign='center';if(!TH||TH.gravity){
   const ready=world.rotCD<=0&&!world.rot;
-  if(world.panelOff>0){ // the grid is down: a big countdown
-    const s=Math.ceil(world.panelOff),last=world.panelOff<5.5,pulse=last?.6+.4*Math.abs(Math.sin(world.panelOff*Math.PI)):1;
-    c.font='bold 13px "Courier New",monospace';c.fillStyle='#c0a8b8';c.fillText('▚ GRAVITY GRID OFFLINE ▞',W/2,20);
-    c.save();c.font='bold 46px "Courier New",monospace';c.textBaseline='middle';c.globalAlpha=pulse;c.fillStyle=last?'#ff3fa4':'#e8ecf2';c.shadowColor=c.fillStyle;c.shadowBlur=last?18:8;
-    const jx=(Math.random()-.5)*(world.panelOff>PANEL_OFF-1?8:1.2);c.fillText(String(s).padStart(2,'0'),W/2+jx,52);c.restore();
+  if(world.panelOff>0){ // the grid is down (the big countdown is on the panels themselves)
+    c.fillStyle='#a8909e';c.fillText(`▚ GRAVITY GRID OFFLINE ${Math.ceil(world.panelOff)}s ▞`,W/2,26);
   }else{
   c.fillStyle=ready?'#ff3fa4':'#7a5068';c.fillText(ready?'◆ GRAVITY PANELS ARMED ◆':`GRAVITY PANELS RECHARGING ${world.rotCD.toFixed(1)}s`,W/2,26);
   c.font='11px "Courier New",monospace';c.fillStyle='#778';c.fillText(`ARENA TURNS: ${world.turns}`,W/2,42);

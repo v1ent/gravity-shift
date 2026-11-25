@@ -212,7 +212,10 @@ function buildLevelMesh(){
         // emit quad
         const t=Math.abs(m),sgn=m>0?1:-1;
         const typ=t===20||t===21?2:t;
-        const col=TYPE_COL[typ]||TYPE_COL[1];
+        let col=TYPE_COL[typ]||TYPE_COL[1];
+        // live panels: the colour slot carries which way is up and right, for the countdown digits
+        if(t===20){const hax=d!==1?3-d-1:0,upIsU=d!==1?(u===1?1:0):(u===2?1:0),nd=[0,0,0];nd[d]=m>0?1:-1;
+          const r=d!==1?(hax===0?nd[2]:-nd[0]):1;col=[upIsU,r<0?1:0,0];}
         const em=t===20?1:t===21?3:typ===3?2:typ===4?4:typ===5?5:typ===6?6:0;
         const p=[0,0,0];p[d]=x[d]*T;
         const corner=(cu,cv)=>{const r=p.slice();r[u]=cu*T;r[v]=cv*T;return r;};
