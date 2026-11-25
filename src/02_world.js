@@ -3,6 +3,8 @@ const PARTITIONS=false,STAIRS=false; // side-to-side walls and a mid floor split
 //  WORLD — voxel construction site, collision, 90° gravity turns, nav
 // =====================================================================
 const T=32,N=37,L=N*T,S6=6;
+// a ledge or curb n cells long: runs of 2-4 machinery cells (7) between runs of plain concrete (1), about 40% machinery
+function machineryRuns(n,R){const out=[];let m=R()<.45;while(out.length<n){const len=2+(R()*3|0);for(let q=0;q<len&&out.length<n;q++)out.push(m?7:1);m=m?false:R()<.62;}return out;}
 // voxel types: 0 air, 1 concrete, 2 gravity panel, 3 steel, 4 hazard rim, 5 neon strip, 6 outer shell,
 //   7 machinery (the ledges and curbs round the panels: solid like concrete, but drawn as pipes and devices — src/02b_deco.js)
 let grid=new Uint8Array(N*N*N);
@@ -134,9 +136,9 @@ function genLevel(seed){
       const u0=m*M+4; // panel spans u0..u0+4
       panels.push({face,y0,u0});
       // ledges (3 deep, 9 wide) under and over the panel
-      for(const yy of [y0,y0+6]){if(yy>=N-1)continue;
-        for(let d=1;d<=3;d++)for(let u=u0-2;u<=u0+6;u++){
-          if(face==='x0')setT(d,yy,u,7);else if(face==='x1')setT(N-1-d,yy,u,7);else if(face==='z0')setT(u,yy,d,7);else setT(u,yy,N-1-d,7);}}
+      for(const yy of [y0,y0+6]){if(yy>=N-1)continue;const mix=machineryRuns(9,R);
+        for(let d=1;d<=3;d++)for(let u=u0-2;u<=u0+6;u++){const ty=mix[u-u0+2];
+          if(face==='x0')setT(d,yy,u,ty);else if(face==='x1')setT(N-1-d,yy,u,ty);else if(face==='z0')setT(u,yy,d,ty);else setT(u,yy,N-1-d,ty);}}
     }
   }
   for(const face of ['y0','y1']){
@@ -145,7 +147,9 @@ function genLevel(seed){
       panels.push({face,u0,v0});
       // a 1-block curb around it: a step on the floor now, a ledge once the arena turns
       const y=face==='y0'?1:N-2;
-      for(let u=u0-1;u<=u0+5;u++)for(let v=v0-1;v<=v0+5;v++)if(u===u0-1||u===u0+5||v===v0-1||v===v0+5)setT(u,y,v,7);
+      const ring=[];for(let u=u0-1;u<=u0+5;u++)for(let v=v0-1;v<=v0+5;v++)if(u===u0-1||u===u0+5||v===v0-1||v===v0+5)ring.push([u,v]);
+      ring.sort((a,b)=>Math.atan2(a[1]-v0-2,a[0]-u0-2)-Math.atan2(b[1]-v0-2,b[0]-u0-2));const mix=machineryRuns(ring.length,R);
+      ring.forEach(([u,v],q)=>setT(u,y,v,mix[q]));
     }
   }
   // ---- half-covers: low walls (one block high) on the walkable floors, straight or L-shaped,

@@ -162,6 +162,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <div class="lab">EFFECTS</div><div class="fragrow"><input type="range" id="fxSl" min="0" max="100" step="1"><b id="fxV"></b></div>
 <div class="lab">GAME SPEED</div><div class="fragrow"><input type="range" id="spdSl" min="60" max="100" step="5"><b id="spdV"></b></div>
 <div class="lab">FIGHTERS</div><div id="styleopt"></div>
+<div class="lab">EXPLOSIONS</div><div id="boomopt"></div>
 <div class="lab">FPS</div><div id="fpsopt"></div>
 <div class="lab">KEYS</div><div><button class="opt" data-go="pgKeys">CHANGE KEY BINDINGS</button></div>
 </div>
@@ -327,6 +328,7 @@ void main(){
     col=mix(col,mix(vec3(0.06),vec3(0.9,0.7,0.15),s)*(0.55+0.5*dif),band*0.85);ec=vec3(1.0,0.8,0.25);
   }
   if(vEm>5.5){ec*=0.35;}
+  if(vEm>7.5&&vEm<8.5){ec=vec3(0.0);} // plain machinery parts: no glowing edges
   if(vEm>1.5&&vEm<2.5){ec=vec3(1.0,0.75,0.25);}
   col+=ec*(edge*0.9+sm*0.35);
   if((vEm>0.5&&vEm<1.5)||(vEm>2.5&&vEm<3.5)){ // gravity panel: a screen when live, switched off on floors and ceilings
@@ -507,6 +509,8 @@ const PARTITIONS=false,STAIRS=false; // side-to-side walls and a mid floor split
 //  WORLD — voxel construction site, collision, 90° gravity turns, nav
 // =====================================================================
 const T=32,N=37,L=N*T,S6=6;
+// a ledge or curb n cells long: runs of 2-4 machinery cells (7) between runs of plain concrete (1), about 40% machinery
+function machineryRuns(n,R){const out=[];let m=R()<.45;while(out.length<n){const len=2+(R()*3|0);for(let q=0;q<len&&out.length<n;q++)out.push(m?7:1);m=m?false:R()<.62;}return out;}
 // voxel types: 0 air, 1 concrete, 2 gravity panel, 3 steel, 4 hazard rim, 5 neon strip, 6 outer shell,
 //   7 machinery (the ledges and curbs round the panels: solid like concrete, but drawn as pipes and devices — src/02b_deco.js)
 let grid=new Uint8Array(N*N*N);
@@ -638,9 +642,9 @@ function genLevel(seed){
       const u0=m*M+4; // panel spans u0..u0+4
       panels.push({face,y0,u0});
       // ledges (3 deep, 9 wide) under and over the panel
-      for(const yy of [y0,y0+6]){if(yy>=N-1)continue;
-        for(let d=1;d<=3;d++)for(let u=u0-2;u<=u0+6;u++){
-          if(face==='x0')setT(d,yy,u,7);else if(face==='x1')setT(N-1-d,yy,u,7);else if(face==='z0')setT(u,yy,d,7);else setT(u,yy,N-1-d,7);}}
+      for(const yy of [y0,y0+6]){if(yy>=N-1)continue;const mix=machineryRuns(9,R);
+        for(let d=1;d<=3;d++)for(let u=u0-2;u<=u0+6;u++){const ty=mix[u-u0+2];
+          if(face==='x0')setT(d,yy,u,ty);else if(face==='x1')setT(N-1-d,yy,u,ty);else if(face==='z0')setT(u,yy,d,ty);else setT(u,yy,N-1-d,ty);}}
     }
   }
   for(const face of ['y0','y1']){
@@ -649,7 +653,9 @@ function genLevel(seed){
       panels.push({face,u0,v0});
       // a 1-block curb around it: a step on the floor now, a ledge once the arena turns
       const y=face==='y0'?1:N-2;
-      for(let u=u0-1;u<=u0+5;u++)for(let v=v0-1;v<=v0+5;v++)if(u===u0-1||u===u0+5||v===v0-1||v===v0+5)setT(u,y,v,7);
+      const ring=[];for(let u=u0-1;u<=u0+5;u++)for(let v=v0-1;v<=v0+5;v++)if(u===u0-1||u===u0+5||v===v0-1||v===v0+5)ring.push([u,v]);
+      ring.sort((a,b)=>Math.atan2(a[1]-v0-2,a[0]-u0-2)-Math.atan2(b[1]-v0-2,b[0]-u0-2));const mix=machineryRuns(ring.length,R);
+      ring.forEach(([u,v],q)=>setT(u,y,v,mix[q]));
     }
   }
   // ---- half-covers: low walls (one block high) on the walkable floors, straight or L-shaped,
@@ -1089,7 +1095,7 @@ function genPanelDressing(){
     const O=[0,0,0];O[aax]=(mn[aax]+mx[aax]+1)*T/2;O[bax]=(mn[bax]+mx[bax]+1)*T/2;O[na]=nv[na]>0?(mn[na]+1)*T:mn[na]*T;
     const wall=na!==1;panelSpots.push({c:V(O[0],O[1],O[2]),n:V(nv[0],nv[1],nv[2]),wall});
     // a box in panel space: centre (pa,pb,pn), size (sa,sb,sn); pn is the distance out from the wall
-    const box=(pa,pb,pn,sa,sb,sn,col,em)=>{const c=O.slice();c[aax]+=pa;c[bax]+=pb;c[na]+=pn*nv[na];const s=[0,0,0];s[aax]=sa;s[bax]=sb;s[na]=sn;addD(V(c[0],c[1],c[2]),s[0],s[1],s[2],col,em);};
+    const box=(pa,pb,pn,sa,sb,sn,col,em)=>{const c=O.slice();c[aax]+=pa;c[bax]+=pb;c[na]+=pn*nv[na];const s=[0,0,0];s[aax]=sa;s[bax]=sb;s[na]=sn;addD(V(c[0],c[1],c[2]),s[0],s[1],s[2],col,em||8);};
     const onWall=(pa,pb)=>{const c=O.slice();c[aax]+=pa;c[bax]+=pb;c[na]-=nv[na]*T/2;const i=Math.floor(c[0]/T),j=Math.floor(c[1]/T),k=Math.floor(c[2]/T);
       return decorable(tile(i,j,k))&&!solid(tile(i+nv[0],j+nv[1],k+nv[2]));};
     // bezel + neon line
@@ -1101,10 +1107,10 @@ function genPanelDressing(){
     const band=(put,s0,s1,c0,c1,maxH,ok)=>{
       const W2=c1-c0;
       // pipes running the length of the band: round, square, flat duct, insulated, ribbed
-      const np=1+(R()*3|0);
+      const np=R()<.4?0:1+(R()*2|0);
       for(let q=0;q<np;q++){
         const style=R()*5|0,d=style===2?3:[3.5,5,6.5,8][R()*4|0],cw=style===2?10+R()*8:d,cc=c0+cw/2+2+R()*Math.max(0,W2-cw-4),hh=maxH*(.25+R()*.55);
-        const col=[DC.pipeT,DC.pipeG,DC.pipeC,DC.pipeW,STEEL][R()*5|0],len=s1-s0;
+        const col=[DC.pipeG,STEEL,DC.flange,DC.pipeG][R()*4|0],len=s1-s0;
         if(!ok((s0+s1)/2,cc))continue;
         put((s0+s1)/2,cc,hh,len,cw,d,col);
         if(style===3)for(let x=s0+6;x<s1-4;x+=10)put(x,cc,hh,5,cw+1.4,d+1.4,DC.pipeW);          // insulation wraps
@@ -1117,15 +1123,15 @@ function genPanelDressing(){
       // devices packed along the band
       for(let x=s0+2;x<s1-6;){
         const w=Math.min(s1-2-x,8+R()*22);if(w<6)break;
-        if(R()<.82){
+        if(R()<.45){
           const cw=Math.min(W2-2,10+R()*(W2-8)),cc=c0+1+cw/2+R()*Math.max(0,W2-2-cw),hd=Math.min(maxH,4+R()*maxH*.8),xc=x+w/2;
           if(ok(xc,cc)){
-            put(xc,cc,hd/2,w,cw,hd,[DARK,STEEL,DC.ebox,DC.vent][R()*4|0]);
+            put(xc,cc,hd/2,w,cw,hd,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
             const kind=R()*6|0,f=hd+.4;
             if(kind===0)for(let y=-cw/2+3;y<cw/2-2;y+=3.2)put(xc,cc+y,f,w-4,1.1,.8,DC.slat);                        // vent bank
-            else if(kind===1){const n=2+(R()*4|0);for(let q=0;q<n;q++)put(xc-w/2+3+q*(w-6)/Math.max(1,n-1),cc+cw/2-3,f,1.8,1.8,.8,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);} // LED row
-            else if(kind===2)put(xc,cc,f,w-5,Math.min(cw-5,10),.6,[DC.lampC,DC.ledG,hexRGB('#ff3fa4')][R()*3|0],5);            // little screen
-            else if(kind===3){put(xc,cc,f,w-3,2.2,.6,DC.stripe);put(xc,cc-cw/4,f,w-3,2.2,.6,DC.stripe);}                   // warning stripes
+            else if(kind===1){const n=1+(R()*2|0);for(let q=0;q<n;q++)put(xc-w/2+3+q*4,cc+cw/2-3,f,1.6,1.6,.8,R()<.7?DC.ledG:DC.ledR,7);} // an LED or two
+            else if(kind===2&&R()<.4)put(xc,cc,f,w-5,Math.min(cw-5,10),.6,DC.lampC,5);   // little screen (now and then)
+            else if(kind===3)put(xc,cc,f,w-3,1.6,.6,DC.flange);   // a seam
             else if(kind===4){put(xc,cc,f+1.5,2,cw*.6,3,DC.tray);put(xc,cc,f+.2,5,5,.6,DC.pipeW,5);}                       // handle + gauge
             else{put(xc,cc,f,w*.5,cw*.5,1.2,DC.flange);put(xc+w*.3,cc+cw*.3,f+.6,2,2,.6,DC.ledG,7);}                       // hatch + LED
             if(R()<.35)put(xc,cc,hd+2,2,2,4,DC.tray);                                                                     // antenna stub / connector
@@ -1169,9 +1175,9 @@ function genMachinery(){
   const layouts=new Map();
   const layout=(id,fi)=>{const key=id*6+fi;if(layouts.has(key))return layouts.get(key);
     const pipes=[],np=1+(R()*3|0);let c=-T/2+3;
-    for(let q=0;q<np&&c<-2;q++){const d=[3,4,5.5,7][R()*4|0];pipes.push({c:c+d/2,d,col:[DC.pipeG,DC.pipeT,DC.pipeC,STEEL,DC.flange][R()*5|0],wrap:R()<.3});c+=d+1+R()*2;}
+    for(let q=0;q<np&&c<-2;q++){const d=[3,4,5.5,7][R()*4|0];pipes.push({c:c+d/2,d,col:[DC.pipeG,STEEL,DC.flange,DARK][R()*4|0],wrap:R()<.2});c+=d+1+R()*2;}
     const L2={pipes,devLo:Math.max(c,-4),devHi:T/2-2};layouts.set(key,L2);return L2;};
-  const bx=(c,s,col,em)=>addD(c,s.x,s.y,s.z,col,em);
+  const bx=(c,s,col,em)=>addD(c,s.x,s.y,s.z,col,em||8);
   for(let k=0;k<N;k++)for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     if(!isM(i,j,k))continue;const id=comp.get(gi(i,j,k)),cc=V((i+.5)*T,(j+.5)*T,(k+.5)*T);
     const exp=NS.map(n=>!solid(tile(i+n[0],j+n[1],k+n[2])));
@@ -1194,7 +1200,7 @@ function genMachinery(){
         // plates, grates and the odd hatch, flush with the top
         for(const a of [-1,1])for(const b of [-1,1]){const r=R(),sc=a*T/4,cc2=b*T/4;
           if(r<.2){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.2,DARK);for(let q=-5;q<=5;q+=2.5)part(sc,cc2+q,T/2-3,.9,.2,.45,STEEL);}
-          else if(r<.27){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[0]);part(sc,cc2,T/2-6,T/2-6,.1,.5,STEEL);part(sc+4,cc2+4,1.6,1.6,0,.7,[DC.ledG,DC.ledA][R()*2|0],7);}
+          else if(r<.27){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[0]);part(sc,cc2,T/2-6,T/2-6,.1,.5,STEEL);}
           else part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[R()*3|0]);}
         // a lip along any open edge: a steel nosing with yellow tape
         return;
@@ -1202,7 +1208,7 @@ function genMachinery(){
       const LY=layout(id,f);
       // pipes, unbroken from cell to cell
       for(const P of LY.pipes){part(0,P.c,T+.4,P.d,2.5,P.d-1.5,P.col);
-        if(P.wrap)part(0,P.c,5,P.d+1.2,2.5,P.d-.9,DC.pipeW);
+        if(P.wrap)part(0,P.c,5,P.d+1.2,2.5,P.d-.9,DC.flange);
         else if(R()<.35)part((R()-.5)*T*.7,P.c,2.6,P.d+2.6,2.5,P.d-.4,DC.flange);}
       // devices along the rest of the face
       let s=-T/2+.6;
@@ -1210,12 +1216,12 @@ function genMachinery(){
         const lo=LY.devLo,hi=LY.devHi,ch=Math.max(4,(hi-lo)*(.55+R()*.45)),c0=lo+(hi-lo-ch)*R()+ch/2,out=.3+R()*1.6;
         const r=R();
         if(r<.12){part(xc,c0,w-.4,ch,2.5,.1,CORE);}  // a gap
-        else{part(xc,c0,w-.4,ch,2.5,out,[DARK,STEEL,DC.ebox,DC.vent][R()*4|0]);
+        else{part(xc,c0,w-.4,ch,2.5,out,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
           const f2=out+.35,k2=R()*5|0;
           if(k2===0)for(let y=-ch/2+1.6;y<ch/2-1;y+=2)part(xc,c0+y,w-2,.7,0,f2,DC.slat);
-          else if(k2===1)for(let q=0;q<Math.min(4,w/3|0);q++)part(xc-w/2+2+q*2.8,c0+ch/2-1.8,1.3,1.3,0,f2+.2,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);
-          else if(k2===2&&w>6)part(xc,c0,w-3,Math.min(ch-2,6),0,f2,[DC.lampC,DC.ledG][R()*2|0],5);
-          else if(k2===3)part(xc,c0+ch/2-1.2,w-.4,1.6,0,f2,DC.stripe);
+          else if(k2===1&&R()<.5)part(xc-w/2+2,c0+ch/2-1.8,1.3,1.3,0,f2+.2,R()<.7?DC.ledG:DC.ledR,7);
+          else if(k2===2&&w>6&&R()<.3)part(xc,c0,w-3,Math.min(ch-2,6),0,f2,DC.lampC,5);
+          else if(k2===3)part(xc,c0+ch/2-1.2,w-.4,1.6,0,f2,DC.flange);
           else part(xc,c0,w*.45,ch*.45,0,f2+.3,DC.flange);}
         s+=w;}
     });
@@ -2600,7 +2606,7 @@ function sfxSample(kind,at){
   return false;
 }
 function sfx(kind,at){
-  if(!AC)return;if(sfxSample(kind,at))return;let vol=1;
+  if(!AC)return;if(at&&!isFinite(at.x+at.y+at.z))at=null;if(sfxSample(kind,at))return;let vol=1; // (a sound with a broken position plays without one)
   if(at&&player){const d=Math.hypot(at.x-player.x,at.y-player.y,at.z-player.z);vol=clamp(1-d/1300,.06,1);}
   const t=AC.currentTime,g=AC.createGain();g.connect(master);
   const noise=(dur,f,q,type)=>{const s=AC.createBufferSource();s.buffer=noiseBuf;const fl=AC.createBiquadFilter();fl.type=type||'bandpass';fl.frequency.value=f;fl.Q.value=q||1;s.connect(fl);fl.connect(g);s.start(t,Math.random()*.5,dur);};
@@ -2742,7 +2748,7 @@ function updateBullets(dt){
     if(!b.flew&&player&&player.alive&&b.owner!==player){const h=headPos(player);if(Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z)<90){b.flew=true;sfx('flyby',b);}}
     for(let s=0;s<steps&&!dead;s++){
       b.x+=sx;b.y+=sy;b.z+=sz;
-      if(solid(tileAt(b.x,b.y,b.z))){dead=true;sparkAt(b.x-sx,b.y-sy,b.z-sz,b.col);panelShot(b.x,b.y,b.z,1,b);break;}
+      if(solid(tileAt(b.x,b.y,b.z))){dead=true;sparkAt(b.x-sx,b.y-sy,b.z-sz,b.col);panelShot(b.x,b.y,b.z,b.pellet?.3:1,b);break;} // a shotgun blast (9 pellets) costs the grid 2.7: three blasts take it down
       for(const e of chars){
         if(e===b.owner||!e.alive)continue;
         if(Math.abs(b.x-e.x)<e.w/2+2&&Math.abs(b.z-e.z)<e.w/2+2&&b.y>e.y&&b.y<e.y+e.h){
@@ -2775,7 +2781,7 @@ function panelShot(x,y,z,n,src){
   const i=Math.floor(x/T),j=Math.floor(y/T),k=Math.floor(z/T);if(!isLiveK(i,j,k)||world.panelOff>0||world.rot)return;
   world.panelHP=(world.panelHP===undefined?PANEL_HP:world.panelHP)-n;world.panelHitT=world.time;world.panelGlitch=1;
   for(let q=0;q<6;q++)addPart(x,y,z,(rnd()-.5)*380,rnd()*260,(rnd()-.5)*380,.25+rnd()*.3,[1,.3,.75],2.5,'spark');
-  sfx('pzap',src);
+  if(world.time-(world.pzapT||-9)>.06){world.pzapT=world.time;sfx('pzap',src);}
   if(world.panelHP<=0){
     world.panelOff=PANEL_OFF;world.panelHP=PANEL_HP;world.rotCD=Math.max(world.rotCD,PANEL_OFF);world.panelBy=src&&src.owner;
     sfx('pdown');world.flash=Math.max(world.flash,.35);
@@ -2813,13 +2819,17 @@ function explosionFX(c,RAD,o){
   const vc=offSurface(c,26),n=vlen(vsub(vc,c))>1?vnorm(vsub(vc,c)):V(0,1,0),barrel=!!o.barrel;
   world.xflash={p:vc,r:RAD*3.2,col:barrel?[1,.55,.2]:[1,.7,.35],t:world.time,dur:barrel?.4:.28};
   const free=p=>solid(tileAt(p.x,p.y,p.z))?vc:p,sph=k=>{const a=rnd()*Math.PI*2,b=Math.asin(rnd()*2-1);return V(Math.cos(a)*Math.cos(b)*k,Math.sin(b)*k,Math.sin(a)*Math.cos(b)*k);};
-  // the sharp part: star flashes, a jagged fireball, shockwaves, spark streaks (src/04f_hardfx.js)
-  hardBlast(vc,n,RAD,barrel);
-  // a few glowing embers that linger, and a thin quick wisp of smoke
-  for(let i=0;i<10;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,.9+rnd()*1.1,rnd()<.5?[1,.6,.15]:[1,.35,.08],2+rnd()*1.2,'ember');}
-  for(let i=0;i<5;i++){const p=free(vadd(vc,sph(10+rnd()*20)));addPart(p.x,p.y,p.z,(rnd()-.5)*60+n.x*40,60+rnd()*40,(rnd()-.5)*60+n.z*40,.7+rnd()*.5,[.12,.1,.13],10+rnd()*8,'smoke');}
+  // the look: Options > Explosions (src/04f_hardfx.js)
+  const style=SETTINGS.boom||'voxel';
+  if(style==='classic'){world.xflash.dur=barrel?.7:.5;boomClassic(vc,n,c,RAD,barrel,free,sph);}
+  else if(style==='sharp'){hardBlast(vc,n,RAD,barrel);
+    for(let i=0;i<10;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,.9+rnd()*1.1,rnd()<.5?[1,.6,.15]:[1,.35,.08],2+rnd()*1.2,'ember');}
+    for(let i=0;i<5;i++){const p=free(vadd(vc,sph(10+rnd()*20)));addPart(p.x,p.y,p.z,(rnd()-.5)*60+n.x*40,60+rnd()*40,(rnd()-.5)*60+n.z*40,.7+rnd()*.5,[.12,.1,.13],10+rnd()*8,'smoke');}}
+  else if(style==='plasma')boomPlasma(vc,n,RAD);
+  else if(style==='toon')boomToon(vc,n,RAD);
+  else boomVoxel(vc,n,RAD,barrel);
   // scorch on the surface
-  {const p=offSurface(c,1.5);if(vlen(vsub(p,c))>.5)parts.push({x:p.x,y:p.y,z:p.z,vx:0,vy:0,vz:0,life:10,max:10,col:[.02,.015,.02],size:RAD*.55,type:'scorch'});}
+  {const p=offSurface(c,1.2);if(vlen(vsub(p,c))>.5)addHard({type:'scorch',alpha:true,p,plane:vnorm(vsub(p,c)),t:0,life:12,size:RAD*.6,rot:rnd()*6,jag:Array.from({length:14},()=>.75+rnd()*.4)});}
   // debris: torn barrel shell that burns, or chips of the wall/floor
   const dc=barrel?o.barrel.col:[.3,.32,.4];
   for(let i=0;i<(barrel?9:6);i++){const v=vadd(sph(160+rnd()*280),vscale(n,220)),p=free(vadd(vc,sph(8)));
@@ -3766,6 +3776,8 @@ let hardFX=[];
 function addHard(o){hardFX.push(o);if(hardFX.length>600)hardFX.splice(0,hardFX.length-600);}
 function updateHardFX(dt){
   for(const f of hardFX){f.t+=dt;
+    if((f.type==='cube'||f.type==='cel')&&f.v){const dr=Math.exp(-(f.drag||0)*dt);f.v=vscale(f.v,dr);f.v.y-=(f.g||0)*dt;
+      const np=vadd(f.p,vscale(f.v,dt));if(solid(tileAt(np.x,np.y,np.z)))f.v=V(0,0,0);else f.p=np;if(f.spin)f.ang+=f.spin*dt;}
     if(f.type==='streak'){const dr=Math.exp(-f.drag*dt);f.v=vscale(f.v,dr);f.v.y-=f.g*dt;f.p=vadd(f.p,vscale(f.v,dt));
       if(solid(tileAt(f.p.x,f.p.y,f.p.z)))f.t=f.life;}}
   hardFX=hardFX.filter(f=>f.t<f.life);
@@ -3782,6 +3794,54 @@ function hardBlast(vc,n,RAD,barrel){
   for(let i=0;i<46;i++){const v=vadd(sph(650+rnd()*950),vscale(n,320));
     addHard({type:'streak',p:vc,v,t:0,life:.22+rnd()*.28,drag:2.6,g:500,len:.045,w:1.1+rnd()*1.3,c0:rnd()<.5?[1,.95,.7,1]:[1,.62,.2,1]});}
 }
+const sphR=k=>{const a=rnd()*Math.PI*2,b=Math.asin(rnd()*2-1);return V(Math.cos(a)*Math.cos(b)*k,Math.sin(b)*k,Math.sin(a)*Math.cos(b)*k);};
+// CLASSIC: the original soft fireball, puffs, sparks, embers, billowing smoke and a dust ring
+function boomClassic(vc,n,c,RAD,barrel,free,sph){
+  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.12,max:.12,col:[1,1,.9],size:RAD*1.1,type:'glow'});
+  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.3,max:.3,col:[1,.7,.3],size:RAD*1.9,type:'glow'});
+  parts.push({x:vc.x,y:vc.y,z:vc.z,vx:0,vy:0,vz:0,life:.55,max:.55,col:[.7,.2,.05],size:RAD*1.4,type:'glow'});
+  addPart(vc.x,vc.y,vc.z,0,0,0,.45,[1,.55,.15],RAD/6,'ring');
+  for(let i=0;i<18;i++){const v=sph(90+rnd()*220),p=free(vadd(vc,vscale(v,.08)));addPart(p.x,p.y,p.z,v.x+n.x*60,v.y+n.y*60+40,v.z+n.z*60,.35+rnd()*.35,rnd()<.4?[1,.85,.4]:rnd()<.5?[1,.5,.12]:[.9,.25,.05],20+rnd()*18,'flame');}
+  for(let i=0;i<50;i++){const v=sph(140+rnd()*560);addPart(vc.x,vc.y,vc.z,v.x+n.x*120,v.y+n.y*120+100,v.z+n.z*120,.35+rnd()*.5,rnd()<.5?[1,.8,.2]:[1,.35,.1],3,'spark');}
+  for(let i=0;i<24;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,1.4+rnd()*1.6,rnd()<.5?[1,.6,.15]:[1,.35,.08],2.2+rnd()*1.5,'ember');}
+  for(let i=0;i<30;i++){const p=free(vadd(vc,sph(10+rnd()*40)));const v=sph(40+rnd()*110);
+    addPart(p.x,p.y,p.z,v.x+n.x*50,Math.abs(v.y)*.5+50+rnd()*70,v.z+n.z*50,1.6+rnd()*2.2,barrel?[.1,.08,.09]:[.2,.17,.22],18+rnd()*20,'smoke');}
+  {const t1=vlen(vcross(n,V(0,1,0)))>.1?vnorm(vcross(n,V(0,1,0))):V(1,0,0),t2=vcross(n,t1);
+   for(let i=0;i<26;i++){const a=i/26*Math.PI*2,d=vadd(vscale(t1,Math.cos(a)),vscale(t2,Math.sin(a))),sp=260+rnd()*160,p=vadd(c,vscale(n,4));
+     addPart(p.x,p.y,p.z,d.x*sp,d.y*sp+20,d.z*sp,.6+rnd()*.4,[.5,.52,.6],10+rnd()*8,'dust');}}
+}
+// VOXEL: burning cubes thrown out, cooling white > yellow > orange > red > soot; then cube smoke and a ring of grit
+function boomVoxel(vc,n,RAD,barrel){
+  addHard({type:'disk',p:vc,t:0,life:.09,size:RAD*.75,jag:Array(10).fill(1),c0:[1,1,.9,1],c1:[1,.8,.4,.6]});
+  for(let i=0;i<30;i++){const v=vadd(sphR(200+rnd()*520),vscale(n,180));
+    addHard({type:'cube',fire:true,p:vadd(vc,sphR(RAD*.15)),v,t:0,life:.5+rnd()*.5,size:RAD*(.07+rnd()*.09),ax:vnorm(sphR(1)),ang:rnd()*6,spin:(rnd()-.5)*14,drag:2.2,g:260});}
+  for(let i=0;i<14;i++){const v=vadd(sphR(40+rnd()*90),vadd(vscale(n,50),V(0,70,0)));
+    addHard({type:'cube',alpha:true,smoke:true,p:vadd(vc,sphR(RAD*.2)),v,t:-.08-rnd()*.15,life:1.1+rnd()*.9,size:RAD*(.1+rnd()*.1),ax:vnorm(sphR(1)),ang:rnd()*6,spin:(rnd()-.5)*3,drag:1.4,g:-25,col:barrel?[.09,.08,.09]:[.16,.15,.19]});}
+  {const t1=vlen(vcross(n,V(0,1,0)))>.1?vnorm(vcross(n,V(0,1,0))):V(1,0,0),t2=vcross(n,t1);
+   for(let i=0;i<16;i++){const a=i/16*Math.PI*2,d=vadd(vscale(t1,Math.cos(a)),vscale(t2,Math.sin(a)));
+     addHard({type:'cube',alpha:true,smoke:true,p:vadd(vc,vscale(n,-RAD*.1)),v:vscale(d,240+rnd()*120),t:0,life:.45+rnd()*.25,size:RAD*.05,ax:vnorm(sphR(1)),ang:0,spin:9,drag:4,g:0,col:[.4,.42,.5]});}}
+}
+// PLASMA: a neon energy burst — a white-hot core, an expanding wire sphere, electric arcs, cyan and magenta sparks
+function boomPlasma(vc,n,RAD){
+  world.xflash.col=[.45,.8,1];
+  addHard({type:'disk',p:vc,t:0,life:.24,size:RAD*.55,jag:Array(14).fill(1),c0:[1,1,1,1],c1:[.3,.9,1,.7]});
+  const planes=[V(0,1,0),vnorm(V(1,.4,.2)),vnorm(V(-.3,.5,1))];
+  planes.forEach((pl,i)=>addHard({type:'ring',p:vc,t:-i*.03,life:.45,size:RAD*1.7,w:2.4,c0:i%2?[1,.25,.75,.9]:[.3,.95,1,.9],plane:pl}));
+  addHard({type:'ring',p:vc,t:0,life:.3,size:RAD*2.2,w:4,c0:[.8,.95,1,.8]});
+  for(let i=0;i<9;i++)addHard({type:'arc',p:vc,dir:vnorm(vadd(sphR(1),vscale(n,.5))),len:RAD*(.6+rnd()*.7),t:rnd()*.08,life:.22+rnd()*.15,w:1.6,c0:rnd()<.5?[.6,.95,1,1]:[1,.5,.9,1]});
+  for(let i=0;i<34;i++){const v=vadd(sphR(500+rnd()*800),vscale(n,250));
+    addHard({type:'streak',p:vc,v,t:0,life:.2+rnd()*.25,drag:3,g:150,len:.035,w:1.1,c0:rnd()<.5?[.4,1,1,1]:[1,.4,.85,1]});}
+}
+// TOON: cartoon puffs with dark outlines — yellow/orange fire blobs that swell and pop, grey smoke puffs, speed lines
+function boomToon(vc,n,RAD){
+  addHard({type:'star',p:vc,t:0,life:.08,size:RAD*1.2,rot:rnd()*6,sp:Array.from({length:10},()=>.6+rnd()*.4),c0:[1,1,.95,1],c1:[1,.9,.4,0]});
+  for(let i=0;i<8;i++){const o=vadd(sphR(RAD*.32),vscale(n,RAD*.15));
+    addHard({type:'cel',alpha:true,p:vadd(vc,o),v:vscale(o,2.2),drag:3,t:-i*.012,life:.38+rnd()*.15,size:RAD*(.3+rnd()*.22),col:i<3?[1,.93,.45]:i<6?[1,.62,.15]:[.95,.32,.08],ink:[.13,.05,.03]});}
+  for(let i=0;i<9;i++){const o=vadd(sphR(RAD*.35),vscale(n,RAD*.2));
+    addHard({type:'cel',alpha:true,smoke:true,p:vadd(vc,o),v:vadd(vscale(o,.9),V(0,55,0)),drag:1.2,t:-.18-rnd()*.12,life:1+rnd()*.6,size:RAD*(.22+rnd()*.15),col:[.36,.35,.4],ink:[.08,.07,.1]});}
+  for(let i=0;i<10;i++){const v=vadd(sphR(900+rnd()*500),vscale(n,300));
+    addHard({type:'streak',p:vadd(vc,vscale(vnorm(v),RAD*.4)),v,t:0,life:.14+rnd()*.08,drag:2,g:0,len:.07,w:1.8,c0:[1,1,.95,1]});}
+}
 // ---- drawing: camera-facing triangles, one flat-colour program ----
 const HVS=`attribute vec3 aPos;attribute vec4 aCol;uniform mat4 uVP;uniform mat4 uWorldFix;varying vec4 vCol;
 void main(){vCol=aCol;gl_Position=uVP*(uWorldFix*vec4(aPos,1.0));}`;
@@ -3792,11 +3852,40 @@ function drawHardFX(){
   if(!HR){const p=gl.createProgram();for(const [t,src] of [[gl.VERTEX_SHADER,HVS],[gl.FRAGMENT_SHADER,HFS]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);gl.attachShader(p,s);}
     gl.linkProgram(p);HR={p,buf:gl.createBuffer(),aPos:gl.getAttribLocation(p,'aPos'),aCol:gl.getAttribLocation(p,'aCol'),uVP:gl.getUniformLocation(p,'uVP'),uWorldFix:gl.getUniformLocation(p,'uWorldFix')};}
   const fw=cam.fwd;let rt=vcross(fw,V(0,1,0));rt=vlen(rt)<1e-3?V(1,0,0):vnorm(rt);const up=vcross(rt,fw);
-  const out=[],P=(p,c)=>out.push(p.x,p.y,p.z,c[0],c[1],c[2],c[3]);
+  const outA=[],outB=[];let out=outB;const P=(p,c)=>out.push(p.x,p.y,p.z,c[0],c[1],c[2],c[3]);
   const tri=(a,b,c,ca,cb,cc)=>{P(a,ca);P(b,cb);P(c,cc);};
   const at=(o,ax,ay,x,y)=>vadd(o,vadd(vscale(ax,x),vscale(ay,y)));
   const mixc=(a,b,k)=>a.map((x,i)=>x+(b[i]-x)*k);
-  for(const f of hardFX){if(f.t<0)continue;const k=clamp(f.t/f.life,0,1);
+  const FIRE=[[1,1,.92],[1,.9,.4],[1,.55,.12],[.75,.18,.05],[.16,.12,.12]];
+  const fireAt=k=>{const x=clamp(k,0,.999)*(FIRE.length-1),i=Math.floor(x),u=x-i;return FIRE[i].map((v,j)=>v+(FIRE[i+1][j]-v)*u);};
+  const L3=vnorm(V(.35,.85,.4));
+  for(const f of hardFX){if(f.t<0)continue;const k=clamp(f.t/f.life,0,1);out=f.alpha?outA:outB;
+    if(f.type==='cube'){ // a tumbling cube, its faces shaded
+      const s=f.size*(f.smoke?(.7+k*.8):(1-k*.55))/2,q=qaxis(f.ax,f.ang),X=qrot(q,V(s,0,0)),Y=qrot(q,V(0,s,0)),Z=qrot(q,V(0,0,s));
+      const col=f.fire?fireAt(k):f.col,a=f.smoke?(1-k)*.85:1;
+      for(const [nn,u,v] of [[X,Y,Z],[vscale(X,-1),Z,Y],[Y,Z,X],[vscale(Y,-1),X,Z],[Z,X,Y],[vscale(Z,-1),Y,X]]){
+        const lit=f.fire?(.75+.25*Math.max(0,vdot(vnorm(nn),L3))):(.55+.45*Math.max(0,vdot(vnorm(nn),L3)));const c=[col[0]*lit,col[1]*lit,col[2]*lit,a];
+        const o=vadd(f.p,nn),p00=vsub(vsub(o,u),v),p10=vsub(vadd(o,u),v),p11=vadd(vadd(o,u),v),p01=vadd(vsub(o,u),v);
+        tri(p00,p10,p11,c,c,c);tri(p00,p11,p01,c,c,c);}
+      if(f.fire&&k<.5){out=outB;const g=[col[0],col[1],col[2],.35*(1-k*2)],s2=s*1.9;tri(vadd(f.p,vscale(rt,-s2)),vadd(f.p,vscale(up,s2)),vadd(f.p,vscale(rt,s2)),g,g,g);tri(vadd(f.p,vscale(rt,-s2)),vadd(f.p,vscale(rt,s2)),vadd(f.p,vscale(up,-s2)),g,g,g);}
+      continue;}
+    if(f.type==='cel'){ // a cartoon puff: dark outline, flat fill, a lighter highlight
+      const sw=Math.sin(Math.min(1,k*1.6)*Math.PI*.5),s=f.size*(f.smoke?(.5+k*.9):(.45+.75*sw)*(k>.7?1-(k-.7)/.3:1)),a=f.smoke?1-k*k:1;
+      if(s<.5)continue;const N2=18,ring=(r,c,dx,dy)=>{for(let i=0;i<N2;i++){const a0=i/N2*Math.PI*2,a1=(i+1)/N2*Math.PI*2,o=at(f.p,rt,up,dx,dy);tri(o,at(o,rt,up,Math.cos(a0)*r,Math.sin(a0)*r),at(o,rt,up,Math.cos(a1)*r,Math.sin(a1)*r),c,c,c);}};
+      ring(s*1.1,[...f.ink,a],0,0);ring(s,[...f.col,a],0,0);ring(s*.45,[Math.min(1,f.col[0]*1.15+.1),Math.min(1,f.col[1]*1.15+.1),Math.min(1,f.col[2]*1.15+.1),a],-s*.28,s*.3);
+      continue;}
+    if(f.type==='scorch'){ // flat on the surface it hit, fading out over its life
+      const pl=f.plane;let ax=vnorm(vcross(pl,Math.abs(pl.y)<.9?V(0,1,0):V(1,0,0))),ay=vcross(pl,ax);const ca=Math.cos(f.rot),sa=Math.sin(f.rot);[ax,ay]=[vadd(vscale(ax,ca),vscale(ay,sa)),vsub(vscale(ay,ca),vscale(ax,sa))];
+      const a=Math.min(1,(1-k)*4)*.85,c0=[.015,.012,.015,a],c1=[.02,.015,.02,0],n=f.jag.length;
+      for(let i=0;i<n;i++){const a0=i/n*Math.PI*2,a1=(i+1)/n*Math.PI*2,r0=f.size*f.jag[i],r1=f.size*f.jag[(i+1)%n];
+        tri(f.p,at(f.p,ax,ay,Math.cos(a0)*r0,Math.sin(a0)*r0),at(f.p,ax,ay,Math.cos(a1)*r1,Math.sin(a1)*r1),c0,c1,c1);}
+      continue;}
+    if(f.type==='arc'){ // a jagged electric arc, re-drawn every frame so it crackles
+      let side=vcross(f.dir,cam.fwd);side=vlen(side)<1e-3?rt:vnorm(side);const up2=vnorm(vcross(side,f.dir)),c=f.c0.map((x,i)=>i===3?x*(1-k):x);
+      let prev=f.p;const segs=7;for(let i=1;i<=segs;i++){const along=f.len*i/segs*(.6+.4*Math.min(1,k*3));
+        const nx=i<segs?vadd(vadd(vadd(f.p,vscale(f.dir,along)),vscale(side,(Math.random()-.5)*f.len*.25)),vscale(up2,(Math.random()-.5)*f.len*.25)):vadd(f.p,vscale(f.dir,along));
+        const sd=vscale(side,f.w);tri(vadd(prev,sd),vsub(prev,sd),vadd(nx,sd),c,c,c);tri(vsub(prev,sd),vsub(nx,sd),vadd(nx,sd),c,c,c);prev=nx;}
+      continue;}
     if(f.type==='star'){const s=f.size*(.7+k*.5),n=f.sp.length,fade=1-k,c0=f.c0.map((x,i)=>i===3?x*fade:x),c1=f.c1;
       for(let i=0;i<n;i++){const a0=f.rot+i/n*Math.PI*2,a1=f.rot+(i+.5)/n*Math.PI*2,a2=f.rot+(i+1)/n*Math.PI*2,ri=s*.16;
         const tip=at(f.p,rt,up,Math.cos(a1)*s*f.sp[i],Math.sin(a1)*s*f.sp[i]);
@@ -3814,14 +3903,19 @@ function drawHardFX(){
       const c=f.c0.map((x,i)=>i===3?x*(1-k):x),ct=mixc(c,[1,.35,.05,0],1);
       tri(vadd(f.p,side),vsub(f.p,side),tail,c,c,ct);}
   }
-  if(!out.length)return;
+  if(!outA.length&&!outB.length)return;
   gl.useProgram(HR.p);for(let a=0;a<8;a++)gl.disableVertexAttribArray(a);
-  gl.bindBuffer(gl.ARRAY_BUFFER,HR.buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(out),gl.DYNAMIC_DRAW);
-  gl.enableVertexAttribArray(HR.aPos);gl.vertexAttribPointer(HR.aPos,3,gl.FLOAT,false,28,0);
-  gl.enableVertexAttribArray(HR.aCol);gl.vertexAttribPointer(HR.aCol,4,gl.FLOAT,false,28,12);
+  gl.bindBuffer(gl.ARRAY_BUFFER,HR.buf);
   gl.uniformMatrix4fv(HR.uVP,false,FR.vp);gl.uniformMatrix4fv(HR.uWorldFix,false,FR.fix);
-  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);gl.depthMask(false);gl.disable(gl.CULL_FACE);
-  gl.drawArrays(gl.TRIANGLES,0,out.length/7);
+  gl.enable(gl.BLEND);gl.depthMask(false);gl.disable(gl.CULL_FACE);
+  for(const [arr,add] of [[outA,false],[outB,true]]){if(!arr.length)continue;
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(HR.aPos);gl.vertexAttribPointer(HR.aPos,3,gl.FLOAT,false,28,0);
+    gl.enableVertexAttribArray(HR.aCol);gl.vertexAttribPointer(HR.aCol,4,gl.FLOAT,false,28,12);
+    gl.blendFunc(gl.SRC_ALPHA,add?gl.ONE:gl.ONE_MINUS_SRC_ALPHA);
+    if(!add){gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-1,-2);}
+    gl.drawArrays(gl.TRIANGLES,0,arr.length/7);
+    gl.disable(gl.POLYGON_OFFSET_FILL);}
   gl.depthMask(true);gl.disable(gl.BLEND);
   gl.disableVertexAttribArray(HR.aPos);gl.disableVertexAttribArray(HR.aCol);
 }
@@ -4153,7 +4247,7 @@ let gameState='menu',winner=null,paused=false;
 const cam={yaw:0,pitch:-.15,pos:V(0,0,0),fwd:V(0,0,1)};
 
 function doRotate(key,kicker,stop){
-  gibs=[];
+  gibs=[];hardFX=hardFX.filter(f=>f.type!=='scorch');
   const r=ROT[key];
   rotateGridOnly(key);rotateDeco(key);buildLevelMesh();buildDecoMesh();buildNav();
   const P=(x,y,z)=>{const q=r.pt(x,y,z);return V(q[0],q[1],q[2]);},Vv=(x,y,z)=>{const q=r.vec(x,y,z);return V(q[0],q[1],q[2]);};
@@ -4236,7 +4330,7 @@ const cv=document.getElementById('c'),hud=document.getElementById('hud'),hctx=hu
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(!keys[k])pressed[k]=true;keys[k]=true;
   if(world.demo&&gameState==='play'&&!paused&&!e.repeat){if(k==='a'||k==='arrowleft')demoCycle(-1);if(k==='d'||k==='arrowright')demoCycle(1);}
   if(k==='escape'&&gameState==='play'&&!TUT.cardOpen){setPaused(!paused);}
-  if(gameState==='over'&&world.fixedArena&&!world.demo&&!TUT.on){if(k==='enter')endChoice('same');else if(k==='r')endChoice('random');else if(k==='escape')endChoice('menu');return;}
+  if(gameState==='over'&&!world.demo&&!TUT.on){if(k==='enter')endChoice('same');else if(k==='r')endChoice('random');else if(k==='escape')endChoice('menu');return;}
   if(k==='enter'&&gameState==='over'&&!TUT.cardOpen){if(TUT.on)startTutorial(TUT.id);else newMatch(world.demo?(SETTINGS.seed||'').trim()||undefined:undefined,{demo:world.demo});}
   if(gameState==='play'&&Object.values(SETTINGS.kb).includes(k))e.preventDefault();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
@@ -4586,12 +4680,12 @@ function drawHUD(){
   }
   if(TUT.on)tutHUD(c);
   if(paused){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);}
-  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(!world.demo&&(winner===p||allied(winner,p))?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';if(!TUT.on&&!world.fixedArena)c.fillText('press ENTER for a new arena',W/2,H/2+24);}
+  if(gameState==='over'&&winner){c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);c.font='bold 40px "Courier New",monospace';c.fillStyle=winner.color;c.fillText(!world.demo&&(winner===p||allied(winner,p))?(TUT.on?'YOU WIN':winner.team?'YOUR TEAM WINS THE ARENA':'YOU WIN THE ARENA'):`${winner.team?'TEAM '+sideName(winner):winner.name} WINS`,W/2,H/2-10);if(winner.team){c.font='15px "Courier New",monospace';c.fillText(sideName(winner).split('+').join('  ·  '),W/2,H/2+50);}c.font='16px "Courier New",monospace';c.fillStyle='#ccd';}
   if(world.flash>0){c.fillStyle=`rgba(255,63,164,${world.flash*.3})`;c.fillRect(0,0,W,H);}
 }
 
 // ---------- settings (start screen) ----------
-const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50,padSeen:false,charStyle:'lines',speed:85,kb:Object.assign({},KB_DEF),gp:Object.assign({},GP_DEF)};
+const SETTINGS={bots:3,skill:'normal',frags:15,color:'#29f0ff',name:'',seed:'',input:'mouse',sens:100,music:55,fx:80,fps:false,assist:true,assistStr:50,padSeen:false,charStyle:'lines',boom:'voxel',speed:85,kb:Object.assign({},KB_DEF),gp:Object.assign({},GP_DEF)};
 const playerName=()=>(SETTINGS.name||'').trim().toUpperCase().slice(0,12)||'YOU';
 const PLAYER_COLORS=['#29f0ff','#ff3fa4','#ffb020','#9dff3a','#b06bff','#ff5a3c','#ffffff','#3c8cff','#ffe23c','#00e0a0'];
 // a bot (or tutorial actor) that would share your colour gets the colour you gave up
@@ -4599,7 +4693,7 @@ function freeColor(col){const used=new Set(chars.map(c=>c.color));return PLAYER_
 function fixColorClash(){const p=chars.find(c=>!c.isBot);if(!p)return;for(const b of chars)if(b!==p&&b.color.toLowerCase()===p.color.toLowerCase()){b.color=freeColor(b.color);b.col=hexRGB(b.color);}}
 try{const s=JSON.parse(localStorage.getItem('gravityShiftSettings')||'null');if(s){if(s.bots>=0&&s.bots<=7)SETTINGS.bots=s.bots|0;if(BOT_SKILLS[s.skill])SETTINGS.skill=s.skill;if(s.frags>=10&&s.frags<=50)SETTINGS.frags=s.frags|0;if(PLAYER_COLORS.includes(s.color))SETTINGS.color=s.color;
   if(typeof s.name==='string')SETTINGS.name=s.name.slice(0,12);if(typeof s.seed==='string')SETTINGS.seed=s.seed.slice(0,40);if(s.input==='gamepad')SETTINGS.input='gamepad';
-  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(['solid','lines','shiny','ink','inkShiny'].includes(s.charStyle))SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
+  for(const k of ['sens','music','fx'])if(typeof s[k]==='number'&&s[k]>=0&&s[k]<=250)SETTINGS[k]=s[k];SETTINGS.fps=!!s.fps;if(typeof s.assist==='boolean')SETTINGS.assist=s.assist;if(typeof s.assistStr==='number'&&s.assistStr>=0&&s.assistStr<=100)SETTINGS.assistStr=s.assistStr;SETTINGS.padSeen=!!s.padSeen||SETTINGS.input==='gamepad';if(['classic','sharp','voxel','plasma','toon'].includes(s.boom))SETTINGS.boom=s.boom;if(['solid','lines','shiny','ink','inkShiny'].includes(s.charStyle))SETTINGS.charStyle=s.charStyle;if(s.speed>=60&&s.speed<=100)SETTINGS.speed=s.speed|0;
   if(s.kb)for(const a in KB_DEF)if(typeof s.kb[a]==='string'&&s.kb[a])SETTINGS.kb[a]=s.kb[a];
   if(s.gp)for(const a in GP_DEF)if(Number.isInteger(s.gp[a])&&s.gp[a]>=-1&&s.gp[a]<20&&s.gp[a]!==9)SETTINGS.gp[a]=s.gp[a];}}catch(e){}
 function getSettings(){return SETTINGS;}
@@ -4779,6 +4873,7 @@ function wireMenu(){
     $('asdesc').textContent=pad?'slows the look on a target, tracks and pulls toward it · RB snaps on':'gamepad only — switch Controls to Gamepad to use it';};
   opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{
     SETTINGS.input=v;if(v==='gamepad'&&!SETTINGS.padSeen){SETTINGS.padSeen=true;SETTINGS.assist=true;SETTINGS.assistStr=50;$('asSl').value=50;}drawAssist();});
+  opts($('boomopt'),[['voxel','VOXEL'],['plasma','PLASMA'],['toon','TOON'],['sharp','SHARP'],['classic','CLASSIC']],()=>SETTINGS.boom,v=>{SETTINGS.boom=v;});
   opts($('styleopt'),[['lines','LINES'],['solid','SOLID'],['shiny','SHINY'],['ink','INK'],['inkShiny','INK GLOSS']],()=>SETTINGS.charStyle,v=>{SETTINGS.charStyle=v;});
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
@@ -5009,7 +5104,7 @@ if(document.body)(function(){const h=document.createElement('div');h.id='sndhint
   setInterval(()=>{const blocked=!AC||AC.state!=='running';h.style.display=blocked&&(SETTINGS.fx>0||SETTINGS.music>0)&&!window.VIEWER?'block':'none';},500);})();
 
 // ---------- end of a match on one of the four arenas: play it again, a random arena, or the main menu ----------
-function endOptsOn(){return gameState==='over'&&world.fixedArena&&!world.demo&&!TUT.on&&!TUT.cardOpen;}
+function endOptsOn(){return gameState==='over'&&!world.demo&&!TUT.on&&!TUT.cardOpen;}
 function endChoice(c){
   if(!endOptsOn())return;
   if(c==='same')newMatch(world.seedLabel);else if(c==='random')newMatch();
@@ -5708,7 +5803,7 @@ async function loadModel(){
       const deriv=!!gl.getExtension('OES_standard_derivatives');
       let fs=(deriv?'#extension GL_OES_standard_derivatives : enable\n':'')+base.replace('varying vec3 vW;','varying vec3 vW;varying vec3 vB;');
       fs=fs.replace('gl_FragColor=vec4(mix(uFog,col,f),uAlpha);',
-        'vec3 wB='+(deriv?'fwidth(vB)*0.95':'vec3(0.035)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
+        'vec3 wB='+(deriv?'fwidth(vB)*2.4':'vec3(0.08)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
         'col=mix(col,vec3(0.012,0.01,0.018),ink*0.9);gl_FragColor=vec4(mix(uFog,col,f),uAlpha);');
       const pr=gl.createProgram();
       for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,fs]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);

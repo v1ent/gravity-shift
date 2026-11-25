@@ -151,7 +151,7 @@ async function loadModel(){
       const deriv=!!gl.getExtension('OES_standard_derivatives');
       let fs=(deriv?'#extension GL_OES_standard_derivatives : enable\n':'')+base.replace('varying vec3 vW;','varying vec3 vW;varying vec3 vB;');
       fs=fs.replace('gl_FragColor=vec4(mix(uFog,col,f),uAlpha);',
-        'vec3 wB='+(deriv?'fwidth(vB)*0.95':'vec3(0.035)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
+        'vec3 wB='+(deriv?'fwidth(vB)*2.4':'vec3(0.08)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
         'col=mix(col,vec3(0.012,0.01,0.018),ink*0.9);gl_FragColor=vec4(mix(uFog,col,f),uAlpha);');
       const pr=gl.createProgram();
       for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,fs]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);

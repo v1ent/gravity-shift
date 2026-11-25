@@ -103,6 +103,7 @@ void main(){
     col=mix(col,mix(vec3(0.06),vec3(0.9,0.7,0.15),s)*(0.55+0.5*dif),band*0.85);ec=vec3(1.0,0.8,0.25);
   }
   if(vEm>5.5){ec*=0.35;}
+  if(vEm>7.5&&vEm<8.5){ec=vec3(0.0);} // plain machinery parts: no glowing edges
   if(vEm>1.5&&vEm<2.5){ec=vec3(1.0,0.75,0.25);}
   col+=ec*(edge*0.9+sm*0.35);
   if((vEm>0.5&&vEm<1.5)||(vEm>2.5&&vEm<3.5)){ // gravity panel: a screen when live, switched off on floors and ceilings

@@ -105,7 +105,7 @@ function sfxSample(kind,at){
   return false;
 }
 function sfx(kind,at){
-  if(!AC)return;if(sfxSample(kind,at))return;let vol=1;
+  if(!AC)return;if(at&&!isFinite(at.x+at.y+at.z))at=null;if(sfxSample(kind,at))return;let vol=1; // (a sound with a broken position plays without one)
   if(at&&player){const d=Math.hypot(at.x-player.x,at.y-player.y,at.z-player.z);vol=clamp(1-d/1300,.06,1);}
   const t=AC.currentTime,g=AC.createGain();g.connect(master);
   const noise=(dur,f,q,type)=>{const s=AC.createBufferSource();s.buffer=noiseBuf;const fl=AC.createBiquadFilter();fl.type=type||'bandpass';fl.frequency.value=f;fl.Q.value=q||1;s.connect(fl);fl.connect(g);s.start(t,Math.random()*.5,dur);};
@@ -247,7 +247,7 @@ function updateBullets(dt){
     if(!b.flew&&player&&player.alive&&b.owner!==player){const h=headPos(player);if(Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z)<90){b.flew=true;sfx('flyby',b);}}
     for(let s=0;s<steps&&!dead;s++){
       b.x+=sx;b.y+=sy;b.z+=sz;
-      if(solid(tileAt(b.x,b.y,b.z))){dead=true;sparkAt(b.x-sx,b.y-sy,b.z-sz,b.col);panelShot(b.x,b.y,b.z,1,b);break;}
+      if(solid(tileAt(b.x,b.y,b.z))){dead=true;sparkAt(b.x-sx,b.y-sy,b.z-sz,b.col);panelShot(b.x,b.y,b.z,b.pellet?.3:1,b);break;} // a shotgun blast (9 pellets) costs the grid 2.7: three blasts take it down
       for(const e of chars){
         if(e===b.owner||!e.alive)continue;
         if(Math.abs(b.x-e.x)<e.w/2+2&&Math.abs(b.z-e.z)<e.w/2+2&&b.y>e.y&&b.y<e.y+e.h){
@@ -280,7 +280,7 @@ function panelShot(x,y,z,n,src){
   const i=Math.floor(x/T),j=Math.floor(y/T),k=Math.floor(z/T);if(!isLiveK(i,j,k)||world.panelOff>0||world.rot)return;
   world.panelHP=(world.panelHP===undefined?PANEL_HP:world.panelHP)-n;world.panelHitT=world.time;world.panelGlitch=1;
   for(let q=0;q<6;q++)addPart(x,y,z,(rnd()-.5)*380,rnd()*260,(rnd()-.5)*380,.25+rnd()*.3,[1,.3,.75],2.5,'spark');
-  sfx('pzap',src);
+  if(world.time-(world.pzapT||-9)>.06){world.pzapT=world.time;sfx('pzap',src);}
   if(world.panelHP<=0){
     world.panelOff=PANEL_OFF;world.panelHP=PANEL_HP;world.rotCD=Math.max(world.rotCD,PANEL_OFF);world.panelBy=src&&src.owner;
     sfx('pdown');world.flash=Math.max(world.flash,.35);
@@ -318,13 +318,17 @@ function explosionFX(c,RAD,o){
   const vc=offSurface(c,26),n=vlen(vsub(vc,c))>1?vnorm(vsub(vc,c)):V(0,1,0),barrel=!!o.barrel;
   world.xflash={p:vc,r:RAD*3.2,col:barrel?[1,.55,.2]:[1,.7,.35],t:world.time,dur:barrel?.4:.28};
   const free=p=>solid(tileAt(p.x,p.y,p.z))?vc:p,sph=k=>{const a=rnd()*Math.PI*2,b=Math.asin(rnd()*2-1);return V(Math.cos(a)*Math.cos(b)*k,Math.sin(b)*k,Math.sin(a)*Math.cos(b)*k);};
-  // the sharp part: star flashes, a jagged fireball, shockwaves, spark streaks (src/04f_hardfx.js)
-  hardBlast(vc,n,RAD,barrel);
-  // a few glowing embers that linger, and a thin quick wisp of smoke
-  for(let i=0;i<10;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,.9+rnd()*1.1,rnd()<.5?[1,.6,.15]:[1,.35,.08],2+rnd()*1.2,'ember');}
-  for(let i=0;i<5;i++){const p=free(vadd(vc,sph(10+rnd()*20)));addPart(p.x,p.y,p.z,(rnd()-.5)*60+n.x*40,60+rnd()*40,(rnd()-.5)*60+n.z*40,.7+rnd()*.5,[.12,.1,.13],10+rnd()*8,'smoke');}
+  // the look: Options > Explosions (src/04f_hardfx.js)
+  const style=SETTINGS.boom||'voxel';
+  if(style==='classic'){world.xflash.dur=barrel?.7:.5;boomClassic(vc,n,c,RAD,barrel,free,sph);}
+  else if(style==='sharp'){hardBlast(vc,n,RAD,barrel);
+    for(let i=0;i<10;i++){const v=sph(60+rnd()*260);addPart(vc.x,vc.y,vc.z,v.x+n.x*80,v.y+n.y*80+140,v.z+n.z*80,.9+rnd()*1.1,rnd()<.5?[1,.6,.15]:[1,.35,.08],2+rnd()*1.2,'ember');}
+    for(let i=0;i<5;i++){const p=free(vadd(vc,sph(10+rnd()*20)));addPart(p.x,p.y,p.z,(rnd()-.5)*60+n.x*40,60+rnd()*40,(rnd()-.5)*60+n.z*40,.7+rnd()*.5,[.12,.1,.13],10+rnd()*8,'smoke');}}
+  else if(style==='plasma')boomPlasma(vc,n,RAD);
+  else if(style==='toon')boomToon(vc,n,RAD);
+  else boomVoxel(vc,n,RAD,barrel);
   // scorch on the surface
-  {const p=offSurface(c,1.5);if(vlen(vsub(p,c))>.5)parts.push({x:p.x,y:p.y,z:p.z,vx:0,vy:0,vz:0,life:10,max:10,col:[.02,.015,.02],size:RAD*.55,type:'scorch'});}
+  {const p=offSurface(c,1.2);if(vlen(vsub(p,c))>.5)addHard({type:'scorch',alpha:true,p,plane:vnorm(vsub(p,c)),t:0,life:12,size:RAD*.6,rot:rnd()*6,jag:Array.from({length:14},()=>.75+rnd()*.4)});}
   // debris: torn barrel shell that burns, or chips of the wall/floor
   const dc=barrel?o.barrel.col:[.3,.32,.4];
   for(let i=0;i<(barrel?9:6);i++){const v=vadd(sph(160+rnd()*280),vscale(n,220)),p=free(vadd(vc,sph(8)));

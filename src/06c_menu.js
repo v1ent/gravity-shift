@@ -50,6 +50,7 @@ function wireMenu(){
     $('asdesc').textContent=pad?'slows the look on a target, tracks and pulls toward it · RB snaps on':'gamepad only — switch Controls to Gamepad to use it';};
   opts($('ctlmode'),[['mouse','MOUSE + KEYBOARD'],['gamepad','GAMEPAD']],()=>SETTINGS.input,v=>{
     SETTINGS.input=v;if(v==='gamepad'&&!SETTINGS.padSeen){SETTINGS.padSeen=true;SETTINGS.assist=true;SETTINGS.assistStr=50;$('asSl').value=50;}drawAssist();});
+  opts($('boomopt'),[['voxel','VOXEL'],['plasma','PLASMA'],['toon','TOON'],['sharp','SHARP'],['classic','CLASSIC']],()=>SETTINGS.boom,v=>{SETTINGS.boom=v;});
   opts($('styleopt'),[['lines','LINES'],['solid','SOLID'],['shiny','SHINY'],['ink','INK'],['inkShiny','INK GLOSS']],()=>SETTINGS.charStyle,v=>{SETTINGS.charStyle=v;});
   opts($('fpsopt'),[[false,'OFF'],[true,'ON']],()=>SETTINGS.fps,v=>{SETTINGS.fps=v;});
   const slider=(id,vid,key,fmt,after)=>{const sl=$(id),vv=$(vid);sl.value=SETTINGS[key];vv.textContent=fmt(SETTINGS[key]);
@@ -280,7 +281,7 @@ if(document.body)(function(){const h=document.createElement('div');h.id='sndhint
   setInterval(()=>{const blocked=!AC||AC.state!=='running';h.style.display=blocked&&(SETTINGS.fx>0||SETTINGS.music>0)&&!window.VIEWER?'block':'none';},500);})();
 
 // ---------- end of a match on one of the four arenas: play it again, a random arena, or the main menu ----------
-function endOptsOn(){return gameState==='over'&&world.fixedArena&&!world.demo&&!TUT.on&&!TUT.cardOpen;}
+function endOptsOn(){return gameState==='over'&&!world.demo&&!TUT.on&&!TUT.cardOpen;}
 function endChoice(c){
   if(!endOptsOn())return;
   if(c==='same')newMatch(world.seedLabel);else if(c==='random')newMatch();
