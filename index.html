@@ -96,7 +96,9 @@ body.nocur,body.nocur canvas{cursor:none!important}
 #tut td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:13px;color:#b9c8dd}
 #tut td:first-child{color:#ffcc33;width:130px}
 #tut p{line-height:1.45;color:#b9c8dd;margin:7px 0;font-size:13px}
-#tut details.howto{margin-top:10px;border:1px solid #29f0ff33;padding:6px 12px;background:#0b0f1d}
+#tut .howto{margin-top:10px;border:1px solid #29f0ff33;padding:6px 12px;background:#0b0f1d;max-height:70vh;overflow:auto}
+#tut button#howtoBtn{width:100%;margin:0 0 10px;padding:12px;font-size:15px;letter-spacing:3px;background:#0e1424;color:#29f0ff;border:1px solid #29f0ff}
+#tut button#howtoBtn:hover{background:#ff3fa4;color:#05060c;border-color:#ff3fa4}
 #tut details.howto summary{cursor:pointer;color:#29f0ff;letter-spacing:3px;font-size:14px;padding:4px 0}
 #tut button.room.pf,#tut button.alt.pf,#tut summary.pf{outline:2px solid #29f0ff}
 #pause button.pf{background:#29f0ff;color:#05060c}
@@ -185,9 +187,12 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <div id="tut"><div class="box">
 <h1>GRAVITY<span>SHIFT</span></h1>
 <div class="sub">TUTORIAL // HOW TO PLAY</div>
+<div id="tutmain">
+<div style="text-align:center"><button id="howtoBtn" class="mi">HOW TO PLAY — CONTROLS AND RULES</button></div>
 <div id="tutlist"></div>
 <p class="note">ESC in any room opens the menu — restart the room, pick another one, or go back to the main menu.</p>
-<details class="howto"><summary>HOW TO PLAY — CONTROLS AND RULES</summary>
+</div>
+<div id="howto" class="howto" style="display:none">
 <table>
 <tr><td>MOUSE</td><td>Look / aim (click the game to capture the mouse)</td></tr>
 <tr><td data-k="{fwd} {left} {back} {right}">W A S D</td><td>Walk · <b>double-tap W / S / A / D</b> to dodge: dive-roll forward, back, left, right (costs stamina)</td></tr>
@@ -218,8 +223,9 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <tr><td>Y · LB</td><td>Next weapon · reload</td></tr>
 <tr><td>START</td><td>Pause · in menus the D-pad / left stick moves, A selects, B goes back</td></tr>
 </table>
-</details>
-<div style="text-align:center;margin-top:12px"><button id="tutback" class="alt">BACK</button></div>
+<div style="text-align:center;margin-top:12px"><button id="howtoBack" class="alt">BACK TO THE TUTORIAL</button></div>
+</div>
+<div id="tutbackrow" style="text-align:center;margin-top:12px"><button id="tutback" class="alt">BACK</button></div>
 </div></div>
 <div id="card"><div class="box"><h2 id="cardT"></h2><div id="cardB"></div><div id="cardBtns"></div></div></div>
 <script>
@@ -555,6 +561,7 @@ const isLiveK=(i,j,k)=>tile(i,j,k)===2&&(tile(i,j+1,k)===2||tile(i,j-1,k)===2);
 
 // ---------------- level generation ----------------
 function genLevel(seed){
+  const ledgeCells=new Set(); // ledge blocks next to wall panels: no hazard rims on them
   const R=mulberry32(seed);
   grid=new Uint8Array(N*N*N);stairO=new Uint8Array(N*N*N);
   const M=12,MC=3; // macro grid: 3x3x3 big rooms of 11 blocks
@@ -644,7 +651,7 @@ function genLevel(seed){
       // ledges (3 deep, 9 wide) under and over the panel
       for(const yy of [y0,y0+6]){if(yy>=N-1)continue;const mix=machineryRuns(9,R);
         for(let d=1;d<=3;d++)for(let u=u0-2;u<=u0+6;u++){const ty=mix[u-u0+2];
-          if(face==='x0')setT(d,yy,u,ty);else if(face==='x1')setT(N-1-d,yy,u,ty);else if(face==='z0')setT(u,yy,d,ty);else setT(u,yy,N-1-d,ty);}}
+          const q=face==='x0'?[d,yy,u]:face==='x1'?[N-1-d,yy,u]:face==='z0'?[u,yy,d]:[u,yy,N-1-d];setT(q[0],q[1],q[2],ty);ledgeCells.add(gi(q[0],q[1],q[2]));}}
     }
   }
   for(const face of ['y0','y1']){
@@ -677,7 +684,7 @@ function genLevel(seed){
   // ---- hazard rims on main floors
   const rim=[];
   for(const y of [6,12,18,24,30])for(let x=1;x<N-1;x++)for(let z=1;z<N-1;z++){
-    if(tile(x,y,z)!==1)continue;
+    if(tile(x,y,z)!==1||ledgeCells.has(gi(x,y,z)))continue; // (the ledges round the panels stay plain)
     if(!solid(tile(x+1,y,z))||!solid(tile(x-1,y,z))||!solid(tile(x,y,z+1))||!solid(tile(x,y,z-1)))rim.push([x,y,z]);
   }
   for(const [x,y,z] of rim)setT(x,y,z,4);
@@ -1123,14 +1130,14 @@ function genPanelDressing(){
       // devices packed along the band
       for(let x=s0+2;x<s1-6;){
         const w=Math.min(s1-2-x,8+R()*22);if(w<6)break;
-        if(R()<.45){
+        if(R()<.6){
           const cw=Math.min(W2-2,10+R()*(W2-8)),cc=c0+1+cw/2+R()*Math.max(0,W2-2-cw),hd=Math.min(maxH,4+R()*maxH*.8),xc=x+w/2;
           if(ok(xc,cc)){
             put(xc,cc,hd/2,w,cw,hd,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
             const kind=R()*6|0,f=hd+.4;
             if(kind===0)for(let y=-cw/2+3;y<cw/2-2;y+=3.2)put(xc,cc+y,f,w-4,1.1,.8,DC.slat);                        // vent bank
-            else if(kind===1){const n=1+(R()*2|0);for(let q=0;q<n;q++)put(xc-w/2+3+q*4,cc+cw/2-3,f,1.6,1.6,.8,R()<.7?DC.ledG:DC.ledR,7);} // an LED or two
-            else if(kind===2&&R()<.4)put(xc,cc,f,w-5,Math.min(cw-5,10),.6,DC.lampC,5);   // little screen (now and then)
+            else if(kind===1){const n=2+(R()*4|0);for(let q=0;q<n;q++)put(xc-w/2+3+q*(w-6)/Math.max(1,n-1),cc+cw/2-3,f,1.8,1.8,.8,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);} // a row of blinking LEDs
+            else if(kind===2)put(xc,cc,f,w-5,Math.min(cw-5,10),.6,[DC.lampC,DC.ledG,hexRGB('#ff3fa4')][R()*3|0],5);   // a little screen
             else if(kind===3)put(xc,cc,f,w-3,1.6,.6,DC.flange);   // a seam
             else if(kind===4){put(xc,cc,f+1.5,2,cw*.6,3,DC.tray);put(xc,cc,f+.2,5,5,.6,DC.pipeW,5);}                       // handle + gauge
             else{put(xc,cc,f,w*.5,cw*.5,1.2,DC.flange);put(xc+w*.3,cc+cw*.3,f+.6,2,2,.6,DC.ledG,7);}                       // hatch + LED
@@ -1197,12 +1204,12 @@ function genMachinery(){
         const sz=[0,0,0];sz[ra]=ss;sz[ca]=cs;sz[na]=out+inn;bx(p,V(sz[0],sz[1],sz[2]),col,em);};
       const up=n[1]===1&&na===1; // a top you walk on (as generated)
       if(up){
-        // plates, grates and the odd hatch, flush with the top
-        for(const a of [-1,1])for(const b of [-1,1]){const r=R(),sc=a*T/4,cc2=b*T/4;
-          if(r<.2){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.2,DARK);for(let q=-5;q<=5;q+=2.5)part(sc,cc2+q,T/2-3,.9,.2,.45,STEEL);}
-          else if(r<.27){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[0]);part(sc,cc2,T/2-6,T/2-6,.1,.5,STEEL);}
-          else part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[R()*3|0]);}
-        // a lip along any open edge: a steel nosing with yellow tape
+        // a top you can walk on: mostly one plain plate, sometimes a hatch, a grate strip along the run or a low box
+        const r=R(),pc=PLATE[R()*3|0];
+        if(r<.55)part(0,0,T-1.4,T-1.4,2.5,.2,pc);
+        else if(r<.72){part(0,0,T-1.4,T-1.4,2.5,.2,pc);const hx=(R()-.5)*8,hy=(R()-.5)*8;part(hx,hy,12,12,.1,.55,STEEL);part(hx+4,hy+4,1.6,1.6,0,.8,R()<.6?DC.ledG:DC.ledA,7);}
+        else if(r<.88){part(0,0,T-1.4,T-1.4,2.5,.2,pc);part(0,-T/4+R()*T/2,T-1.4,7,.2,.35,DARK);for(let q=-T/2+3;q<T/2-2;q+=3.2)part(q,0,1,6,0,.5,STEEL);}
+        else{part(0,0,T-1.4,T-1.4,2.5,.2,pc);const w=8+R()*8;part((R()-.5)*6,(R()-.5)*6,w,8,0,3.5,DARK);part(0,0,2.2,1.6,0,3.9,[DC.ledG,DC.ledR,DC.ledA][R()*3|0],7);}
         return;
       }
       const LY=layout(id,f);
@@ -1219,8 +1226,8 @@ function genMachinery(){
         else{part(xc,c0,w-.4,ch,2.5,out,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
           const f2=out+.35,k2=R()*5|0;
           if(k2===0)for(let y=-ch/2+1.6;y<ch/2-1;y+=2)part(xc,c0+y,w-2,.7,0,f2,DC.slat);
-          else if(k2===1&&R()<.5)part(xc-w/2+2,c0+ch/2-1.8,1.3,1.3,0,f2+.2,R()<.7?DC.ledG:DC.ledR,7);
-          else if(k2===2&&w>6&&R()<.3)part(xc,c0,w-3,Math.min(ch-2,6),0,f2,DC.lampC,5);
+          else if(k2===1)for(let q=0;q<Math.min(4,w/3|0);q++)part(xc-w/2+2+q*2.8,c0+ch/2-1.8,1.3,1.3,0,f2+.2,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);
+          else if(k2===2&&w>6)part(xc,c0,w-3,Math.min(ch-2,6),0,f2,[DC.lampC,DC.ledG][R()*2|0],5);
           else if(k2===3)part(xc,c0+ch/2-1.2,w-.4,1.6,0,f2,DC.flange);
           else part(xc,c0,w*.45,ch*.45,0,f2+.3,DC.flange);}
         s+=w;}
@@ -2413,10 +2420,12 @@ function drawWeaponsSK(e,P,SK,acc,al){
     if(e.weapon==='shotgun')drawShotgunModel(e._gunF,acc,al,0);else if(e.weapon==='rifle')drawRifleModel(e._gunF,acc,al,0,e._gunF.mag);else drawPistolModel(e._gunF,acc,al,e._gunF.slide||0);
     noteMuzzle(e,e._gunF);
   }else if(P.gunOn&&e.weapon==='pistol'&&!busy){
-    // carried in the hand along the hand's own axis; snapped onto the aim line while shooting
-    const w=clamp((e.aimW||0)*1.6,0,1),pd=e._aimDir||SK.handFwd;
-    const u=vnorm(vadd(vscale(SK.handFwd,1-w),vscale(pd,w)));
-    let v=vnorm(vadd(vscale(SK.handDown,-(1-w)),vscale(V(0,1,0),w)));v=vnorm(vsub(v,vscale(u,vdot(v,u))));
+    // relaxed: pointing forward and a little down from the body (the wrist only nudges it, so the walk and idle clips
+    // can't twist it round); snapped onto the aim line while shooting
+    const w=clamp((e.aimW||0)*1.6,0,1),fb=V(Math.sin(by),0,Math.cos(by)),pd=e._aimDir||fb;
+    const hk=Math.max(0,vdot(SK.handFwd,fb))*.25,relax=vnorm(vadd(vadd(vscale(fb,.85),V(0,-.45,0)),vscale(SK.handFwd,hk)));
+    const u=vnorm(vadd(vscale(relax,1-w),vscale(pd,w)));
+    let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?vscale(fb,-1):vnorm(v);
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
     drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);noteMuzzle(e,F);
   }else if(P.gunOn&&!busy&&twoHanded(e)){ // long gun, both hands
@@ -4391,6 +4400,28 @@ const dblTap={};
 // ---------- camera ----------
 // keep the camera at least r away from every wall, floor and ceiling: the near clipping plane is only 2 units
 // from the eye, so a camera that skims a surface at a shallow angle would otherwise see through it
+// the camera also stops at decoration it would otherwise slide into (door and window frames, pipes, machinery):
+// boxes bigger than a few units, grown by a small margin, tested along the line from the shoulder back to the camera
+function camDecoRay(pv,fw,back){
+  const M=4;let best=back;
+  for(const d of deco){const s=d.s;if(s[0]<5&&s[1]<5&&s[2]<5)continue;
+    const dx=d.c.x-pv.x,dy=d.c.y-pv.y,dz=d.c.z-pv.z,reach=back+s[0]+s[1]+s[2];if(dx*dx+dy*dy+dz*dz>reach*reach)continue;
+    let t0=-1e9,t1=1e9,inside=true;const o=[pv.x,pv.y,pv.z],dir=[-fw.x,-fw.y,-fw.z],c=[d.c.x,d.c.y,d.c.z];
+    for(let a=0;a<3;a++){const lo=c[a]-s[a]/2-M,hi=c[a]+s[a]/2+M;if(o[a]<lo||o[a]>hi)inside=false;
+      if(Math.abs(dir[a])<1e-6){if(o[a]<lo||o[a]>hi){t0=1e9;break;}continue;}
+      let ta=(lo-o[a])/dir[a],tb=(hi-o[a])/dir[a];if(ta>tb){const q=ta;ta=tb;tb=q;}t0=Math.max(t0,ta);t1=Math.min(t1,tb);}
+    if(inside)continue; // the player is standing in it: nothing sensible to do
+    if(t0<=t1&&t0>0&&t0<best)best=Math.max(8,t0-2);}
+  return best;
+}
+function camDecoOut(p,M){
+  const q=[p.x,p.y,p.z];
+  for(const d of deco){const s=d.s;if(s[0]<5&&s[1]<5&&s[2]<5)continue;const c=[d.c.x,d.c.y,d.c.z];let pen=1e9,ax=-1,sg=0;
+    for(let a=0;a<3;a++){const lo=c[a]-s[a]/2-M,hi=c[a]+s[a]/2+M;if(q[a]<=lo||q[a]>=hi){ax=-2;break;}
+      const pl=q[a]-lo,ph=hi-q[a];if(pl<pen){pen=pl;ax=a;sg=-1;}if(ph<pen){pen=ph;ax=a;sg=1;}}
+    if(ax>=0)q[ax]+=sg*pen;}
+  return V(q[0],q[1],q[2]);
+}
 function camPushOut(p,r){
   const q=[p.x,p.y,p.z];
   for(let pass=0;pass<2;pass++)for(let a=0;a<3;a++)for(const s of [1,-1]){
@@ -4414,7 +4445,8 @@ function updateCamera(){
   const r=rayVoxel(pivot,vscale(fw,-1),back+8);if(r.t<back+8)back=Math.max(8,r.t-8);
   // keep the shoulder pivot itself out of walls
   let pv=pivot;if(solid(tileAt(pv.x,pv.y,pv.z)))pv=head;
-  let pos=camPushOut(vadd(pv,vscale(fw,-back)),7);
+  back=camDecoRay(pv,fw,back);
+  let pos=camDecoOut(camPushOut(vadd(pv,vscale(fw,-back)),7),5);
   if(world.shake>0)pos=vadd(pos,V((rnd()-.5)*world.shake*.6,(rnd()-.5)*world.shake*.6,(rnd()-.5)*world.shake*.6));
   cam.pos=pos;cam.fwd=fw;cam.back=back;
   // aim point: what's under the crosshair (in world coordinates, also while the arena turns)
@@ -5640,8 +5672,12 @@ function openTutMenu(){
     b.innerHTML=`<span class="n">${i+1}</span><span class="t">${r.name}<small>${r.desc}</small></span><span class="ok">${TUT.done[r.id]?'✓':''}</span>`;
     b.onclick=()=>{if(!AC)initAudio();if(AC&&AC.state==='suspended')AC.resume();document.getElementById('tut').style.display='none';startTutorial(r.id);};
     list.appendChild(b);});
-  document.getElementById('tut').style.display='flex';
+  tutHowto(false);document.getElementById('tut').style.display='flex';
 }
+// the how-to-play page inside the tutorial menu: its own button first in the list, and a way back
+function tutHowto(on){const g=id=>document.getElementById(id);if(!g('howto'))return;
+  g('howto').style.display=on?'block':'none';g('tutmain').style.display=on?'none':'block';g('tutbackrow').style.display=on?'none':'block';}
+if(typeof document!=='undefined'&&document.getElementById('howtoBtn')){document.getElementById('howtoBtn').onclick=()=>tutHowto(true);document.getElementById('howtoBack').onclick=()=>tutHowto(false);}
 document.getElementById('tutback').onclick=()=>{document.getElementById('tut').style.display='none';showMenu('pgMain');};
 
 // Character animation clips (Adobe Mixamo), converted by assets/convert_anims.py — not covered by the MIT license
@@ -5731,7 +5767,7 @@ void main(){
 }`;}
 // LINE_ANGLE: how sharp a crease must be to draw (higher = fewer lines). A line is kept only if its mirror twin on the
 // other side of the body (x → -x) is a line too, so the pattern is symmetric even where the two sides are triangulated differently.
-const LINE_ANGLE=42,LINE_W=.6;
+const LINE_ANGLE=42,LINE_W=1.2,SYM_LINES=false;
 function buildLineMesh(gl,u8,vOff,ni,idx){
   const d=new DataView(u8.buffer,u8.byteOffset),pos=i=>{const o=vOff+i*20;return [d.getInt16(o,true),d.getInt16(o+2,true),d.getInt16(o+4,true)];};
   const key=p=>p[0]+','+p[1]+','+p[2],nt=ni/3,N=[],edges=new Map(),mat=i=>u8[vOff+i*20+11];
@@ -5753,7 +5789,8 @@ function buildLineMesh(gl,u8,vOff,ni,idx){
   for(const [e,l] of edges){let sh;if(l.length!==2)sh=true;else{const a=N[l[0]],b=N[l[1]];
       sh=mat(idx[l[0]*3])!==mat(idx[l[1]*3])||a[0]*b[0]+a[1]*b[1]+a[2]*b[2]<cosA;}
     if(sh)raw.add(e);}
-  const sharpE=new Set();for(const e of raw){const [a,b]=e.split('|'),ma=mir.get(a),mb=mir.get(b);if(ma&&mb&&raw.has(ek(ma,mb)))sharpE.add(e);}
+  // SYM_LINES: keep only creases whose mirror twin is a crease too (symmetric, fewer); off = every sharp crease
+  let sharpE=raw;if(SYM_LINES){sharpE=new Set();for(const e of raw){const [a,b]=e.split('|'),ma=mir.get(a),mb=mir.get(b);if(ma&&mb&&raw.has(ek(ma,mb)))sharpE.add(e);}}
   const out=new Uint8Array(ni*24);
   for(let t=0;t<nt;t++){const ks=[0,1,2].map(j=>key(pos(idx[t*3+j]))),vis=[0,1,2].map(k=>sharpE.has(ek(ks[(k+1)%3],ks[(k+2)%3])));
     for(let j=0;j<3;j++){const src=vOff+idx[t*3+j]*20,dst=(t*3+j)*24;out.set(u8.subarray(src,src+20),dst);
@@ -5803,7 +5840,7 @@ async function loadModel(){
       const deriv=!!gl.getExtension('OES_standard_derivatives');
       let fs=(deriv?'#extension GL_OES_standard_derivatives : enable\n':'')+base.replace('varying vec3 vW;','varying vec3 vW;varying vec3 vB;');
       fs=fs.replace('gl_FragColor=vec4(mix(uFog,col,f),uAlpha);',
-        'vec3 wB='+(deriv?'fwidth(vB)*2.4':'vec3(0.08)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
+        'vec3 wB='+(deriv?'fwidth(vB)*3.4':'vec3(0.11)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
         'col=mix(col,vec3(0.012,0.01,0.018),ink*0.9);gl_FragColor=vec4(mix(uFog,col,f),uAlpha);');
       const pr=gl.createProgram();
       for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,fs]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
@@ -6414,7 +6451,7 @@ function drawPose(P,col,alpha,flash){
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
   {const li=FR.light;if(li){gl.uniform4f(L.uLP,li.p.x,li.p.y,li.p.z,li.r);gl.uniform3f(L.uLC,li.c[0],li.c[1],li.c[2]);}else{gl.uniform4f(L.uLP,0,-1e5,0,1);gl.uniform3f(L.uLC,0,0,0);}}
   const fl=flash||0;
-  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);gl.uniform3f(L.uJoint,.1+col[0]*fl*.3,.11+col[1]*fl*.3,.15+col[2]*fl*.3);
+  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);{const k=.68,b=[col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06];gl.uniform3f(L.uJoint,b[0]*k,b[1]*k,b[2]*k);} // joints: the fighter's colour, a shade darker
   gl.uniform3f(L.uGlow,col[0]*(.35+fl),col[1]*(.35+fl),col[2]*(.35+fl));
   if(alpha<.99){
     // see-through: lay down the body's depth first, so only its front shows and nothing behind it (guns, its own far side) bleeds through

@@ -150,6 +150,28 @@ const dblTap={};
 // ---------- camera ----------
 // keep the camera at least r away from every wall, floor and ceiling: the near clipping plane is only 2 units
 // from the eye, so a camera that skims a surface at a shallow angle would otherwise see through it
+// the camera also stops at decoration it would otherwise slide into (door and window frames, pipes, machinery):
+// boxes bigger than a few units, grown by a small margin, tested along the line from the shoulder back to the camera
+function camDecoRay(pv,fw,back){
+  const M=4;let best=back;
+  for(const d of deco){const s=d.s;if(s[0]<5&&s[1]<5&&s[2]<5)continue;
+    const dx=d.c.x-pv.x,dy=d.c.y-pv.y,dz=d.c.z-pv.z,reach=back+s[0]+s[1]+s[2];if(dx*dx+dy*dy+dz*dz>reach*reach)continue;
+    let t0=-1e9,t1=1e9,inside=true;const o=[pv.x,pv.y,pv.z],dir=[-fw.x,-fw.y,-fw.z],c=[d.c.x,d.c.y,d.c.z];
+    for(let a=0;a<3;a++){const lo=c[a]-s[a]/2-M,hi=c[a]+s[a]/2+M;if(o[a]<lo||o[a]>hi)inside=false;
+      if(Math.abs(dir[a])<1e-6){if(o[a]<lo||o[a]>hi){t0=1e9;break;}continue;}
+      let ta=(lo-o[a])/dir[a],tb=(hi-o[a])/dir[a];if(ta>tb){const q=ta;ta=tb;tb=q;}t0=Math.max(t0,ta);t1=Math.min(t1,tb);}
+    if(inside)continue; // the player is standing in it: nothing sensible to do
+    if(t0<=t1&&t0>0&&t0<best)best=Math.max(8,t0-2);}
+  return best;
+}
+function camDecoOut(p,M){
+  const q=[p.x,p.y,p.z];
+  for(const d of deco){const s=d.s;if(s[0]<5&&s[1]<5&&s[2]<5)continue;const c=[d.c.x,d.c.y,d.c.z];let pen=1e9,ax=-1,sg=0;
+    for(let a=0;a<3;a++){const lo=c[a]-s[a]/2-M,hi=c[a]+s[a]/2+M;if(q[a]<=lo||q[a]>=hi){ax=-2;break;}
+      const pl=q[a]-lo,ph=hi-q[a];if(pl<pen){pen=pl;ax=a;sg=-1;}if(ph<pen){pen=ph;ax=a;sg=1;}}
+    if(ax>=0)q[ax]+=sg*pen;}
+  return V(q[0],q[1],q[2]);
+}
 function camPushOut(p,r){
   const q=[p.x,p.y,p.z];
   for(let pass=0;pass<2;pass++)for(let a=0;a<3;a++)for(const s of [1,-1]){
@@ -173,7 +195,8 @@ function updateCamera(){
   const r=rayVoxel(pivot,vscale(fw,-1),back+8);if(r.t<back+8)back=Math.max(8,r.t-8);
   // keep the shoulder pivot itself out of walls
   let pv=pivot;if(solid(tileAt(pv.x,pv.y,pv.z)))pv=head;
-  let pos=camPushOut(vadd(pv,vscale(fw,-back)),7);
+  back=camDecoRay(pv,fw,back);
+  let pos=camDecoOut(camPushOut(vadd(pv,vscale(fw,-back)),7),5);
   if(world.shake>0)pos=vadd(pos,V((rnd()-.5)*world.shake*.6,(rnd()-.5)*world.shake*.6,(rnd()-.5)*world.shake*.6));
   cam.pos=pos;cam.fwd=fw;cam.back=back;
   // aim point: what's under the crosshair (in world coordinates, also while the arena turns)

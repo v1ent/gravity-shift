@@ -1011,10 +1011,12 @@ function drawWeaponsSK(e,P,SK,acc,al){
     if(e.weapon==='shotgun')drawShotgunModel(e._gunF,acc,al,0);else if(e.weapon==='rifle')drawRifleModel(e._gunF,acc,al,0,e._gunF.mag);else drawPistolModel(e._gunF,acc,al,e._gunF.slide||0);
     noteMuzzle(e,e._gunF);
   }else if(P.gunOn&&e.weapon==='pistol'&&!busy){
-    // carried in the hand along the hand's own axis; snapped onto the aim line while shooting
-    const w=clamp((e.aimW||0)*1.6,0,1),pd=e._aimDir||SK.handFwd;
-    const u=vnorm(vadd(vscale(SK.handFwd,1-w),vscale(pd,w)));
-    let v=vnorm(vadd(vscale(SK.handDown,-(1-w)),vscale(V(0,1,0),w)));v=vnorm(vsub(v,vscale(u,vdot(v,u))));
+    // relaxed: pointing forward and a little down from the body (the wrist only nudges it, so the walk and idle clips
+    // can't twist it round); snapped onto the aim line while shooting
+    const w=clamp((e.aimW||0)*1.6,0,1),fb=V(Math.sin(by),0,Math.cos(by)),pd=e._aimDir||fb;
+    const hk=Math.max(0,vdot(SK.handFwd,fb))*.25,relax=vnorm(vadd(vadd(vscale(fb,.85),V(0,-.45,0)),vscale(SK.handFwd,hk)));
+    const u=vnorm(vadd(vscale(relax,1-w),vscale(pd,w)));
+    let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?vscale(fb,-1):vnorm(v);
     const F={o:vadd(SK.hR,vadd(vscale(u,1.6),vscale(v,.6))),u,v,w:vcross(u,v)};
     drawPistolModel(F,acc,al,e.recoil*e.recoil*1.4);noteMuzzle(e,F);
   }else if(P.gunOn&&!busy&&twoHanded(e)){ // long gun, both hands

@@ -475,6 +475,10 @@ function openTutMenu(){
     b.innerHTML=`<span class="n">${i+1}</span><span class="t">${r.name}<small>${r.desc}</small></span><span class="ok">${TUT.done[r.id]?'✓':''}</span>`;
     b.onclick=()=>{if(!AC)initAudio();if(AC&&AC.state==='suspended')AC.resume();document.getElementById('tut').style.display='none';startTutorial(r.id);};
     list.appendChild(b);});
-  document.getElementById('tut').style.display='flex';
+  tutHowto(false);document.getElementById('tut').style.display='flex';
 }
+// the how-to-play page inside the tutorial menu: its own button first in the list, and a way back
+function tutHowto(on){const g=id=>document.getElementById(id);if(!g('howto'))return;
+  g('howto').style.display=on?'block':'none';g('tutmain').style.display=on?'none':'block';g('tutbackrow').style.display=on?'none':'block';}
+if(typeof document!=='undefined'&&document.getElementById('howtoBtn')){document.getElementById('howtoBtn').onclick=()=>tutHowto(true);document.getElementById('howtoBack').onclick=()=>tutHowto(false);}
 document.getElementById('tutback').onclick=()=>{document.getElementById('tut').style.display='none';showMenu('pgMain');};

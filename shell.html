@@ -96,7 +96,9 @@ body.nocur,body.nocur canvas{cursor:none!important}
 #tut td{padding:3px 6px;border-bottom:1px solid #ffffff10;font-size:13px;color:#b9c8dd}
 #tut td:first-child{color:#ffcc33;width:130px}
 #tut p{line-height:1.45;color:#b9c8dd;margin:7px 0;font-size:13px}
-#tut details.howto{margin-top:10px;border:1px solid #29f0ff33;padding:6px 12px;background:#0b0f1d}
+#tut .howto{margin-top:10px;border:1px solid #29f0ff33;padding:6px 12px;background:#0b0f1d;max-height:70vh;overflow:auto}
+#tut button#howtoBtn{width:100%;margin:0 0 10px;padding:12px;font-size:15px;letter-spacing:3px;background:#0e1424;color:#29f0ff;border:1px solid #29f0ff}
+#tut button#howtoBtn:hover{background:#ff3fa4;color:#05060c;border-color:#ff3fa4}
 #tut details.howto summary{cursor:pointer;color:#29f0ff;letter-spacing:3px;font-size:14px;padding:4px 0}
 #tut button.room.pf,#tut button.alt.pf,#tut summary.pf{outline:2px solid #29f0ff}
 #pause button.pf{background:#29f0ff;color:#05060c}
@@ -185,9 +187,12 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <div id="tut"><div class="box">
 <h1>GRAVITY<span>SHIFT</span></h1>
 <div class="sub">TUTORIAL // HOW TO PLAY</div>
+<div id="tutmain">
+<div style="text-align:center"><button id="howtoBtn" class="mi">HOW TO PLAY — CONTROLS AND RULES</button></div>
 <div id="tutlist"></div>
 <p class="note">ESC in any room opens the menu — restart the room, pick another one, or go back to the main menu.</p>
-<details class="howto"><summary>HOW TO PLAY — CONTROLS AND RULES</summary>
+</div>
+<div id="howto" class="howto" style="display:none">
 <table>
 <tr><td>MOUSE</td><td>Look / aim (click the game to capture the mouse)</td></tr>
 <tr><td data-k="{fwd} {left} {back} {right}">W A S D</td><td>Walk · <b>double-tap W / S / A / D</b> to dodge: dive-roll forward, back, left, right (costs stamina)</td></tr>
@@ -218,8 +223,9 @@ body.nocur,body.nocur canvas{cursor:none!important}
 <tr><td>Y · LB</td><td>Next weapon · reload</td></tr>
 <tr><td>START</td><td>Pause · in menus the D-pad / left stick moves, A selects, B goes back</td></tr>
 </table>
-</details>
-<div style="text-align:center;margin-top:12px"><button id="tutback" class="alt">BACK</button></div>
+<div style="text-align:center;margin-top:12px"><button id="howtoBack" class="alt">BACK TO THE TUTORIAL</button></div>
+</div>
+<div id="tutbackrow" style="text-align:center;margin-top:12px"><button id="tutback" class="alt">BACK</button></div>
 </div></div>
 <div id="card"><div class="box"><h2 id="cardT"></h2><div id="cardB"></div><div id="cardBtns"></div></div></div>
 <script>

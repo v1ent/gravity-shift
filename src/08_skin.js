@@ -79,7 +79,7 @@ void main(){
 }`;}
 // LINE_ANGLE: how sharp a crease must be to draw (higher = fewer lines). A line is kept only if its mirror twin on the
 // other side of the body (x → -x) is a line too, so the pattern is symmetric even where the two sides are triangulated differently.
-const LINE_ANGLE=42,LINE_W=.6;
+const LINE_ANGLE=42,LINE_W=1.2,SYM_LINES=false;
 function buildLineMesh(gl,u8,vOff,ni,idx){
   const d=new DataView(u8.buffer,u8.byteOffset),pos=i=>{const o=vOff+i*20;return [d.getInt16(o,true),d.getInt16(o+2,true),d.getInt16(o+4,true)];};
   const key=p=>p[0]+','+p[1]+','+p[2],nt=ni/3,N=[],edges=new Map(),mat=i=>u8[vOff+i*20+11];
@@ -101,7 +101,8 @@ function buildLineMesh(gl,u8,vOff,ni,idx){
   for(const [e,l] of edges){let sh;if(l.length!==2)sh=true;else{const a=N[l[0]],b=N[l[1]];
       sh=mat(idx[l[0]*3])!==mat(idx[l[1]*3])||a[0]*b[0]+a[1]*b[1]+a[2]*b[2]<cosA;}
     if(sh)raw.add(e);}
-  const sharpE=new Set();for(const e of raw){const [a,b]=e.split('|'),ma=mir.get(a),mb=mir.get(b);if(ma&&mb&&raw.has(ek(ma,mb)))sharpE.add(e);}
+  // SYM_LINES: keep only creases whose mirror twin is a crease too (symmetric, fewer); off = every sharp crease
+  let sharpE=raw;if(SYM_LINES){sharpE=new Set();for(const e of raw){const [a,b]=e.split('|'),ma=mir.get(a),mb=mir.get(b);if(ma&&mb&&raw.has(ek(ma,mb)))sharpE.add(e);}}
   const out=new Uint8Array(ni*24);
   for(let t=0;t<nt;t++){const ks=[0,1,2].map(j=>key(pos(idx[t*3+j]))),vis=[0,1,2].map(k=>sharpE.has(ek(ks[(k+1)%3],ks[(k+2)%3])));
     for(let j=0;j<3;j++){const src=vOff+idx[t*3+j]*20,dst=(t*3+j)*24;out.set(u8.subarray(src,src+20),dst);
@@ -151,7 +152,7 @@ async function loadModel(){
       const deriv=!!gl.getExtension('OES_standard_derivatives');
       let fs=(deriv?'#extension GL_OES_standard_derivatives : enable\n':'')+base.replace('varying vec3 vW;','varying vec3 vW;varying vec3 vB;');
       fs=fs.replace('gl_FragColor=vec4(mix(uFog,col,f),uAlpha);',
-        'vec3 wB='+(deriv?'fwidth(vB)*2.4':'vec3(0.08)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
+        'vec3 wB='+(deriv?'fwidth(vB)*3.4':'vec3(0.11)')+';vec3 aB=smoothstep(vec3(0.0),wB,vB);float ink=1.0-min(min(aB.x,aB.y),aB.z);'+
         'col=mix(col,vec3(0.012,0.01,0.018),ink*0.9);gl_FragColor=vec4(mix(uFog,col,f),uAlpha);');
       const pr=gl.createProgram();
       for(const [t,src] of [[gl.VERTEX_SHADER,SKVS_L],[gl.FRAGMENT_SHADER,fs]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
@@ -762,7 +763,7 @@ function drawPose(P,col,alpha,flash){
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
   {const li=FR.light;if(li){gl.uniform4f(L.uLP,li.p.x,li.p.y,li.p.z,li.r);gl.uniform3f(L.uLC,li.c[0],li.c[1],li.c[2]);}else{gl.uniform4f(L.uLP,0,-1e5,0,1);gl.uniform3f(L.uLC,0,0,0);}}
   const fl=flash||0;
-  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);gl.uniform3f(L.uJoint,.1+col[0]*fl*.3,.11+col[1]*fl*.3,.15+col[2]*fl*.3);
+  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);{const k=.68,b=[col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06];gl.uniform3f(L.uJoint,b[0]*k,b[1]*k,b[2]*k);} // joints: the fighter's colour, a shade darker
   gl.uniform3f(L.uGlow,col[0]*(.35+fl),col[1]*(.35+fl),col[2]*(.35+fl));
   if(alpha<.99){
     // see-through: lay down the body's depth first, so only its front shows and nothing behind it (guns, its own far side) bleeds through

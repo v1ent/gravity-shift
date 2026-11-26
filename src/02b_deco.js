@@ -166,14 +166,14 @@ function genPanelDressing(){
       // devices packed along the band
       for(let x=s0+2;x<s1-6;){
         const w=Math.min(s1-2-x,8+R()*22);if(w<6)break;
-        if(R()<.45){
+        if(R()<.6){
           const cw=Math.min(W2-2,10+R()*(W2-8)),cc=c0+1+cw/2+R()*Math.max(0,W2-2-cw),hd=Math.min(maxH,4+R()*maxH*.8),xc=x+w/2;
           if(ok(xc,cc)){
             put(xc,cc,hd/2,w,cw,hd,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
             const kind=R()*6|0,f=hd+.4;
             if(kind===0)for(let y=-cw/2+3;y<cw/2-2;y+=3.2)put(xc,cc+y,f,w-4,1.1,.8,DC.slat);                        // vent bank
-            else if(kind===1){const n=1+(R()*2|0);for(let q=0;q<n;q++)put(xc-w/2+3+q*4,cc+cw/2-3,f,1.6,1.6,.8,R()<.7?DC.ledG:DC.ledR,7);} // an LED or two
-            else if(kind===2&&R()<.4)put(xc,cc,f,w-5,Math.min(cw-5,10),.6,DC.lampC,5);   // little screen (now and then)
+            else if(kind===1){const n=2+(R()*4|0);for(let q=0;q<n;q++)put(xc-w/2+3+q*(w-6)/Math.max(1,n-1),cc+cw/2-3,f,1.8,1.8,.8,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);} // a row of blinking LEDs
+            else if(kind===2)put(xc,cc,f,w-5,Math.min(cw-5,10),.6,[DC.lampC,DC.ledG,hexRGB('#ff3fa4')][R()*3|0],5);   // a little screen
             else if(kind===3)put(xc,cc,f,w-3,1.6,.6,DC.flange);   // a seam
             else if(kind===4){put(xc,cc,f+1.5,2,cw*.6,3,DC.tray);put(xc,cc,f+.2,5,5,.6,DC.pipeW,5);}                       // handle + gauge
             else{put(xc,cc,f,w*.5,cw*.5,1.2,DC.flange);put(xc+w*.3,cc+cw*.3,f+.6,2,2,.6,DC.ledG,7);}                       // hatch + LED
@@ -240,12 +240,12 @@ function genMachinery(){
         const sz=[0,0,0];sz[ra]=ss;sz[ca]=cs;sz[na]=out+inn;bx(p,V(sz[0],sz[1],sz[2]),col,em);};
       const up=n[1]===1&&na===1; // a top you walk on (as generated)
       if(up){
-        // plates, grates and the odd hatch, flush with the top
-        for(const a of [-1,1])for(const b of [-1,1]){const r=R(),sc=a*T/4,cc2=b*T/4;
-          if(r<.2){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.2,DARK);for(let q=-5;q<=5;q+=2.5)part(sc,cc2+q,T/2-3,.9,.2,.45,STEEL);}
-          else if(r<.27){part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[0]);part(sc,cc2,T/2-6,T/2-6,.1,.5,STEEL);}
-          else part(sc,cc2,T/2-1.2,T/2-1.2,2.5,.25,PLATE[R()*3|0]);}
-        // a lip along any open edge: a steel nosing with yellow tape
+        // a top you can walk on: mostly one plain plate, sometimes a hatch, a grate strip along the run or a low box
+        const r=R(),pc=PLATE[R()*3|0];
+        if(r<.55)part(0,0,T-1.4,T-1.4,2.5,.2,pc);
+        else if(r<.72){part(0,0,T-1.4,T-1.4,2.5,.2,pc);const hx=(R()-.5)*8,hy=(R()-.5)*8;part(hx,hy,12,12,.1,.55,STEEL);part(hx+4,hy+4,1.6,1.6,0,.8,R()<.6?DC.ledG:DC.ledA,7);}
+        else if(r<.88){part(0,0,T-1.4,T-1.4,2.5,.2,pc);part(0,-T/4+R()*T/2,T-1.4,7,.2,.35,DARK);for(let q=-T/2+3;q<T/2-2;q+=3.2)part(q,0,1,6,0,.5,STEEL);}
+        else{part(0,0,T-1.4,T-1.4,2.5,.2,pc);const w=8+R()*8;part((R()-.5)*6,(R()-.5)*6,w,8,0,3.5,DARK);part(0,0,2.2,1.6,0,3.9,[DC.ledG,DC.ledR,DC.ledA][R()*3|0],7);}
         return;
       }
       const LY=layout(id,f);
@@ -262,8 +262,8 @@ function genMachinery(){
         else{part(xc,c0,w-.4,ch,2.5,out,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
           const f2=out+.35,k2=R()*5|0;
           if(k2===0)for(let y=-ch/2+1.6;y<ch/2-1;y+=2)part(xc,c0+y,w-2,.7,0,f2,DC.slat);
-          else if(k2===1&&R()<.5)part(xc-w/2+2,c0+ch/2-1.8,1.3,1.3,0,f2+.2,R()<.7?DC.ledG:DC.ledR,7);
-          else if(k2===2&&w>6&&R()<.3)part(xc,c0,w-3,Math.min(ch-2,6),0,f2,DC.lampC,5);
+          else if(k2===1)for(let q=0;q<Math.min(4,w/3|0);q++)part(xc-w/2+2+q*2.8,c0+ch/2-1.8,1.3,1.3,0,f2+.2,[DC.ledG,DC.ledR,DC.ledA,DC.lampC][R()*4|0],7);
+          else if(k2===2&&w>6)part(xc,c0,w-3,Math.min(ch-2,6),0,f2,[DC.lampC,DC.ledG][R()*2|0],5);
           else if(k2===3)part(xc,c0+ch/2-1.2,w-.4,1.6,0,f2,DC.flange);
           else part(xc,c0,w*.45,ch*.45,0,f2+.3,DC.flange);}
         s+=w;}

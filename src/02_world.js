@@ -49,6 +49,7 @@ const isLiveK=(i,j,k)=>tile(i,j,k)===2&&(tile(i,j+1,k)===2||tile(i,j-1,k)===2);
 
 // ---------------- level generation ----------------
 function genLevel(seed){
+  const ledgeCells=new Set(); // ledge blocks next to wall panels: no hazard rims on them
   const R=mulberry32(seed);
   grid=new Uint8Array(N*N*N);stairO=new Uint8Array(N*N*N);
   const M=12,MC=3; // macro grid: 3x3x3 big rooms of 11 blocks
@@ -138,7 +139,7 @@ function genLevel(seed){
       // ledges (3 deep, 9 wide) under and over the panel
       for(const yy of [y0,y0+6]){if(yy>=N-1)continue;const mix=machineryRuns(9,R);
         for(let d=1;d<=3;d++)for(let u=u0-2;u<=u0+6;u++){const ty=mix[u-u0+2];
-          if(face==='x0')setT(d,yy,u,ty);else if(face==='x1')setT(N-1-d,yy,u,ty);else if(face==='z0')setT(u,yy,d,ty);else setT(u,yy,N-1-d,ty);}}
+          const q=face==='x0'?[d,yy,u]:face==='x1'?[N-1-d,yy,u]:face==='z0'?[u,yy,d]:[u,yy,N-1-d];setT(q[0],q[1],q[2],ty);ledgeCells.add(gi(q[0],q[1],q[2]));}}
     }
   }
   for(const face of ['y0','y1']){
@@ -171,7 +172,7 @@ function genLevel(seed){
   // ---- hazard rims on main floors
   const rim=[];
   for(const y of [6,12,18,24,30])for(let x=1;x<N-1;x++)for(let z=1;z<N-1;z++){
-    if(tile(x,y,z)!==1)continue;
+    if(tile(x,y,z)!==1||ledgeCells.has(gi(x,y,z)))continue; // (the ledges round the panels stay plain)
     if(!solid(tile(x+1,y,z))||!solid(tile(x-1,y,z))||!solid(tile(x,y,z+1))||!solid(tile(x,y,z-1)))rim.push([x,y,z]);
   }
   for(const [x,y,z] of rim)setT(x,y,z,4);
