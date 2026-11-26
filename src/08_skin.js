@@ -313,6 +313,7 @@ const FPS_C=30;
 const qconj=q=>[-q[0],-q[1],-q[2],q[3]];
 const charOrigin=e=>V(e.x+(e.visX||0),e.y+(e.visY||0),e.z+(e.visZ||0));
 // clip pose at frame f, character space; root: 'feet' (feet under the origin), 'center' (body centred), 'clip' (travel kept), 'none'
+const FLAT_HIT=.29,FLAT_LIE=1.5,FLAT_DUR=FLAT_HIT+44/30/FLAT_LIE; // fall_flat timing (see clipFor)
 function clipAt(name,f,mirror,root){
   const P=sampleClip(name,f/FPS_C,mirror);
   if(root==='feet'||root==='center'){const H=fkHeads(P),bi=SKN.bi,lf=H[bi.LeftFoot],rf=H[bi.RightFoot];
@@ -490,6 +491,12 @@ function clipFor(e,A,dt){
     const t=e.st.t,f=t<.13?3+t/.13*8:11+4.5+4.5*Math.sin((t-.13)*5-Math.PI/2);
     return {P:placeAt(clipAt('running_slide',f,false,'center'),e.st.yaw,o),key:'slide',aim:true};
   }
+  // a fall from height: fall_flat from the end of its flailing — pitching flat onto the ground (frames 19->32, fast, so the
+  // face hits the floor at touchdown), then lying and settling (32->76) — before the usual get-up
+  if(st==='down'&&e.st.flat&&SKN.clips.fall_flat){
+    const t=e.st.t,f=t<FLAT_HIT?19+t/FLAT_HIT*13:Math.min(76,32+(t-FLAT_HIT)*30*FLAT_LIE);
+    return {P:placeAt(clipAt('fall_flat',f,false,'center'),e.st.yaw,o),key:'down'};
+  }
   if(false&&st==='down'){ // knockdowns stay procedural: the clip starts mid-stumble and pops after a tumble
     const t=e.st.t,f=Math.min(45,20+t*42);
     return {P:placeAt(clipAt('fall_flat',f,false,'center'),e.bodyYaw,o),key:'down'};
@@ -498,7 +505,8 @@ function clipFor(e,A,dt){
   if(!e.grounded&&!e.wasBox){
     A.air=(A.air||0)+dt;
     let P;
-    if(e.vy<-430&&e.airT>.3){P=clipAt('landing',4+3.5*Math.sin(world.time*4),false,'none');P.hip.y-=52;}
+    if(e.freeFall&&SKN.clips.fall_flat){A.ff=(A.ff||0)+dt;P=clipAt('fall_flat',12-6*Math.cos(A.ff*4.5),false,'none');} // falling from height: flailing (frames 6..18, back and forth)
+    else if(e.vy<-430&&e.airT>.3){P=clipAt('landing',4+3.5*Math.sin(world.time*4),false,'none');P.hip.y-=52;}
     else{const jumped=world.time-(e.jumpAt||-9)<e.airT+.08;
       const f=e.vy>0?lerp(jumped?23:32,30,clamp(1-e.vy/JUMPV,0,1)):lerp(30,37,clamp(-e.vy/450,0,1));
       P=clipAt('jump',f,false,'none');P.hip.y-=7;}

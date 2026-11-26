@@ -350,12 +350,16 @@ function updateChar(e,dt){
       // after an arena turn: land crouched, hands to the floor, still facing the same way (not on your back looking at the camera)
       if(e.alive&&e.turnFall&&imp>120){e.state='land';e.st={t:0,dur:clamp(.55+fell/T*.06,.7,1.3),sev:1};e.vx*=.3;e.vz*=.3;e.poseBlend=0;e.ba=0;e.bav=0;
         if(fell>7*T)world.shake=Math.max(world.shake,e===player?5:0);}
+      else if(e.alive&&e.freeFall&&fell>4*T&&imp>300&&typeof FLAT_DUR!=='undefined'&&SKN.clips&&SKN.clips.fall_flat){ // fell from height: flat on the ground, then up
+        e.state='down';e.st={t:0,dur:FLAT_DUR,side:1,flat:true,yaw:e.bodyYaw};e.h=22;e.poseBlend=.15;e.vx*=.15;e.vz*=.15;e.knocked=false;e.stun=0;e.cover=null;
+        sfx('thud',e);if(fell>7*T)world.shake=Math.max(world.shake,e===player?6:0);
+        for(let i=0;i<16;i++)addPart(e.x+(rnd()-.5)*40,e.y+2,e.z+(rnd()-.5)*40,(rnd()-.5)*320,rnd()*140,(rnd()-.5)*320,.6,[.54,.59,.69],8,'dust');}
       else if(e.alive&&e.knocked&&imp>120)enterDown(e,clamp((fell-limit)/(8*T)+.25,0,1));
       else if(e.alive&&fell>3.5*T&&imp>460){ // crouch into the landing, hands to the ground; longer for bigger drops
         e.state='land';e.st={t:0,dur:clamp(.2+fell/T*.075,.32,1.15),sev:clamp(fell/(10*T),.35,1)};e.vx*=.35;e.vz*=.35;e.poseBlend=0;
         if(fell>7*T)world.shake=Math.max(world.shake,e===player?5:0);
       }
-      e.fallStart=e.y;e.knocked=false;e.rocketJump=false;e.turnFall=false;
+      e.fallStart=e.y;e.knocked=false;e.rocketJump=false;e.turnFall=false;e.freeFall=false;
     }
     // step up single blocks while walking; vault 2-block obstacles while sprinting
     if(e.state==='normal'&&e.grounded&&moving&&(e.hitX||e.hitZ||Math.hypot(e.vx,e.vz)<30)){
@@ -542,6 +546,9 @@ function updateChar(e,dt){
   }
   // stealth
   e.airT=(e.grounded||e.wasBox)?0:(e.airT||0)+dt;
+  // an uncontrolled fall: more than 4 blocks down, not riding a rocket jump (an arena turn counts)
+  if(e.grounded||e.wasBox||e.state!=='normal')e.freeFall=false;
+  else if(!e.rocketJump&&e.vy<-150&&e.fallStart!==undefined&&e.fallStart-e.y>4*T)e.freeFall=true;
   if(e.hidden){const ok=(e.state==='normal'||e.state==='kick')&&e.airT<.15&&!(e.sprinting&&e.grounded);if(!ok)reveal(e);}
   else if(STEALTH_ON&&e.state==='normal'&&e.crouch&&e.grounded){e.crouchT+=dt;if(e.crouchT>=STEALTH_T){e.hidden=true;sfx('cloak',e);}}
   else e.crouchT=0;
