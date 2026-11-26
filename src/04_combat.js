@@ -275,7 +275,7 @@ function updateBullets(dt){
 // ---------- shooting the gravity panels ----------
 // The live panels share one grid: every bullet into one costs it 1, a rocket 4. It mends slowly when nobody shoots it;
 // at zero every panel in the arena goes offline (static) for PANEL_OFF seconds and nobody can turn the arena.
-const PANEL_HP=8,PANEL_OFF=59;
+const PANEL_HP=8,PANEL_OFF=30;
 function panelShot(x,y,z,n,src){
   const i=Math.floor(x/T),j=Math.floor(y/T),k=Math.floor(z/T);if(!isLiveK(i,j,k)||world.panelOff>0||world.rot)return;
   world.panelHP=(world.panelHP===undefined?PANEL_HP:world.panelHP)-n;world.panelHitT=world.time;world.panelGlitch=1;
