@@ -210,7 +210,7 @@ body.nocur,body.nocur canvas{cursor:none!important}
 </table>
 <p><b style="color:#ff8a2a">Rockets</b> (middle mouse, or slot 2): slow, then accelerating. A direct hit kills outright, and the blast hurts anyone near it — aim at the floor or a wall beside your target. Fighters in the air take little damage but get thrown hard.</p>
 <p>Kick a <b style="color:#ff3fa4">gravity (magenta) panel</b> on the outer walls and the whole hall turns so that wall becomes the floor.</p>
-<p><b style="color:#ccd">Alliances:</b> press T to wave. A fighter who comes to stand in front of you and presses T too bows with you, and you take their color: from then on you're a team until the round ends. Bots stop targeting you (friendly fire still hurts — a teamkill costs a frag), the team's score is its members' frags averaged, and if the team wins you all win. Bots offer and accept alliances too, and like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
+<p><b style="color:#ccd">Alliances:</b> press T to wave. A fighter who comes to stand in front of you and presses T too bows with you, and you take their color: from then on you're a team until the round ends. Bots stop targeting you (friendly fire still hurts — a teamkill costs a frag), the team's score is its best member's frags, and if the team wins you all win. Bots offer and accept alliances too, and like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
 <div class="ptitle" style="margin-top:12px">GAMEPAD <small>(Options → Controls → Gamepad)</small></div>
 <table>
 <tr><td>LEFT STICK</td><td>Move · click it to sprint</td></tr>
@@ -3730,14 +3730,14 @@ function rbDraw(b,lc,ls,col,em,edge,alpha){
 //  ALLIANCES — press T to wave. Someone who stands in front of a waving
 //  fighter and presses T too: both bow, and the one who waved first takes
 //  the other's colour and joins them. Allies don't target each other
-//  (friendly fire still hurts), their frags are averaged, and the team
+//  (friendly fire still hurts), the team scores its best member's frags, and it
 //  wins together. Teams last until the end of the round. The last fighter
 //  standing alone can never be absorbed: there must always be two sides.
 // =====================================================================
 const WAVE_T=6,BOW_T=2.6,ALLY_RANGE=120;
 const allied=(a,b)=>!!a&&!!b&&a!==b&&!!a.team&&a.team===b.team;
 const sideMembers=e=>e.team?chars.filter(c=>c.team===e.team):[e];
-const sideScore=e=>{const m=sideMembers(e);return m.reduce((a,c)=>a+c.kills,0)/m.length;};
+const sideScore=e=>Math.max(...sideMembers(e).map(c=>c.kills)); // a team scores its best member's frags
 const sideCount=()=>new Set(chars.map(c=>c.team||c)).size;
 function sideName(e){return e.team?sideMembers(e).map(c=>c.name).join('+'):e.name;}
 // the side in front (strictly ahead on frags), or null
@@ -4741,7 +4741,7 @@ function drawHUD(){
   if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText(`[${bindName('kick')}] KICK THE PANEL — TURN THE ARENA`,W/2,H/2+70);c.globalAlpha=1;}}
   // scoreboard + feed
   c.textAlign='right';c.font='bold 13px "Courier New",monospace';
-  // one block per side: a team shows its averaged score, then its members
+  // one block per side: a team shows its score (its best member's frags), then its members
   const rows=[];
   if(!TH||TH.score){const seen=new Set(),sides=[];for(const q of chars){const k=q.team||q;if(seen.has(k))continue;seen.add(k);sides.push(q);}
     sides.sort((a,b)=>sideScore(b)-sideScore(a));
@@ -4752,7 +4752,7 @@ function drawHUD(){
   c.fillStyle='rgba(5,6,14,.7)';c.fillRect(W-196,12,184,22+rows.length*18);
   c.fillStyle='#889';c.fillText(`FRAGS / ${world.fragLimit||FRAG_LIMIT}`,W-20,28);
   rows.forEach((r,i)=>{const y=48+i*18;
-    if(r.team){c.fillStyle=r.col;c.textAlign='left';c.fillText(r.name,W-188,y);c.textAlign='right';c.fillText(r.score.toFixed(1),W-20,y);return;}
+    if(r.team){c.fillStyle=r.col;c.textAlign='left';c.fillText(r.name,W-188,y);c.textAlign='right';c.fillText(String(r.score),W-20,y);return;}
     const q=r.q;c.fillStyle=q.color;c.textAlign='left';c.fillText((q===p?'▶ ':'  ')+(r.sub?' ':'')+q.name,W-188,y);c.textAlign='right';c.fillText(`${q.kills}  ${q.deaths}`,W-20,y);});
   }
   drawFeed(c);drawSpree(c);
@@ -5598,7 +5598,7 @@ TUT_BUILD.ally=()=>{
   return {
     name:'ALLIANCES',spawn:{x:3.5*T,y:fy,z:11.5*T},yaw:Math.PI/2,allyHud:true,actors,hud:{gravity:false},
     card:['ALLIANCES',`<p>Any fighter can offer an alliance. Press <b>T</b> to <b>wave</b>. Someone who comes to <b>stand in front of you</b> and presses <b>T</b> too <b>bows</b> with you — and the one who waved first <b>takes the other's colour</b>. You're a team until the round ends.</p>
-      <p>Allies don't target each other (friendly fire still hurts), the team's score is its members' frags averaged, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
+      <p>Allies don't target each other (friendly fire still hurts), the team's score is its best member's frags, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
       <p>Follow the yellow line. Stop at each blue marker and watch, then do it yourself.</p>`],
     obj:[{text:'Walk to the first blue marker and watch VOLT and NYX',short:'WATCH'},
          {text:'Second marker: face RAZOR and press {wave} to wave — he comes over and accepts',short:'ASK'},

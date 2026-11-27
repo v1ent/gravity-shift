@@ -413,7 +413,7 @@ function drawHUD(){
   if(p.kickPrompt&&ready&&p.alive){c.font='bold 16px "Courier New",monospace';c.fillStyle='#ff3fa4';c.globalAlpha=.6+.4*Math.sin(world.time*8);c.fillText(`[${bindName('kick')}] KICK THE PANEL — TURN THE ARENA`,W/2,H/2+70);c.globalAlpha=1;}}
   // scoreboard + feed
   c.textAlign='right';c.font='bold 13px "Courier New",monospace';
-  // one block per side: a team shows its averaged score, then its members
+  // one block per side: a team shows its score (its best member's frags), then its members
   const rows=[];
   if(!TH||TH.score){const seen=new Set(),sides=[];for(const q of chars){const k=q.team||q;if(seen.has(k))continue;seen.add(k);sides.push(q);}
     sides.sort((a,b)=>sideScore(b)-sideScore(a));
@@ -424,7 +424,7 @@ function drawHUD(){
   c.fillStyle='rgba(5,6,14,.7)';c.fillRect(W-196,12,184,22+rows.length*18);
   c.fillStyle='#889';c.fillText(`FRAGS / ${world.fragLimit||FRAG_LIMIT}`,W-20,28);
   rows.forEach((r,i)=>{const y=48+i*18;
-    if(r.team){c.fillStyle=r.col;c.textAlign='left';c.fillText(r.name,W-188,y);c.textAlign='right';c.fillText(r.score.toFixed(1),W-20,y);return;}
+    if(r.team){c.fillStyle=r.col;c.textAlign='left';c.fillText(r.name,W-188,y);c.textAlign='right';c.fillText(String(r.score),W-20,y);return;}
     const q=r.q;c.fillStyle=q.color;c.textAlign='left';c.fillText((q===p?'▶ ':'  ')+(r.sub?' ':'')+q.name,W-188,y);c.textAlign='right';c.fillText(`${q.kills}  ${q.deaths}`,W-20,y);});
   }
   drawFeed(c);drawSpree(c);

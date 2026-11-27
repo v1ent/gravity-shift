@@ -2,14 +2,14 @@
 //  ALLIANCES — press T to wave. Someone who stands in front of a waving
 //  fighter and presses T too: both bow, and the one who waved first takes
 //  the other's colour and joins them. Allies don't target each other
-//  (friendly fire still hurts), their frags are averaged, and the team
+//  (friendly fire still hurts), the team scores its best member's frags, and it
 //  wins together. Teams last until the end of the round. The last fighter
 //  standing alone can never be absorbed: there must always be two sides.
 // =====================================================================
 const WAVE_T=6,BOW_T=2.6,ALLY_RANGE=120;
 const allied=(a,b)=>!!a&&!!b&&a!==b&&!!a.team&&a.team===b.team;
 const sideMembers=e=>e.team?chars.filter(c=>c.team===e.team):[e];
-const sideScore=e=>{const m=sideMembers(e);return m.reduce((a,c)=>a+c.kills,0)/m.length;};
+const sideScore=e=>Math.max(...sideMembers(e).map(c=>c.kills)); // a team scores its best member's frags
 const sideCount=()=>new Set(chars.map(c=>c.team||c)).size;
 function sideName(e){return e.team?sideMembers(e).map(c=>c.name).join('+'):e.name;}
 // the side in front (strictly ahead on frags), or null

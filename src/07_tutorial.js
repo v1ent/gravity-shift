@@ -321,7 +321,7 @@ TUT_BUILD.ally=()=>{
   return {
     name:'ALLIANCES',spawn:{x:3.5*T,y:fy,z:11.5*T},yaw:Math.PI/2,allyHud:true,actors,hud:{gravity:false},
     card:['ALLIANCES',`<p>Any fighter can offer an alliance. Press <b>T</b> to <b>wave</b>. Someone who comes to <b>stand in front of you</b> and presses <b>T</b> too <b>bows</b> with you — and the one who waved first <b>takes the other's colour</b>. You're a team until the round ends.</p>
-      <p>Allies don't target each other (friendly fire still hurts), the team's score is its members' frags averaged, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
+      <p>Allies don't target each other (friendly fire still hurts), the team's score is its best member's frags, and if the team wins, you all win. Bots like to gang up on whoever is winning. There must always be two sides: the last lone fighter can't be absorbed.</p>
       <p>Follow the yellow line. Stop at each blue marker and watch, then do it yourself.</p>`],
     obj:[{text:'Walk to the first blue marker and watch VOLT and NYX',short:'WATCH'},
          {text:'Second marker: face RAZOR and press {wave} to wave — he comes over and accepts',short:'ASK'},
