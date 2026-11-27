@@ -2630,7 +2630,7 @@ function playS(g,at,o){
   s.playbackRate.value=(o.rate||1)*(1+(Math.random()-.5)*(o.jit===undefined?.06:o.jit));
   const g2=AC.createGain();g2.gain.value=vol;let out=g2;
   if(pan&&AC.createStereoPanner){const p=AC.createStereoPanner();p.pan.value=pan;g2.connect(p);out=p;}
-  s.connect(g2);out.connect(master);s.start();return true;
+  s.connect(g2);out.connect(master);s.start(AC.currentTime+(o.delay||0));return true;
 }
 // the live wall panels hum quietly (vortex_loop): one looping voice per panel, faded by distance and panned
 const PHUM={v:[],spots:null};
@@ -2653,10 +2653,11 @@ function sfxSample(kind,at){
     case 'shot':return playS(me?'pistol_player_shot':'pistol_enemy_shot',at,{vol:me?.75:.85});
     case 'rifle':return playS(me?'ar_player_shot':'ar_npc_shot',at,{vol:me?.7:.85,jit:.05});        // automatic rifle: yours / a bot's
     case 'shotgun':return playS(me?'shotgun_player_shot':'shotgun_npc_shot',at,{vol:me?.8:.95,range:1600});
-    case 'heal':return playS('medkit',at,{vol:.8,jit:0});
+    case 'heal':{const bot=at&&at.by&&at.by!==player;return playS('medkit',at,{vol:bot?.38:.8,rate:bot?.84:1,range:bot?900:1300,jit:bot?.04:0});} // a bot's pickup: quieter, lower
     case 'panelStep':return playS('vortex_travel',at,{vol:me?.55:.6,range:900,jit:.08}); // feet onto a magenta panel
     // reloads: the recording plays as the reload starts; the clicks at the end (and per shotgun shell) are then left out
-    case 'reloadStart':{const w=at&&at.weapon==='rifle'?'ar':at&&at.weapon;return playS(w+'_reload',at,{vol:me?.7:.8,range:900,jit:.03});}
+    case 'reloadStart':{const w=at&&at.weapon==='rifle'?'ar':at&&at.weapon,ts=world.time-(at&&at.lastShot!==undefined?at.lastShot:-9); // (an automatic reload starts with the last shot: wait for it to ring out)
+      return playS(w+'_reload',at,{vol:me?.7:.8,range:900,jit:.03,delay:Math.max(0,(w==='shotgun'?.55:.35)-ts)});}
     case 'reloadEnd':{const w=at&&at.weapon==='rifle'?'ar':at&&at.weapon;if(SNDG[w+'_reload'])return true;sfx('reload',at);return true;}
     case 'rocket':return playS('launcher_shot',at,{vol:.9});
     case 'boom':return playS('launcher_impact',at,{vol:1,range:1800,jit:.1});
@@ -3149,7 +3150,7 @@ function charProps(e){
       continue;
     }
     if(b.kind==='medkit'){
-      if(e.hp<100&&e.state!=='down'){e.hp=Math.min(100,e.hp+50);b.dead=true;sfx('heal',b);
+      if(e.hp<100&&e.state!=='down'){e.hp=Math.min(100,e.hp+50);b.dead=true;b.by=e;sfx('heal',b);
         for(let i=0;i<16;i++)addPart(b.x,b.y+9,b.z,(rnd()-.5)*160,rnd()*220,(rnd()-.5)*160,.6,[.36,1,.6],3,'spark');}
       continue;
     }
