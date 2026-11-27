@@ -3353,14 +3353,14 @@ function spawnGibs(e,dir){
   };
   if(H){
     for(const [bn,ch,xs,kind] of GIB_SEGS){
-      if(SKN.gibRanges&&GIB_PART[bn]===null)continue; // (drawn as part of the torso piece)
+      if(bn==='Hips'||bn==='Spine2')continue; // no torso piece: only the head and the limbs fly
       const i=bi[bn],a=H[i];let len=xs[1]||11,mid=a;
       if(ch){const b=H[bi[ch]];len=Math.max(6,vlen(vsub(b,a)));mid=vscale(vadd(a,b),.5);}
       else mid=vadd(a,qrot(P.q[i],V(0,5,0)));
       segNow=bn;add(mid,P.q[i],xs[0],len,xs[2],kind,kind==='limb'?(bn.includes('Up')||bn.endsWith('Arm')?col.map(v=>v*.6+.04):dark):col.map(v=>v*.55+.05));
     }
   }else{
-    for(const [sx,sy,sz,hy,kind] of [[10,11,10,e.h-6,'head'],[16,18,10,36,'chest'],[14,8,9,24,'pelvis'],[5,14,5,36,'limb'],[5,14,5,36,'limb'],[6.8,17,6.8,14,'limb'],[6.8,17,6.8,14,'limb']])
+    for(const [sx,sy,sz,hy,kind] of [[10,11,10,e.h-6,'head'],[5,14,5,36,'limb'],[5,14,5,36,'limb'],[6.8,17,6.8,14,'limb'],[6.8,17,6.8,14,'limb']])
       add(V(e.x+(rnd()-.5)*8,e.y+hy,e.z+(rnd()-.5)*8),qaxis(vnorm(V(rnd()-.5,rnd()-.5,rnd()-.5)),rnd()*6),sx,sy,sz,kind,col.map(v=>v*.55+.05));
   }
   for(let i=0;i<9;i++)add(vadd(c,V((rnd()-.5)*20,(rnd()-.5)*30,(rnd()-.5)*20)),qaxis(vnorm(V(rnd()-.5,rnd()-.5,rnd()-.5)),rnd()*6),2+rnd()*3,2+rnd()*4,1.5+rnd()*2.5,'shard',rnd()<.5?dark:[.13,.14,.18]);
@@ -5002,6 +5002,7 @@ function wireMenu(){
   $('go').onclick=()=>{const v=$('seedRnd').value.trim();startArena(v||undefined);if(!(SETTINGS.seed||'').trim())rndSeed=String(1000+((Math.random()*99000)|0));};
   $('seedRnd').oninput=()=>{SETTINGS.seed=$('seedRnd').value;$('seedIn').value=SETTINGS.seed;saveSettings();};
   $('reroll').onclick=()=>{SETTINGS.seed='';$('seedIn').value='';saveSettings();rndSeed=String(1000+((Math.random()*99000)|0));refreshGamePage();};
+  SETTINGS.seed='';saveSettings(); // a typed seed lasts for this session only: every launch starts on a fresh random seed
   $('seedIn').value=SETTINGS.seed||'';
   $('seedIn').oninput=()=>{SETTINGS.seed=$('seedIn').value;saveSettings();};
   $('pname').value=SETTINGS.name||'';

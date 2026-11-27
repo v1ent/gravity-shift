@@ -30,6 +30,7 @@ function wireMenu(){
   $('go').onclick=()=>{const v=$('seedRnd').value.trim();startArena(v||undefined);if(!(SETTINGS.seed||'').trim())rndSeed=String(1000+((Math.random()*99000)|0));};
   $('seedRnd').oninput=()=>{SETTINGS.seed=$('seedRnd').value;$('seedIn').value=SETTINGS.seed;saveSettings();};
   $('reroll').onclick=()=>{SETTINGS.seed='';$('seedIn').value='';saveSettings();rndSeed=String(1000+((Math.random()*99000)|0));refreshGamePage();};
+  SETTINGS.seed='';saveSettings(); // a typed seed lasts for this session only: every launch starts on a fresh random seed
   $('seedIn').value=SETTINGS.seed||'';
   $('seedIn').oninput=()=>{SETTINGS.seed=$('seedIn').value;saveSettings();};
   $('pname').value=SETTINGS.name||'';
