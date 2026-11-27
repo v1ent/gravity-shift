@@ -236,6 +236,8 @@ function updateChar(e,dt){
   const c=e.ctl;
   if(!e.alive){if(gameState==='play'){e.respawn-=dt;if(e.respawn<=0)spawn(e);}return;}
   e.wasBox=e.boxSupport;e.boxSupport=false;
+  // stepping onto a magenta panel (also landing on the one you just kicked): a whoosh
+  {const onP=e.alive&&e.grounded&&tile(Math.floor(e.x/T),Math.floor((e.y-4)/T),Math.floor(e.z/T))===2;if(onP&&!e._onPanel)sfx('panelStep',e);e._onPanel=onP;}
   // safety: stuck inside blocks for more than a moment while moving normally (e.g. the arena turned mid-climb) → step out
   if(e.state==='normal'&&!world.rot){if(overlapSolid(e.x,e.y+.5,e.z,e.w-1,e.h-1)){e.embT=(e.embT||0)+dt;if(e.embT>.1){pushOut(e);e.embT=0;}}else e.embT=0;}
   e.invuln=Math.max(0,e.invuln-dt);e.fireCD-=dt;e.bloom=Math.max(0,(e.bloom||0)-dt*.06);e.clickBuf=Math.max(0,(e.clickBuf||0)-dt);e.rfireCD-=dt;e.grabCD-=dt;e.kickCD-=dt;e.stun-=dt;

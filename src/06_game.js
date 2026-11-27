@@ -599,6 +599,7 @@ function frame(now){
   }
   if(gameState!=='menu'&&R.ok){updateCamera();render();}
   else if(R.ok)menuFrame(dt);
+  panelHum(); // the wall panels' quiet hum
   requestAnimationFrame(frame);
 }
 if(!initGL(cv)){document.getElementById('nogl').style.display='block';}

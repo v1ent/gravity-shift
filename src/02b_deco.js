@@ -289,6 +289,7 @@ function rotateDeco(key){
   // which panels were live, in the turned arena's coordinates: the mesh animates the ones that switch on or off
   {const s=new Set();for(const id of panelLiveNow){const i=id%N,j=Math.floor(id/N)%N,k=Math.floor(id/(N*N)),q=r.pt((i+.5)*T,(j+.5)*T,(k+.5)*T);
     s.add(gi(Math.floor(q[0]/T),Math.floor(q[1]/T),Math.floor(q[2]/T)));}panelPrevLive=s;world.panelSwitchT=world.time;}if(typeof rotateDecals==='function')rotateDecals(key);
+  for(const s of panelSpots){const q=r.pt(s.c.x,s.c.y,s.c.z),n=r.vec(s.n.x,s.n.y,s.n.z);s.c=V(q[0],q[1],q[2]);s.n=V(Math.round(n[0]),Math.round(n[1]),Math.round(n[2]));s.wall=s.n.y===0;}
   for(const d of deco){const q=r.pt(d.c.x,d.c.y,d.c.z);d.c=V(q[0],q[1],q[2]);if(key[1]==='x'){const t=d.s[0];d.s[0]=d.s[1];d.s[1]=t;}else{const t=d.s[2];d.s[2]=d.s[1];d.s[1]=t;}}
 }
 function buildDecoMesh(){

@@ -83,6 +83,20 @@ function playS(g,at,o){
   if(pan&&AC.createStereoPanner){const p=AC.createStereoPanner();p.pan.value=pan;g2.connect(p);out=p;}
   s.connect(g2);out.connect(master);s.start();return true;
 }
+// the live wall panels hum quietly (vortex_loop): one looping voice per panel, faded by distance and panned
+const PHUM={v:[],spots:null};
+function panelHum(){
+  if(!AC||!SNDG.vortex_loop)return;
+  if(PHUM.spots!==panelSpots){for(const v of PHUM.v){try{v.s.stop();}catch(e){}v.g.disconnect();}PHUM.v=[];PHUM.spots=panelSpots;
+    for(const sp of panelSpots){const s=AC.createBufferSource();s.buffer=SNDG.vortex_loop[0];s.loop=true;const g=AC.createGain();g.gain.value=0;
+      let out=g;const pn=AC.createStereoPanner?AC.createStereoPanner():null;if(pn){g.connect(pn);out=pn;}out.connect(master);s.connect(g);
+      s.start(0,Math.random()*s.buffer.duration);PHUM.v.push({s,g,pn,sp});}}
+  const on=gameState==='play'&&!paused&&!world.rot&&!(world.panelOff>0)&&player&&cam.fwd;
+  for(const v of PHUM.v){const sp=v.sp;let vol=0,pan=0;
+    if(on&&sp.wall){const d=Math.hypot(sp.c.x-cam.pos.x,sp.c.y-cam.pos.y,sp.c.z-cam.pos.z),k=clamp(1-d/650,0,1);vol=.22*k*k;
+      const dv=vsub(sp.c,cam.pos),L=vlen(dv)||1,r=V(-cam.fwd.z,0,cam.fwd.x),rl=vlen(r)||1;pan=clamp((dv.x*r.x+dv.z*r.z)/(L*rl),-1,1)*.7;}
+    v.g.gain.setTargetAtTime(vol,AC.currentTime,.12);if(v.pn)v.pn.pan.setTargetAtTime(pan,AC.currentTime,.1);}
+}
 // game events that have a recording; anything else (or before the recordings are decoded) uses the synthesised sound
 function sfxSample(kind,at){
   const me=at===player;
@@ -91,6 +105,7 @@ function sfxSample(kind,at){
     case 'rifle':return playS(me?'ar_player_shot':'ar_npc_shot',at,{vol:me?.7:.85,jit:.05});        // automatic rifle: yours / a bot's
     case 'shotgun':return playS(me?'shotgun_player_shot':'shotgun_npc_shot',at,{vol:me?.8:.95,range:1600});
     case 'heal':return playS('medkit',at,{vol:.8,jit:0});
+    case 'panelStep':return playS('vortex_travel',at,{vol:me?.55:.6,range:900,jit:.08}); // feet onto a magenta panel
     // reloads: the recording plays as the reload starts; the clicks at the end (and per shotgun shell) are then left out
     case 'reloadStart':{const w=at&&at.weapon==='rifle'?'ar':at&&at.weapon;return playS(w+'_reload',at,{vol:me?.7:.8,range:900,jit:.03});}
     case 'reloadEnd':{const w=at&&at.weapon==='rifle'?'ar':at&&at.weapon;if(SNDG[w+'_reload'])return true;sfx('reload',at);return true;}
