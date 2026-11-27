@@ -47,7 +47,7 @@ function dodgeDisp(D,t){
   return vscale(D.fb,smooth(u)*(D.scale||1));
 }
 function startDodge(e,kind){
-  const D=DODGES[kind];e.state='dodge';e.st={kind,t:0,yaw:e.bodyYaw,prev:V(0,0,0)};
+  const D=DODGES[kind];e.state='dodge';e.st={kind,t:0,yaw:e.bodyYaw,prev:V(0,0,0)};e._dAimW=e.aimT>0?1:0;
   e.stam=Math.max(0,e.stam-DODGE_STAM);e.stamDelay=1;e.crouch=false;e.h=STAND_H;e.sprinting=false;e.poseBlend=.4;reveal(e);sfx('whoosh',e);
 }
 function makeChar(name,color,isBot){
@@ -534,7 +534,7 @@ function updateChar(e,dt){
   if(e.state!=='normal'){e.crouch=false;if(e.state!=='slide'&&e.state!=='down'&&e.h!==STAND_H&&!overlapSolid(e.x,e.y,e.z,e.w,STAND_H))e.h=STAND_H;}
   // weapons (gun lowered while sprinting or diving)
   if(e.dodgeCD>0)e.dodgeCD-=dt;
-  const canFire=(e.state==='normal'&&!e.runJump)||e.state==='kick'||e.state==='slide';
+  const canFire=(e.state==='normal'&&!e.runJump)||e.state==='kick'||e.state==='slide'||(e.state==='dodge'&&(e.st.kind==='left'||e.st.kind==='right')); // side dives: shoot on the move
   if(ctrl&&canFire&&gameState!=='over'){
     if(c.fireClick)e.clickBuf=.12; // a click just before the gun is ready still counts
     // middle click: a rocket, whatever is in your hands

@@ -431,7 +431,7 @@ function overlayAim(P,e,wGun,wRocket){
   // the pistol: arms from pistol_aim (frames 100->10 raise the gun as you aim; it opens fully aimed and then lowers),
   // and every shot plays rifle_shooting (the two-handed firing loop) on the arms, from the hip too
   if(e.weapon==='pistol'&&SKN.clips.pistol_aim&&SKN.clips.rifle_shooting){
-    const ts=world.time-(e.lastShot||-9),shotW=ts<.3?1:ts<.45?1-(ts-.3)/.15:0,aw=smooth(clamp(e.aimW||0,0,1)),w=Math.max(aw,shotW);
+    const ts=world.time-(e.lastShot||-9),shotW=ts<.3?1:ts<.45?1-(ts-.3)/.15:0,aw=smooth(clamp(e.aimW||0,0,1)),w=Math.max(aw,shotW)*(e._aimK===undefined?1:e._aimK);
     e._pistolW=w;
     if(w>.01){
       const S=shotW>.01?clipAt('rifle_shooting',Math.min(34,ts*30*1.3),false,'none'):clipAt('pistol_aim',lerp(100,10,aw),false,'none');
@@ -507,7 +507,9 @@ function clipFor(e,A,dt){
     // chest, so they turn with the body through the dive and roll), easing in at the take-off and out as he stands up
     if(D.grip&&SKN.clips[D.grip[0]]){const G=clipAt(D.grip[0],D.grip[1],false,'none'),w=D.gripW*smooth(clamp((f-D.f0)/8,0,1))*(1-smooth(clamp((f-D.g1)/(D.f1-D.g1),0,1)));
       layerBones(P,G,['RightShoulder','RightArm','RightForeArm','RightHand',...ARM_L],'Spine2',w);}
-    return {P:placeAt(P,s.yaw,o),key:'dodge'};
+    // shooting out of a side dive: while aiming or just after a shot the arms leave the chest grip and aim the gun
+    let aimK=0;if(D.grip){const want=world.time-(e.lastShot||-9)<.35||e.aimT>0||(e.ctl&&e.ctl.fire);e._dAimW=approach(e._dAimW||0,want?1:0,dt*(want?12:3.5));aimK=smooth(e._dAimW);}else e._dAimW=0;
+    return {P:placeAt(P,s.yaw,o),key:'dodge',aim:aimK>.01,aimK};
   }
   if(st==='climbup'&&e.st.vault&&e.st.over&&(SKN.clips[e.st.vclip]||SKN.clips.vault)){
     // dive vault: hands on the obstacle, body over flat, landing; the clip's travel stretched to the real distance
@@ -721,9 +723,9 @@ function charPose(e){
   if(SKN.clips&&e.alive){
     const r=clipFor(e,A,dt);
     if(r){P=r.P;src=r.key;
-      if(r.aim){const sg=twoHanded(e);const wG=sg?1:e.weapon==='rocket'?0:smooth(clamp(e.aimW||0,0,1));
-        const wR=e.rArm>0?clamp(e.rArm/.08,0,1)*clamp(e.rArm/.2,0,1):0;
-        overlayAim(P,e,wG,wR);addRecoil(P,e);rocketLower(P,e);}}
+      if(r.aim){const sg=twoHanded(e),k=r.aimK===undefined?1:r.aimK;const wG=(sg?1:e.weapon==='rocket'?0:smooth(clamp(e.aimW||0,0,1)))*k;
+        const wR=(e.rArm>0?clamp(e.rArm/.08,0,1)*clamp(e.rArm/.2,0,1):0)*k;
+        e._aimK=k;overlayAim(P,e,wG,wR);e._aimK=1;addRecoil(P,e);rocketLower(P,e);}}
     else{A.legYaw=e.legYaw;A.act=null;}
     if(e.state!=='hang')A.hangT=0;
   }
