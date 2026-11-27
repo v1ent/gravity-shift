@@ -2446,7 +2446,7 @@ function drawWeaponsSK(e,P,SK,acc,al){
   }else if(P.gunOn&&e.weapon==='pistol'&&!busy){
     // relaxed: pointing forward and a little down from the body (the wrist only nudges it, so the walk and idle clips
     // can't twist it round); snapped onto the aim line while shooting
-    const w=clamp((e.aimW||0)*1.6,0,1),fb=V(Math.sin(by),0,Math.cos(by)),pd=e._aimDir||fb;
+    const w=Math.max(clamp((e.aimW||0)*1.6,0,1),e.weapon==='pistol'?e._pistolW||0:0),fb=V(Math.sin(by),0,Math.cos(by)),pd=e._aimDir||fb;
     const hk=Math.max(0,vdot(SK.handFwd,fb))*.25,relax=vnorm(vadd(vadd(vscale(fb,.85),V(0,-.45,0)),vscale(SK.handFwd,hk)));
     const u=vnorm(vadd(vscale(relax,1-w),vscale(pd,w)));
     let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?vscale(fb,-1):vnorm(v);
@@ -2730,7 +2730,7 @@ function fireRifle(e){
   reveal(e);noise(e,900,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
-  const spread=(.01+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0))*(e.aiming?.5:1);
+  const spread=spreadOf(e);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:DMG,head:HEAD_DMG,fall:0,col:e.col});
@@ -2739,12 +2739,20 @@ function fireRifle(e){
   sfx('shot',e);if(e===player)world.shake=Math.max(world.shake,1.5);
   if(e.ammo<=0)e.reload=RELOAD;
 }
+// how far a pistol / rifle shot may stray (also sizes the crosshair). Hip-firing the rifle sprays a lot; aimed it's tight.
+function spreadOf(e){
+  const rf=e.weapon==='rifle',mv=Math.hypot(e.vx,e.vz)>60;
+  const s=rf?.008+(e.bloom||0)+(mv?.018:0)+(e.grounded?0:.03)+(e.isBot?.016:0)+(e.crouch?-.005:0)
+            :.01+(e.bloom||0)+(mv?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0);
+  return s*(e.aiming?.5:1)+(rf&&!e.aiming?RIFLE_HIP:0);
+}
+const RIFLE_HIP=.055;
 function fireAR(e){
   reveal(e);noise(e,950,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
   // tight first shots, the spray opens up the longer you hold the trigger
-  const spread=(.008+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.018:0)+(e.grounded?0:.03)+(e.isBot?.016:0)+(e.crouch?-.005:0))*(e.aiming?.5:1);
+  const spread=spreadOf(e);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:AR_DMG,head:AR_HEAD,fall:0,col:[.5,.95,1]});
@@ -4467,6 +4475,7 @@ function camPushOut(p,r){
   return V(q[0],q[1],q[2]);
 }
 function updateCamera(){
+  if(window.__camLock)return; // (tests: a camera placed by hand)
   // demo: the camera looks where the followed bot looks
   if(world.demo&&player){cam.yaw+=angDiff(player.yaw,cam.yaw)*perFrame(.12);cam.pitch+=(clamp((player.pitch||0)*.6-.12,-.8,.6)-cam.pitch)*perFrame(.08);}
   // aiming zooms in a little (and slows the mouse to match)
@@ -4713,7 +4722,7 @@ function drawHUD(){
   }
   drawFeed(c);drawSpree(c);
   // crosshair
-  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
+  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=(p.weapon==='pistol'||p.weapon==='rifle')?4+p.recoil*4+spreadOf(p)/Math.tan(.6)*H/2*.8:6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0); // pistol / rifle: drawn at the real spread
   drawCrosshair(c,p,cx,cy,sp,hm);
   if(hm){c.strokeStyle='#ff3fa4';c.beginPath();c.moveTo(cx-5,cy-5);c.lineTo(cx+5,cy+5);c.moveTo(cx+5,cy-5);c.lineTo(cx-5,cy+5);c.stroke();}
   c.textAlign='center';
@@ -6151,13 +6160,27 @@ function overlayAim(P,e,wGun,wRocket){
   for(const nm of ['Spine2','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'])rot(nm,bend);
   rot('Neck',bend+(head-bend)*.45);rot('Head',bend+(head-bend)*.9);
   e._aimDir=aim;
+  // the pistol: arms from pistol_aim (frames 100->10 raise the gun as you aim; it opens fully aimed and then lowers),
+  // and every shot plays rifle_shooting (the two-handed firing loop) on the arms, from the hip too
+  if(e.weapon==='pistol'&&SKN.clips.pistol_aim&&SKN.clips.rifle_shooting){
+    const ts=world.time-(e.lastShot||-9),shotW=ts<.3?1:ts<.45?1-(ts-.3)/.15:0,aw=smooth(clamp(e.aimW||0,0,1)),w=Math.max(aw,shotW);
+    e._pistolW=w;
+    if(w>.01){
+      const S=shotW>.01?clipAt('rifle_shooting',Math.min(34,ts*30*1.3),false,'none'):clipAt('pistol_aim',lerp(100,10,aw),false,'none');
+      // arms placed by facing only (the clips' chests lean differently from ours), then tilted to the aim pitch
+      const arms=['RightShoulder','RightArm','RightForeArm','RightHand',...ARM_L],ry=qaxis(V(0,1,0),e.bodyYaw);
+      for(const nm of arms){const i=bi[nm];P.q[i]=qlerp(P.q[i],qmul(ry,S.q[i]),w);}
+      for(const nm of arms)rot(nm,a*w);
+    }
+    return P;
+  }
   if(wA<.01)return P;
   const H=fkHeads(P),shR=H[bi.RightArm],shL=H[bi.LeftArm],mid=vscale(vadd(shR,shL),.5),up=V(0,1,0);
   const len=i=>vlen(vsub(B[i+1].head,B[i].head))*ARM_STRETCH;
   const lr=len(bi.RightArm)+len(bi.RightForeArm),ll=len(bi.LeftArm)+len(bi.LeftForeArm);
   const sg=twoHanded(e),rf=e.weapon==='rifle';
   // gun hand
-  const g=sg?vadd(vadd(shR,vscale(aim,lr*.5)),vadd(vscale(rt,-2.5),V(0,-1.5,0))):vadd(vadd(mid,vscale(aim,lr*.8)),vadd(vscale(rt,1.5),V(0,-3,0)));
+  const g=sg?vadd(vadd(shR,vscale(aim,lr*.5)),vadd(vscale(rt,-2.5),V(0,-1.5+(rf?3.2*smooth(clamp(e.aimW||0,0,1)):0),0))):vadd(vadd(mid,vscale(aim,lr*.8)),vadd(vscale(rt,1.5),V(0,-3,0)));
   let tL=sg?vadd(g,vadd(vscale(aim,rf?9.3:11*CHAR_SCALE),vadd(vscale(rt,-1.5),V(0,-1.5,0)))):vadd(g,vadd(vscale(aim,.8),vadd(vscale(rt,-2.6),V(0,-1.6,0))));
   if(wRocket>0)tL=vadd(vscale(tL,1-wRocket),vscale(vadd(shL,vscale(aim,ll*.97)),wRocket));
   const solveArm=(s,tgt,w,pole)=>{

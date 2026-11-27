@@ -182,6 +182,7 @@ function camPushOut(p,r){
   return V(q[0],q[1],q[2]);
 }
 function updateCamera(){
+  if(window.__camLock)return; // (tests: a camera placed by hand)
   // demo: the camera looks where the followed bot looks
   if(world.demo&&player){cam.yaw+=angDiff(player.yaw,cam.yaw)*perFrame(.12);cam.pitch+=(clamp((player.pitch||0)*.6-.12,-.8,.6)-cam.pitch)*perFrame(.08);}
   // aiming zooms in a little (and slows the mouse to match)
@@ -428,7 +429,7 @@ function drawHUD(){
   }
   drawFeed(c);drawSpree(c);
   // crosshair
-  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0);
+  const cx=W/2,cy=H/2,hm=p.hitMarker>0,sp=(p.weapon==='pistol'||p.weapon==='rifle')?4+p.recoil*4+spreadOf(p)/Math.tan(.6)*H/2*.8:6+p.recoil*4+(p.bloom||0)*260+(Math.hypot(p.vx,p.vz)>60?3:0); // pistol / rifle: drawn at the real spread
   drawCrosshair(c,p,cx,cy,sp,hm);
   if(hm){c.strokeStyle='#ff3fa4';c.beginPath();c.moveTo(cx-5,cy-5);c.lineTo(cx+5,cy+5);c.moveTo(cx+5,cy-5);c.lineTo(cx-5,cy+5);c.stroke();}
   c.textAlign='center';

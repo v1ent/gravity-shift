@@ -428,13 +428,27 @@ function overlayAim(P,e,wGun,wRocket){
   for(const nm of ['Spine2','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'])rot(nm,bend);
   rot('Neck',bend+(head-bend)*.45);rot('Head',bend+(head-bend)*.9);
   e._aimDir=aim;
+  // the pistol: arms from pistol_aim (frames 100->10 raise the gun as you aim; it opens fully aimed and then lowers),
+  // and every shot plays rifle_shooting (the two-handed firing loop) on the arms, from the hip too
+  if(e.weapon==='pistol'&&SKN.clips.pistol_aim&&SKN.clips.rifle_shooting){
+    const ts=world.time-(e.lastShot||-9),shotW=ts<.3?1:ts<.45?1-(ts-.3)/.15:0,aw=smooth(clamp(e.aimW||0,0,1)),w=Math.max(aw,shotW);
+    e._pistolW=w;
+    if(w>.01){
+      const S=shotW>.01?clipAt('rifle_shooting',Math.min(34,ts*30*1.3),false,'none'):clipAt('pistol_aim',lerp(100,10,aw),false,'none');
+      // arms placed by facing only (the clips' chests lean differently from ours), then tilted to the aim pitch
+      const arms=['RightShoulder','RightArm','RightForeArm','RightHand',...ARM_L],ry=qaxis(V(0,1,0),e.bodyYaw);
+      for(const nm of arms){const i=bi[nm];P.q[i]=qlerp(P.q[i],qmul(ry,S.q[i]),w);}
+      for(const nm of arms)rot(nm,a*w);
+    }
+    return P;
+  }
   if(wA<.01)return P;
   const H=fkHeads(P),shR=H[bi.RightArm],shL=H[bi.LeftArm],mid=vscale(vadd(shR,shL),.5),up=V(0,1,0);
   const len=i=>vlen(vsub(B[i+1].head,B[i].head))*ARM_STRETCH;
   const lr=len(bi.RightArm)+len(bi.RightForeArm),ll=len(bi.LeftArm)+len(bi.LeftForeArm);
   const sg=twoHanded(e),rf=e.weapon==='rifle';
   // gun hand
-  const g=sg?vadd(vadd(shR,vscale(aim,lr*.5)),vadd(vscale(rt,-2.5),V(0,-1.5,0))):vadd(vadd(mid,vscale(aim,lr*.8)),vadd(vscale(rt,1.5),V(0,-3,0)));
+  const g=sg?vadd(vadd(shR,vscale(aim,lr*.5)),vadd(vscale(rt,-2.5),V(0,-1.5+(rf?3.2*smooth(clamp(e.aimW||0,0,1)):0),0))):vadd(vadd(mid,vscale(aim,lr*.8)),vadd(vscale(rt,1.5),V(0,-3,0)));
   let tL=sg?vadd(g,vadd(vscale(aim,rf?9.3:11*CHAR_SCALE),vadd(vscale(rt,-1.5),V(0,-1.5,0)))):vadd(g,vadd(vscale(aim,.8),vadd(vscale(rt,-2.6),V(0,-1.6,0))));
   if(wRocket>0)tL=vadd(vscale(tL,1-wRocket),vscale(vadd(shL,vscale(aim,ll*.97)),wRocket));
   const solveArm=(s,tgt,w,pole)=>{

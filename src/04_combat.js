@@ -196,7 +196,7 @@ function fireRifle(e){
   reveal(e);noise(e,900,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
-  const spread=(.01+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0))*(e.aiming?.5:1);
+  const spread=spreadOf(e);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:DMG,head:HEAD_DMG,fall:0,col:e.col});
@@ -205,12 +205,20 @@ function fireRifle(e){
   sfx('shot',e);if(e===player)world.shake=Math.max(world.shake,1.5);
   if(e.ammo<=0)e.reload=RELOAD;
 }
+// how far a pistol / rifle shot may stray (also sizes the crosshair). Hip-firing the rifle sprays a lot; aimed it's tight.
+function spreadOf(e){
+  const rf=e.weapon==='rifle',mv=Math.hypot(e.vx,e.vz)>60;
+  const s=rf?.008+(e.bloom||0)+(mv?.018:0)+(e.grounded?0:.03)+(e.isBot?.016:0)+(e.crouch?-.005:0)
+            :.01+(e.bloom||0)+(mv?.02:0)+(e.grounded?0:.03)+(e.isBot?.018:0)+(e.crouch?-.006:0);
+  return s*(e.aiming?.5:1)+(rf&&!e.aiming?RIFLE_HIP:0);
+}
+const RIFLE_HIP=.055;
 function fireAR(e){
   reveal(e);noise(e,950,e);
   const m=muzzleOf(e),tgt=e.aimPoint||vadd(headPos(e),vscale(fwdOf(e.yaw,e.pitch),1000));
   let d=vnorm(vsub(tgt,m));
   // tight first shots, the spray opens up the longer you hold the trigger
-  const spread=(.008+(e.bloom||0)+(Math.hypot(e.vx,e.vz)>60?.018:0)+(e.grounded?0:.03)+(e.isBot?.016:0)+(e.crouch?-.005:0))*(e.aiming?.5:1);
+  const spread=spreadOf(e);
   d=vnorm(V(d.x+(rnd()-.5)*2*spread,d.y+(rnd()-.5)*2*spread,d.z+(rnd()-.5)*2*spread));
   let start=m;if(solid(tileAt(m.x,m.y,m.z)))start=headPos(e);
   bullets.push({x:start.x,y:start.y,z:start.z,vx:d.x*PISTOL_SPEED,vy:d.y*PISTOL_SPEED,vz:d.z*PISTOL_SPEED,owner:e,life:.6,life0:.6,dmg:AR_DMG,head:AR_HEAD,fall:0,col:[.5,.95,1]});

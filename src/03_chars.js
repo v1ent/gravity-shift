@@ -1023,7 +1023,7 @@ function drawWeaponsSK(e,P,SK,acc,al){
   }else if(P.gunOn&&e.weapon==='pistol'&&!busy){
     // relaxed: pointing forward and a little down from the body (the wrist only nudges it, so the walk and idle clips
     // can't twist it round); snapped onto the aim line while shooting
-    const w=clamp((e.aimW||0)*1.6,0,1),fb=V(Math.sin(by),0,Math.cos(by)),pd=e._aimDir||fb;
+    const w=Math.max(clamp((e.aimW||0)*1.6,0,1),e.weapon==='pistol'?e._pistolW||0:0),fb=V(Math.sin(by),0,Math.cos(by)),pd=e._aimDir||fb;
     const hk=Math.max(0,vdot(SK.handFwd,fb))*.25,relax=vnorm(vadd(vadd(vscale(fb,.85),V(0,-.45,0)),vscale(SK.handFwd,hk)));
     const u=vnorm(vadd(vscale(relax,1-w),vscale(pd,w)));
     let v=vsub(V(0,1,0),vscale(u,u.y));v=vlen(v)<.1?vscale(fb,-1):vnorm(v);
