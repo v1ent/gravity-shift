@@ -83,7 +83,7 @@ function musicStart(){
 }
 function musicStop(){musicOn=false;if(musicTimer)clearInterval(musicTimer);musicTimer=null;if(musTrack){try{musTrack.s.stop();}catch(e){}musTrack=null;}}
 // the recorded loops: menu music in the menus, game music in matches; they cross-fade when that changes
-const MUS_LOOP={music_menu:6.0,music_game:10.5};let musTrack=null;
+const MUS_LOOP={music_menu:6.0,music_game:60.0};let musTrack=null; // game music: 45 bars at 180 BPM
 function musicRecorded(){
   if(!SNDG.music_menu||!SNDG.music_game)return false;
   const want=gameState==='menu'||(TUT.on&&gameState!=='play')?'music_menu':'music_game';
