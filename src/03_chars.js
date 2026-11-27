@@ -19,9 +19,13 @@ let chars=[],player=null;
 const DODGE_STAM=.3;
 const DODGES={
   back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
-  // side dodges: dodge_right_02 (ends facing forward: no turn-back needed), its travel stretched 2.6x; left is its mirror
-  right:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:false,scale:2.6,fb:V(-82,0,-5)},
-  left:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:true,scale:2.6,fb:V(82,0,-5)},
+  // side dodges: dive_right (a dive to the side, rolling up facing forward); left is its mirror. Travel: one-way (the get-up
+  // doesn't drag the body back), the clip's forward drift dropped, the sideways distance stretched 1.85x
+  right:{clip:'dive_right',f0:6,f1:96,rate:2.2,mirror:false,scale:1.85,zs:0,mono:true,grip:['pistol_aim',100],gripW:1,g1:84,fb:V(-114,0,0)},
+  left:{clip:'dive_right',f0:6,f1:96,rate:2.2,mirror:true,scale:1.85,zs:0,mono:true,grip:['pistol_aim',100],gripW:1,g1:84,fb:V(114,0,0)},
+  // backups: dodge_right_02 (side step) and rolling_right
+  right02:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:false,scale:2.6,fb:V(-82,0,-5)},
+  rollR:{clip:'rolling_right',f0:0,f1:76,rate:2,mirror:false,scale:1,fb:V(-80,0,0)},
   // forward (double-tap W): the dive-and-roll of cover_jump_over, from the take-off run to standing up again
   fwd:{clip:'cover_jump_over',f0:8,f1:68,rate:1.6,mirror:false,fb:V(0,0,252)},
 };
@@ -32,6 +36,11 @@ function dodgeFrame(D,frames){if(!D.cyc)return {f:D.f0+frames,k:0};const k=Math.
 function dodgeDisp(D,t){
   const u=clamp(t/D.dur,0,1);
   if(typeof SKN!=='undefined'&&SKN.clips&&SKN.clips[D.clip]){
+    if(D.mono){ // one-way travel: per frame, the farthest the hip has got so far along the dodge's direction
+      if(!D.tab){const h=f=>sampleClip(D.clip,f/30,D.mirror).hip,a=h(D.f0),end=h(D.f1),sg=Math.sign(end.x-a.x)||1;D.tab=[];let m=0;
+        for(let f=D.f0;f<=D.f1;f++){const b=h(f);m=Math.max(m,(b.x-a.x)*sg);D.tab.push([m*sg,(b.z-a.z)]);}}
+      const fr=u*(D.f1-D.f0),i=Math.min(D.tab.length-2,Math.floor(fr)),w=fr-i,A=D.tab[i],B=D.tab[i+1],k=D.scale||1,kz=D.zs!=null?D.zs:1;
+      return V(lerp(A[0],B[0],w)*k,0,lerp(A[1],B[1],w)*k*kz);}
     const h=f=>sampleClip(D.clip,f/30,D.mirror).hip,k=D.scale||1,F=dodgeFrame(D,u*(D.f1-D.f0)),a=h(D.f0),b=h(F.f);
     let x=b.x-a.x,z=b.z-a.z;if(D.cyc){const c=h(D.cyc);x+=(c.x-a.x)*F.k;z+=(c.z-a.z)*F.k;}
     return V(x*k,0,z*k);}

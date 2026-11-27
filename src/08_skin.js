@@ -503,6 +503,10 @@ function clipFor(e,A,dt){
     const P=clipAt(D.clip,f,D.mirror,'none');
     // dodge_right ends turned 93° to the side: turn it back so it finishes facing forward
     if(D.fix)rotatePose(P,qaxis(V(0,1,0),D.fix*smooth(clamp((f-D.fix0)/(D.fix1-D.fix0),0,1))),V(P.hip.x,0,P.hip.z));
+    // dive: the clip flings both hands open; hold the gun in both hands against the chest instead (arms taken relative to the
+    // chest, so they turn with the body through the dive and roll), easing in at the take-off and out as he stands up
+    if(D.grip&&SKN.clips[D.grip[0]]){const G=clipAt(D.grip[0],D.grip[1],false,'none'),w=D.gripW*smooth(clamp((f-D.f0)/8,0,1))*(1-smooth(clamp((f-D.g1)/(D.f1-D.g1),0,1)));
+      layerBones(P,G,['RightShoulder','RightArm','RightForeArm','RightHand',...ARM_L],'Spine2',w);}
     return {P:placeAt(P,s.yaw,o),key:'dodge'};
   }
   if(st==='climbup'&&e.st.vault&&e.st.over&&(SKN.clips[e.st.vclip]||SKN.clips.vault)){
