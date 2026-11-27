@@ -459,19 +459,41 @@ function tidyProps(dt){
     const walls=[wallAt(b,1,0)||wallAt(b,-1,0),wallAt(b,0,1)||wallAt(b,0,-1)];
     const cornered=walls[0]&&walls[1],stacked=!solid(tileAt(b.x,b.y-3,b.z))&&b.y>1;
     return (cornered&&near(b,80)>=1)||stacked&&near(b,70)>=2;});
-  let moved=0;const sp=stuck.length?spawnPoints():[];
-  for(const b of stuck){if(moved>=3)break;if(!unseen(V(b.x,b.y+b.h/2,b.z)))continue;
-    for(let tries=0;tries<30;tries++){
-      const q=sp[rnd()*sp.length|0];if(!q)break;
-      const x=q.x+(rnd()-.5)*T*2,z=q.z+(rnd()-.5)*T*2,y=Math.floor((q.y+1)/T)*T;
-      const flat=[[0,0],[1,0],[-1,0],[0,1],[0,-1]].every(([dx,dz])=>{const xx=x+dx*T,zz=z+dz*T;return solid(tileAt(xx,y-4,zz))&&!solid(tileAt(xx,y+4,zz))&&!solid(tileAt(xx,y+36,zz));});
-      if(!flat||overlapSolid(x,y+1,z,b.w,b.h))continue;
-      if(props.some(o=>o!==b&&!o.dead&&Math.hypot(o.x-x,o.z-z)<70&&Math.abs(o.y-y)<40))continue;
-      if(chars.some(c=>c.alive&&Math.hypot(c.x-x,c.z-z)<110))continue;
-      if(!unseen(V(x,y+b.h/2,z)))continue;
-      b.x=x;b.y=y+1;b.z=z;b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.q=qaxis(V(0,1,0),(rnd()*4|0)*Math.PI/2);b.grounded=false;b.asleep=false;b.sleep=0;rbBounds(b);
-      moved++;break;
-    }
+  let moved=0;
+  for(const b of stuck){if(moved>=3)break;if(!unseen(V(b.x,b.y+b.h/2,b.z)))continue;if(relocateProp(b,unseen))moved++;}
+}
+// move a prop onto a free patch of flat floor near a spawn point (out of sight if `unseen` is given); true if it found one
+function relocateProp(b,unseen){
+  const sp=spawnPoints();
+  for(let tries=0;tries<40;tries++){
+    const q=sp[rnd()*sp.length|0];if(!q)break;
+    const x=q.x+(rnd()-.5)*T*2,z=q.z+(rnd()-.5)*T*2,y=Math.floor((q.y+1)/T)*T;
+    const flat=[[0,0],[1,0],[-1,0],[0,1],[0,-1]].every(([dx,dz])=>{const xx=x+dx*T,zz=z+dz*T;return solid(tileAt(xx,y-4,zz))&&!solid(tileAt(xx,y+4,zz))&&!solid(tileAt(xx,y+36,zz));});
+    if(!flat||overlapSolid(x,y+1,z,b.w,b.h))continue;
+    if(props.some(o=>o!==b&&!o.dead&&Math.hypot(o.x-x,o.z-z)<70&&Math.abs(o.y-y)<40))continue;
+    if(chars.some(c=>c.alive&&Math.hypot(c.x-x,c.z-z)<110))continue;
+    if(unseen&&!unseen(V(x,y+b.h/2,z)))continue;
+    b.x=x;b.y=y+1;b.z=z;b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.q=qaxis(V(0,1,0),(rnd()*4|0)*Math.PI/2);b.grounded=false;b.asleep=false;b.sleep=0;rbBounds(b);
+    return true;
+  }
+  return false;
+}
+// safety net: a box that stays awake for 6 s without getting anywhere (jiggling in a bad spot) and that nobody is pushing
+// is settled where it is; if it starts jiggling again, or nobody can see it, it is moved onto flat floor elsewhere
+function unjiggle(b,dt){
+  if(b.asleep||world.rot||b.fuse!==undefined||TUT.on){b.jig=null;return;}
+  const J=b.jig||(b.jig={t:0,x:b.x,y:b.y,z:b.z});
+  if(Math.hypot(b.x-J.x,b.y-J.y,b.z-J.z)>48||chars.some(c=>c.alive&&Math.hypot(c.x-b.x,c.z-b.z)<b.w/2+50&&Math.abs(c.y-b.y)<b.h+40)){J.t=0;J.x=b.x;J.y=b.y;J.z=b.z;return;}
+  J.t+=dt;if(J.t<6)return;
+  J.t=0;J.x=b.x;J.y=b.y;J.z=b.z;
+  const viewers=chars.filter(c=>c.alive&&(!c.isBot||c===player)).map(c=>headPos(c)),c0=V(b.x,b.y+b.h/2,b.z),seen=viewers.some(h=>losClear(h,c0));
+  const slow=Math.hypot(b.vx,b.vy,b.vz)<20&&vlen(b.av)<.5;
+  // first (and second, if it's only creeping) time: settle it where it is
+  if((b.jigN||0)<(slow?2:1)&&(b.grounded||slow)){b.jigN=(b.jigN||0)+1;const q0=b.q;b.q=rbSnapQ(b.q);rbBounds(b);
+    if(!overlapSolid(b.x,b.y,b.z,b.w,b.h)){b.vx=b.vy=b.vz=0;b.av=V(0,0,0);b.asleep=true;b.sleep=0;return;}b.q=q0;rbBounds(b);}
+  if(relocateProp(b,seen?null:p=>viewers.every(h=>!losClear(h,p)))||relocateProp(b,null)){b.jigN=0;
+    for(const p of [c0,V(b.x,b.y+b.h/2,b.z)])for(let i=0;i<10;i++)addPart(p.x+(rnd()-.5)*b.w,p.y+(rnd()-.5)*b.h,p.z+(rnd()-.5)*b.d,(rnd()-.5)*120,rnd()*80,(rnd()-.5)*120,.5,[.48,.52,.63],8,'dust');
+    b.jig=null;
   }
 }
 function updateProps(dt){
@@ -488,6 +510,7 @@ function updateProps(dt){
       let imp=0,gr=false;const many=b.W>40||b.H>40||b.D>40;
       for(let s=0;s<2;s++){const r=rbStep(b,dt/2,b.cyl?RB_CYL:many?RB_ALL:RB_LIGHT);imp=Math.max(imp,r.imp);gr=gr||r.ground;}
       b.propSupport=false;b.grounded=gr;
+      unjiggle(b,dt);
       if(imp>320){sfx('crate',b);for(let i=0;i<5;i++)addPart(b.x+(rnd()-.5)*b.w,b.y,b.z+(rnd()-.5)*b.d,(rnd()-.5)*150,rnd()*80,(rnd()-.5)*150,.35,[.48,.52,.63],6,'dust');
         if(b.kind==='barrel'&&imp>700)hurtBarrel(b,(world.time-b.kickT<4&&b.kickedBy)||(world.time-world.lastKickT<6?world.lastKicker:null),1);}
       continue;

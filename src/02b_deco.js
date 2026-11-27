@@ -217,14 +217,14 @@ function genPanelDressing(){
     }
   }
 }
-// ---------- machinery: the ledges and curbs round the panels (voxel type 7) ----------
+// ---------- machinery: the ledges and curbs round the panels (voxel type 8, MACH) ----------
 // Collision is the plain block; what you see is built from smaller parts: a dark core, plates and grates on top,
 // and on the sides and undersides pipes that run on unbroken along the whole ledge plus a row of mixed devices.
 function genMachinery(){
   const R=rnd,AX=[V(1,0,0),V(0,1,0),V(0,0,1)],NS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
   const CORE=hexRGB('#151925'),STEEL=hexRGB('#4a5268'),PLATE=[hexRGB('#3c4459'),hexRGB('#454e66'),hexRGB('#363d50')],DARK=hexRGB('#232836');
   const comp=new Map();let nComp=0;
-  const isM=(i,j,k)=>tile(i,j,k)===7;
+  const isM=(i,j,k)=>tile(i,j,k)===MACH;
   // components (one per ledge / curb), each with its own pipe layout per facing
   for(let k0=0;k0<N;k0++)for(let j0=0;j0<N;j0++)for(let i0=0;i0<N;i0++){if(!isM(i0,j0,k0)||comp.has(gi(i0,j0,k0)))continue;
     const id=nComp++,st=[[i0,j0,k0]];comp.set(gi(i0,j0,k0),id);

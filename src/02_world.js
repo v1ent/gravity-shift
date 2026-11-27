@@ -4,16 +4,17 @@ const PARTITIONS=false,STAIRS=false; // side-to-side walls and a mid floor split
 // =====================================================================
 const T=32,N=37,L=N*T,S6=6;
 // a ledge or curb n cells long: runs of 2-4 machinery cells (7) between runs of plain concrete (1), about 40% machinery
-function machineryRuns(n,R){const out=[];let m=R()<.45;while(out.length<n){const len=2+(R()*3|0);for(let q=0;q<len&&out.length<n;q++)out.push(m?7:1);m=m?false:R()<.62;}return out;}
+function machineryRuns(n,R){const out=[];let m=R()<.45;while(out.length<n){const len=2+(R()*3|0);for(let q=0;q<len&&out.length<n;q++)out.push(m?MACH:1);m=m?false:R()<.62;}return out;}
 // voxel types: 0 air, 1 concrete, 2 gravity panel, 3 steel, 4 hazard rim, 5 neon strip, 6 outer shell,
-//   7 machinery (the ledges and curbs round the panels: solid like concrete, but drawn as pipes and devices — src/02b_deco.js)
+//   8 machinery (the ledges and curbs round the panels: solid like concrete, but drawn as pipes and devices — src/02b_deco.js)
 let grid=new Uint8Array(N*N*N);
 const gi=(i,j,k)=>i+N*(j+N*k);
 const tile=(i,j,k)=>(i<0||j<0||k<0||i>=N||j>=N||k>=N)?6:grid[gi(i,j,k)];
 const setT=(i,j,k,v)=>{if(i>=0&&j>=0&&k>=0&&i<N&&j<N&&k<N)grid[gi(i,j,k)]=v;};
 const solid=t=>t!==0;
 // ---- stair blocks (type 7): four 8px steps inside one cell, oriented by an 'up' and a 'run' (ascending) direction
-const STAIR=7,D6=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+// 7: stairs (switched off) collide as ramps; 8: machinery, solid like concrete
+const STAIR=7,MACH=8,D6=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 let stairO=new Uint8Array(N*N*N);
 const dirIdx=(x,y,z)=>x>.5?0:x<-.5?1:y>.5?2:y<-.5?3:z>.5?4:5;
 function setStair(i,j,k,up,run){setT(i,j,k,STAIR);if(i>=0&&j>=0&&k>=0&&i<N&&j<N&&k<N)stairO[gi(i,j,k)]=up*6+run;}
@@ -210,12 +211,12 @@ function buildLevelMesh(){
       let n=0;
       for(x[v]=0;x[v]<N;x[v]++)for(x[u]=0;x[u]<N;x[u]++){
         let a=x[d]>=0?grid[gi(x[0],x[1],x[2])]:0;
-        let b=x[d]<N-1?grid[gi(x[0]+q[0],x[1]+q[1],x[2]+q[2])]:0;if(a===STAIR)a=0;if(b===STAIR)b=0;
+        let b=x[d]<N-1?grid[gi(x[0]+q[0],x[1]+q[1],x[2]+q[2])]:0;if(a===STAIR||a===MACH)a=0;if(b===STAIR||b===MACH)b=0; // machinery: drawn by the deco, not the mesh
         let m=0;
         const code=(t,i,j,k)=>{if(t!==2)return t;const lv=isLiveK(i,j,k),pv=panelPrevLive&&panelPrevLive.has(gi(i,j,k));
           if(lv)liveNow.add(gi(i,j,k));if(panelPrevLive&&lv!==pv)panelSwitched.add(gi(i,j,k));return lv?(panelPrevLive&&!pv?22:20):(pv?23:21);};
-        if(solid(a)&&!solid(b))m=a===7?0:code(a,x[0],x[1],x[2]);
-        else if(!solid(a)&&solid(b))m=b===7?0:-code(b,x[0]+q[0],x[1]+q[1],x[2]+q[2]);
+        if(solid(a)&&!solid(b))m=code(a,x[0],x[1],x[2]);
+        else if(!solid(a)&&solid(b))m=-code(b,x[0]+q[0],x[1]+q[1],x[2]+q[2]);
         mask[n++]=m;
       }
       x[d]++;
