@@ -104,8 +104,8 @@ TUT_BUILD.trav=()=>{
   gbox(2,5,20,34,21,26,0);  // lane C  (z 20..26) run +x: pull-ups, gap
   gbox(30,5,2,34,21,17,0);  // corner A->B
   gbox(2,5,11,6,21,26,0);   // corner B->C
-  // lane A: two barriers (1 and 2 blocks) after an 11-block run-up
-  gbox(14,5,2,14,5,8,3);gbox(22,5,2,22,6,8,3);
+  // lane A: two low barriers (1 block, vaultable) after an 11-block run-up
+  gbox(14,5,2,14,5,8,3);gbox(22,5,2,22,5,8,3);
   // lane B: slide beam, 1 block of clearance, 14-block run-up from the corner
   gbox(16,6,11,16,21,17,1);gbox(16,6,11,16,6,17,4);
   // lane C: ledge 1 (4 blocks), ledge 2 (+4), 3-block gap, far side (+4)
@@ -248,15 +248,19 @@ TUT_BUILD.shift=()=>{
   const S=[3,10,17,24,31,34];
   for(let f=0;f<4;f++){
     // in frame f the floor is j=14 and the panel to kick is on the +z wall at the end of section f
+    // a 5x5 panel like the arena's (the corridor floor is its bottom ledge), with a strip of machinery over it
     const e=S[f+1]-1;
-    gbox(e-1,15,22,e,17,22,2);
+    gbox(e-4,15,22,e,19,22,2);
+    for(let x=e-6,q=0,mix=machineryRuns(9,rnd);x<=e+2;x++,q++)if(x>S[f]-1)setT(x,20,21,mix[q]);
     // the floor of the next section is missing — a pit
     gbox(S[f+1],9,15,S[f+2]-1,14,21,0);gbox(S[f+1],8,15,S[f+2]-1,8,21,4);
-    for(let x=S[f]+.8;x<e-1.2;x+=1.3)floorChev(x*T,18.5*T,15*T,1,0,MKC.yel,3.2);
-    for(const x of [e-.5])for(let z=17;z<21.5;z+=1.4)floorChev(x*T,z*T,15*T,0,1,MKC.mag,3.2);
+    for(let x=S[f]+.8;x<e-2.6;x+=1.3)floorChev(x*T,17*T,15*T,1,0,MKC.yel,3.2);
+    for(const x of [e-1.5])for(let z=17;z<21.5;z+=1.4)floorChev(x*T,z*T,15*T,0,1,MKC.mag,3.2);
     rotateGridOnly('+z');rotateDeco('+z');
   }
   gbox(34,16,17,34,19,19,5); // exit light
+  genPanelDressing();genMachinery(); // the same frames, devices and pipes as the arena's panels
+  panelPrevLive=null;world.panelSwitchT=-99; // (building turned the room round: no switch-on/off animation at the start)
   floorRect(31.2*T,15.5*T,33.8*T,21.5*T,15*T,MKC.grn,4);
   return {
     name:'ARENA SHIFT',spawn:{x:4.2*T,y:15*T,z:18.5*T},yaw:Math.PI/2,hud:{gravity:true},
