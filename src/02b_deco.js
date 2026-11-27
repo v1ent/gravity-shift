@@ -147,6 +147,8 @@ function genPanelDressing(){
     box(0,hb+t*.5,4.3,2*ha+2*t-4,1.2,.8,PM,5);box(0,-hb-t*.5,4.3,2*ha+2*t-4,1.2,.8,PM,5);box(ha+t*.5,0,4.3,1.2,2*hb,.8,PM,5);box(-ha-t*.5,0,4.3,1.2,2*hb,.8,PM,5);
     // ---- the border: bands packed with devices, pipes and cables ----
     // put(s,c,h,ss,cs,hs,col,em): a box in a band — s along it, c across it, h out from its mounting surface
+    // some panels get a lot more equipment: denser bands, wider at the sides, and extra bands round the ledges
+    const rich=R()<.45,devP=rich?.92:.6;
     const band=(put,s0,s1,c0,c1,maxH,ok)=>{
       const W2=c1-c0;
       // pipes running the length of the band: round, square, flat duct, insulated, ribbed
@@ -166,7 +168,7 @@ function genPanelDressing(){
       // devices packed along the band
       for(let x=s0+2;x<s1-6;){
         const w=Math.min(s1-2-x,8+R()*22);if(w<6)break;
-        if(R()<.6){
+        if(R()<devP){
           const cw=Math.min(W2-2,10+R()*(W2-8)),cc=c0+1+cw/2+R()*Math.max(0,W2-2-cw),hd=Math.min(maxH,4+R()*maxH*.8),xc=x+w/2;
           if(ok(xc,cc)){
             put(xc,cc,hd/2,w,cw,hd,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
@@ -195,8 +197,20 @@ function genPanelDressing(){
     const T2=T*2-2;
     if(wall){
       // both sides of the panel, between the ledges
-      band((s,c,h,ss,cs,hs,col,em)=>box(-ha-t-c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(-ha-t-c,s));
-      band((s,c,h,ss,cs,hs,col,em)=>box(ha+t+c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(ha+t+c,s));
+      const SW=rich?T*3-2:T2;
+      band((s,c,h,ss,cs,hs,col,em)=>box(-ha-t-c,s,h,cs,ss,hs,col,em),-hb,hb,0,SW-t,rich?20:16,(s,c)=>onWall(-ha-t-c,s));
+      band((s,c,h,ss,cs,hs,col,em)=>box(ha+t+c,s,h,cs,ss,hs,col,em),-hb,hb,0,SW-t,rich?20:16,(s,c)=>onWall(ha+t+c,s));
+      if(rich){ // above the top ledge and below the bottom one
+        band((s,c,h,ss,cs,hs,col,em)=>box(s,hb+T+2+c,h,ss,cs,hs,col,em),-ha-T2,ha+T2,0,T*1.4,16,(s,c)=>onWall(s,hb+T+2+c));
+        band((s,c,h,ss,cs,hs,col,em)=>box(s,-hb-T-2-c,h,ss,cs,hs,col,em),-ha-T2,ha+T2,0,T*1.4,16,(s,c)=>onWall(s,-hb-T-2-c));
+      }
+    }else if(rich){ // floor / ceiling panels: a band of equipment on the floor outside the curb
+      const onFloor=(pa,pb)=>{const c=O.slice();c[aax]+=pa;c[bax]+=pb;c[na]-=nv[na]*T/2;const i=Math.floor(c[0]/T),j=Math.floor(c[1]/T),k=Math.floor(c[2]/T);
+        return solid(tile(i,j,k))&&!solid(tile(i+nv[0],j+nv[1],k+nv[2]));};
+      for(const sg of [-1,1]){
+        band((s,c,h,ss,cs,hs,col,em)=>box(s,sg*(hb+T+2+c),h,ss,cs,hs,col,em),-ha-T,ha+T,0,T*1.2,9,(s,c)=>onFloor(s,sg*(hb+T+2+c)));
+        band((s,c,h,ss,cs,hs,col,em)=>box(sg*(ha+T+2+c),s,h,cs,ss,hs,col,em),-hb-T,hb+T,0,T*1.2,9,(s,c)=>onFloor(sg*(ha+T+2+c),s));
+      }
     }
     if(wall){ // a lamp under the top ledge, shining on the panel
       box(0,hb-2,T*1.2,2*ha-10,3,6,DC.lampC,5);box(0,hb-.6,T*1.2,2*ha,1.2,10,DARK);

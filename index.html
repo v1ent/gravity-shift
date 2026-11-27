@@ -1111,6 +1111,8 @@ function genPanelDressing(){
     box(0,hb+t*.5,4.3,2*ha+2*t-4,1.2,.8,PM,5);box(0,-hb-t*.5,4.3,2*ha+2*t-4,1.2,.8,PM,5);box(ha+t*.5,0,4.3,1.2,2*hb,.8,PM,5);box(-ha-t*.5,0,4.3,1.2,2*hb,.8,PM,5);
     // ---- the border: bands packed with devices, pipes and cables ----
     // put(s,c,h,ss,cs,hs,col,em): a box in a band — s along it, c across it, h out from its mounting surface
+    // some panels get a lot more equipment: denser bands, wider at the sides, and extra bands round the ledges
+    const rich=R()<.45,devP=rich?.92:.6;
     const band=(put,s0,s1,c0,c1,maxH,ok)=>{
       const W2=c1-c0;
       // pipes running the length of the band: round, square, flat duct, insulated, ribbed
@@ -1130,7 +1132,7 @@ function genPanelDressing(){
       // devices packed along the band
       for(let x=s0+2;x<s1-6;){
         const w=Math.min(s1-2-x,8+R()*22);if(w<6)break;
-        if(R()<.6){
+        if(R()<devP){
           const cw=Math.min(W2-2,10+R()*(W2-8)),cc=c0+1+cw/2+R()*Math.max(0,W2-2-cw),hd=Math.min(maxH,4+R()*maxH*.8),xc=x+w/2;
           if(ok(xc,cc)){
             put(xc,cc,hd/2,w,cw,hd,[DARK,STEEL,DARK,DC.vent][R()*4|0]);
@@ -1159,8 +1161,20 @@ function genPanelDressing(){
     const T2=T*2-2;
     if(wall){
       // both sides of the panel, between the ledges
-      band((s,c,h,ss,cs,hs,col,em)=>box(-ha-t-c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(-ha-t-c,s));
-      band((s,c,h,ss,cs,hs,col,em)=>box(ha+t+c,s,h,cs,ss,hs,col,em),-hb,hb,0,T2-t,16,(s,c)=>onWall(ha+t+c,s));
+      const SW=rich?T*3-2:T2;
+      band((s,c,h,ss,cs,hs,col,em)=>box(-ha-t-c,s,h,cs,ss,hs,col,em),-hb,hb,0,SW-t,rich?20:16,(s,c)=>onWall(-ha-t-c,s));
+      band((s,c,h,ss,cs,hs,col,em)=>box(ha+t+c,s,h,cs,ss,hs,col,em),-hb,hb,0,SW-t,rich?20:16,(s,c)=>onWall(ha+t+c,s));
+      if(rich){ // above the top ledge and below the bottom one
+        band((s,c,h,ss,cs,hs,col,em)=>box(s,hb+T+2+c,h,ss,cs,hs,col,em),-ha-T2,ha+T2,0,T*1.4,16,(s,c)=>onWall(s,hb+T+2+c));
+        band((s,c,h,ss,cs,hs,col,em)=>box(s,-hb-T-2-c,h,ss,cs,hs,col,em),-ha-T2,ha+T2,0,T*1.4,16,(s,c)=>onWall(s,-hb-T-2-c));
+      }
+    }else if(rich){ // floor / ceiling panels: a band of equipment on the floor outside the curb
+      const onFloor=(pa,pb)=>{const c=O.slice();c[aax]+=pa;c[bax]+=pb;c[na]-=nv[na]*T/2;const i=Math.floor(c[0]/T),j=Math.floor(c[1]/T),k=Math.floor(c[2]/T);
+        return solid(tile(i,j,k))&&!solid(tile(i+nv[0],j+nv[1],k+nv[2]));};
+      for(const sg of [-1,1]){
+        band((s,c,h,ss,cs,hs,col,em)=>box(s,sg*(hb+T+2+c),h,ss,cs,hs,col,em),-ha-T,ha+T,0,T*1.2,9,(s,c)=>onFloor(s,sg*(hb+T+2+c)));
+        band((s,c,h,ss,cs,hs,col,em)=>box(sg*(ha+T+2+c),s,h,cs,ss,hs,col,em),-hb-T,hb+T,0,T*1.2,9,(s,c)=>onFloor(sg*(ha+T+2+c),s));
+      }
     }
     if(wall){ // a lamp under the top ledge, shining on the panel
       box(0,hb-2,T*1.2,2*ha-10,3,6,DC.lampC,5);box(0,hb-.6,T*1.2,2*ha,1.2,10,DARK);
@@ -1428,9 +1442,9 @@ let chars=[],player=null;
 const DODGE_STAM=.3;
 const DODGES={
   back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
-  // side dodges: three strides of jogging_strafe_left (a 21-frame cycle, 72 px each) at double speed; right is its mirror
-  left:{clip:'jogging_strafe_left',f0:0,f1:63,cyc:21,rate:2,mirror:false,fb:V(216,0,0)},
-  right:{clip:'jogging_strafe_left',f0:0,f1:63,cyc:21,rate:2,mirror:true,fb:V(-216,0,0)},
+  // side dodges: dodge_right_02 (ends facing forward: no turn-back needed), its travel stretched 2.6x; left is its mirror
+  right:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:false,scale:2.6,fb:V(-82,0,-5)},
+  left:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:true,scale:2.6,fb:V(82,0,-5)},
   // forward (double-tap W): the dive-and-roll of cover_jump_over, from the take-off run to standing up again
   fwd:{clip:'cover_jump_over',f0:8,f1:68,rate:1.6,mirror:false,fb:V(0,0,252)},
 };
@@ -3239,24 +3253,30 @@ const GIB_SEGS=[ // bone, its child (for length), cross-section, part kind
   ['LeftForeArm','LeftHand',[4.6,0,4.6],'limb'],['RightForeArm','RightHand',[4.6,0,4.6],'limb'],
   ['LeftUpLeg','LeftLeg',[6.8,0,6.8],'limb'],['RightUpLeg','RightLeg',[6.8,0,6.8],'limb'],
   ['LeftLeg','LeftFoot',[5.8,0,5.8],'limb'],['RightLeg','RightFoot',[5.8,0,5.8],'limb']];
+// which mesh part each gib segment shows (the pelvis segment carries the whole torso; the chest segment none)
+const GIB_PART={Head:'head',Spine2:null,Hips:'torso',LeftArm:'armL',RightArm:'armR',LeftForeArm:'foreL',RightForeArm:'foreR',LeftUpLeg:'thighL',RightUpLeg:'thighR',LeftLeg:'shinL',RightLeg:'shinR'};
 function spawnGibs(e,dir){
+  let segNow='';
   const col=e.col,dark=e.col.map(v=>v*.42),c=V(e.x,e.y+e.h*.5,e.z),d=dir||V(0,1,0);
   const fluid=[e.col[0]*.22+.06,e.col[1]*.12+.02,e.col[2]*.18+.04];
-  const P=SKN.ready&&e.skLast?e.skLast:null,H=P?fkHeads(P):null,bi=SKN.bi;
+  const PL=SKN.ready&&e.skLast?e.skLast:null,P=PL?{hip:V(PL.hip.x,PL.hip.y,PL.hip.z),q:PL.q.map(q=>q.slice()),K:PL.K.slice()}:null,H=P?fkHeads(P):null,bi=SKN.bi;
   const add=(pos,q,W,Hh,Dd,kind,cl)=>{
     const sp=280+rnd()*320,g={x:pos.x,y:pos.y,z:pos.z,vx:d.x*sp+(rnd()-.5)*300,vy:d.y*sp*.7+200+rnd()*240,vz:d.z*sp+(rnd()-.5)*300,
       m:Math.max(.2,W*Hh*Dd/1500),col:cl,dark,glow:col,kind,life:6+rnd()*2.5,bleed:kind==='shard'?0:.5+rnd()*.7,fluid};
     rbSetup(g,W,Hh,Dd,q);g.y=pos.y-g.h/2;
+    // with the character model loaded the piece is drawn as that part of the body (its pose at death, carried rigidly)
+    if(P&&SKN.gibRanges&&kind!=='shard'){g.mesh={part:GIB_PART[segNow],P0:P,c0:V(g.x,g.y+g.h/2,g.z),q0:g.q.slice(),col:e.col};}
     // the blast pushes on the near side: off-centre pushes start them spinning
     const r=vsub(pos,c);g.av=vadd(vscale(vcross(r,vscale(d,1)),.12),V((rnd()-.5)*16,(rnd()-.5)*16,(rnd()-.5)*16));
     gibs.push(g);
   };
   if(H){
     for(const [bn,ch,xs,kind] of GIB_SEGS){
+      if(SKN.gibRanges&&GIB_PART[bn]===null)continue; // (drawn as part of the torso piece)
       const i=bi[bn],a=H[i];let len=xs[1]||11,mid=a;
       if(ch){const b=H[bi[ch]];len=Math.max(6,vlen(vsub(b,a)));mid=vscale(vadd(a,b),.5);}
       else mid=vadd(a,qrot(P.q[i],V(0,5,0)));
-      add(mid,P.q[i],xs[0],len,xs[2],kind,kind==='limb'?(bn.includes('Up')||bn.endsWith('Arm')?col.map(v=>v*.6+.04):dark):col.map(v=>v*.55+.05));
+      segNow=bn;add(mid,P.q[i],xs[0],len,xs[2],kind,kind==='limb'?(bn.includes('Up')||bn.endsWith('Arm')?col.map(v=>v*.6+.04):dark):col.map(v=>v*.55+.05));
     }
   }else{
     for(const [sx,sy,sz,hy,kind] of [[10,11,10,e.h-6,'head'],[16,18,10,36,'chest'],[14,8,9,24,'pelvis'],[5,14,5,36,'limb'],[5,14,5,36,'limb'],[6.8,17,6.8,14,'limb'],[6.8,17,6.8,14,'limb']])
@@ -3280,6 +3300,11 @@ function updateGibs(dt){
 function drawGibs(){
   for(const g of gibs){
     const al=Math.min(1,g.life),W=g.W,H=g.H,D=g.D;
+    if(g.mesh&&SKN.ready&&SKN.gibRanges){ // the real body part: its death pose moved with the tumbling piece
+      const M=g.mesh;if(!M.part)continue;const rg=SKN.gibRanges[M.part];if(!rg)continue;
+      const qr=qmul(g.q,qconj(M.q0)),c=V(g.x,g.y+g.h/2,g.z),P0=M.P0;
+      const P={hip:vadd(c,qrot(qr,vsub(P0.hip,M.c0))),q:P0.q.map(q=>qmul(qr,q)),K:P0.K};
+      drawPose(P,M.col,al,0,rg);beginMain();continue;}
     rbDraw(g,V(0,0,0),V(W,H,D),g.col,null,null,al);
     if(g.kind==='shard')continue;
     // torn ends: dark joint caps with a glowing core where it ripped
@@ -5724,7 +5749,7 @@ void main(){
   float dif=max(dot(n,uSun),0.0),hemi=n.y*0.5+0.5;
   vec3 col=base*(0.34+0.30*hemi+0.62*dif);
   float rim=pow(1.0-abs(n.z*0.3+n.x*0.0),3.0)*0.0;
-  col+=uGlow*(1.0-body)*0.55+uGlow*body*0.06;
+  col+=uGlow*0.06; // (joints no longer glow: they're a darker shade of the body)
   {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=base*uLC*la*la*1.1;}
   float f=exp(-pow(vD*uFogD,2.0));
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
@@ -5748,7 +5773,7 @@ void main(){
   col+=env*fres*(0.75+0.55*body);
   col+=vec3(1.0)*pow(max(dot(n,normalize(uSun+v)),0.0),70.0)*(0.7+0.8*body)+vec3(0.25)*pow(max(dot(n,normalize(uSun+v)),0.0),12.0)*body;
   col+=uGlow*pow(1.0-ndv,3.0)*0.7;
-  col+=uGlow*(1.0-body)*0.55+uGlow*body*0.06;
+  col+=uGlow*0.06; // (joints no longer glow: they're a darker shade of the body)
   {vec3 lv=uLP.xyz-vW;float ld=length(lv),la=clamp(1.0-ld/uLP.w,0.0,1.0);
    col+=base*uLC*la*la*1.1+uLC*pow(max(dot(n,normalize(lv/ld+v)),0.0),40.0)*la*1.4;}
   float f=exp(-pow(vD*uFogD,2.0));
@@ -5807,6 +5832,22 @@ function buildLineMesh(gl,u8,vOff,ni,idx){
       for(let k=0;k<3;k++)out[dst+20+k]=(j===k||!vis[k])?255:0;}}
   const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,out,gl.STATIC_DRAW);return {b,n:ni,lines:sharpE.size,raw:raw.size};
 }
+// body parts for gibs: which part each bone belongs to
+function gibPart(name){
+  if(/Head|Neck/.test(name))return 'head';
+  for(const s of ['Left','Right']){const k=s[0];
+    if(name===s+'Arm')return 'arm'+k;if(name===s+'ForeArm'||name.startsWith(s+'Hand'))return 'fore'+k;
+    if(name===s+'UpLeg')return 'thigh'+k;if(name===s+'Leg'||name===s+'Foot'||name.startsWith(s+'Toe'))return 'shin'+k;}
+  return 'torso';
+}
+// each triangle goes to the part of the bone that moves it most; the index list is sorted by part
+function groupTris(u8,vOff,idx,names){
+  const part=names.map(gibPart),dom=i=>{const o=vOff+i*20;let b=0,w=-1;for(let k=0;k<4;k++)if(u8[o+16+k]>w){w=u8[o+16+k];b=u8[o+12+k];}return part[b]||'torso';};
+  const groups={};for(let t=0;t<idx.length/3;t++){const ps=[dom(idx[t*3]),dom(idx[t*3+1]),dom(idx[t*3+2])],g=ps[1]===ps[2]?ps[1]:ps[0];(groups[g]||(groups[g]=[])).push(t);}
+  const out=new Uint16Array(idx.length);let n=0;SKN.gibRanges={};
+  for(const [g,ts] of Object.entries(groups)){SKN.gibRanges[g]=[n,ts.length*3];for(const t of ts){out[n++]=idx[t*3];out[n++]=idx[t*3+1];out[n++]=idx[t*3+2];}}
+  return out;
+}
 async function loadModel(){
   try{
     if(typeof MODEL_B64==='undefined'||!R.ok||typeof DecompressionStream==='undefined'){SKN.failed=true;return;}
@@ -5824,7 +5865,9 @@ async function loadModel(){
     const loc={};for(const a of ['aPos','aNor','aJ','aW'])loc[a]=gl.getAttribLocation(p,a);
     for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC'])loc[u]=gl.getUniformLocation(p,u);
     SKN.vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(buf,vOff,vLen),gl.STATIC_DRAW);
-    SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(buf.slice(iOff,iOff+meta.ni*2)),gl.STATIC_DRAW);
+    // triangles sorted by body part, so a gib can draw just its own piece (SKN.gibRanges)
+    const idxS=groupTris(new Uint8Array(buf),vOff,new Uint16Array(buf.slice(iOff,iOff+meta.ni*2)),meta.bones.map(b=>b.name));
+    SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idxS,gl.STATIC_DRAW);
     SKN.p=p;SKN.loc=loc;SKN.meta=meta;SKN.ni=meta.ni;
     try{ // the "shiny" variant: same mesh, glossy fragment shader
       const sp=gl.createProgram();
@@ -5842,7 +5885,7 @@ async function loadModel(){
       gl.linkProgram(lp);if(!gl.getProgramParameter(lp,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(lp));
       const ll={};for(const a of ['aPos','aNor','aJ','aW','aB'])ll[a]=gl.getAttribLocation(lp,a);
       for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uLine'])ll[u]=gl.getUniformLocation(lp,u);
-      const u8=new Uint8Array(buf),idx=new Uint16Array(buf.slice(iOff,iOff+meta.ni*2));
+      const u8=new Uint8Array(buf),idx=idxS;
       SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx);SKN.lp=lp;SKN.ll=ll;
     }catch(err){console.warn('line style unavailable:',err);}
     // "ink" and "ink gloss": the solid / glossy shading with the same creases drawn as dark lines on top
@@ -6444,7 +6487,7 @@ function corpsesToDolls(){
   corpses=[];
 }
 
-function drawPose(P,col,alpha,flash){
+function drawPose(P,col,alpha,flash,range){ // range: [first index, count] to draw only part of the body (gibs)
   // which look: lines (glowing creases), solid, shiny, ink (solid + dark creases), inkShiny (shiny + dark creases)
   const st=SETTINGS.charStyle,gl=R.gl;
   let prog=SKN.p,L=SKN.loc,unpacked=false,glowLines=false,camU=false;
@@ -6463,13 +6506,14 @@ function drawPose(P,col,alpha,flash){
   gl.enableVertexAttribArray(L.aJ);gl.vertexAttribPointer(L.aJ,4,gl.UNSIGNED_BYTE,false,ST,12);
   gl.enableVertexAttribArray(L.aW);gl.vertexAttribPointer(L.aW,4,gl.UNSIGNED_BYTE,true,ST,16);
   if(lines){gl.enableVertexAttribArray(L.aB);gl.vertexAttribPointer(L.aB,3,gl.UNSIGNED_BYTE,true,ST,20);if(glowLines)gl.uniform3f(L.uLine,col[0],col[1],col[2]);}
-  const draw=()=>{if(lines)gl.drawArrays(gl.TRIANGLES,0,SKN.lm.n);else gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);};
+  const draw=()=>{if(range){if(lines)gl.drawArrays(gl.TRIANGLES,range[0],range[1]);else gl.drawElements(gl.TRIANGLES,range[1],gl.UNSIGNED_SHORT,range[0]*2);}
+    else if(lines)gl.drawArrays(gl.TRIANGLES,0,SKN.lm.n);else gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);};
   gl.uniformMatrix4fv(L.uVP,false,FR.vp);gl.uniformMatrix4fv(L.uWorldFix,false,FR.fix);
   gl.uniformMatrix4fv(L.uB,false,SKN.mats);gl.uniform1f(L.uQ,SKN.meta.q);
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
   {const li=FR.light;if(li){gl.uniform4f(L.uLP,li.p.x,li.p.y,li.p.z,li.r);gl.uniform3f(L.uLC,li.c[0],li.c[1],li.c[2]);}else{gl.uniform4f(L.uLP,0,-1e5,0,1);gl.uniform3f(L.uLC,0,0,0);}}
   const fl=flash||0;
-  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);{const k=.68,b=[col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06];gl.uniform3f(L.uJoint,b[0]*k,b[1]*k,b[2]*k);} // joints: the fighter's colour, a shade darker
+  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);{const k=.55,b=[col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06];gl.uniform3f(L.uJoint,b[0]*k,b[1]*k,b[2]*k);} // joints: the fighter's colour, a shade darker
   gl.uniform3f(L.uGlow,col[0]*(.35+fl),col[1]*(.35+fl),col[2]*(.35+fl));
   if(alpha<.99){
     // see-through: lay down the body's depth first, so only its front shows and nothing behind it (guns, its own far side) bleeds through

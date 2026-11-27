@@ -719,24 +719,30 @@ const GIB_SEGS=[ // bone, its child (for length), cross-section, part kind
   ['LeftForeArm','LeftHand',[4.6,0,4.6],'limb'],['RightForeArm','RightHand',[4.6,0,4.6],'limb'],
   ['LeftUpLeg','LeftLeg',[6.8,0,6.8],'limb'],['RightUpLeg','RightLeg',[6.8,0,6.8],'limb'],
   ['LeftLeg','LeftFoot',[5.8,0,5.8],'limb'],['RightLeg','RightFoot',[5.8,0,5.8],'limb']];
+// which mesh part each gib segment shows (the pelvis segment carries the whole torso; the chest segment none)
+const GIB_PART={Head:'head',Spine2:null,Hips:'torso',LeftArm:'armL',RightArm:'armR',LeftForeArm:'foreL',RightForeArm:'foreR',LeftUpLeg:'thighL',RightUpLeg:'thighR',LeftLeg:'shinL',RightLeg:'shinR'};
 function spawnGibs(e,dir){
+  let segNow='';
   const col=e.col,dark=e.col.map(v=>v*.42),c=V(e.x,e.y+e.h*.5,e.z),d=dir||V(0,1,0);
   const fluid=[e.col[0]*.22+.06,e.col[1]*.12+.02,e.col[2]*.18+.04];
-  const P=SKN.ready&&e.skLast?e.skLast:null,H=P?fkHeads(P):null,bi=SKN.bi;
+  const PL=SKN.ready&&e.skLast?e.skLast:null,P=PL?{hip:V(PL.hip.x,PL.hip.y,PL.hip.z),q:PL.q.map(q=>q.slice()),K:PL.K.slice()}:null,H=P?fkHeads(P):null,bi=SKN.bi;
   const add=(pos,q,W,Hh,Dd,kind,cl)=>{
     const sp=280+rnd()*320,g={x:pos.x,y:pos.y,z:pos.z,vx:d.x*sp+(rnd()-.5)*300,vy:d.y*sp*.7+200+rnd()*240,vz:d.z*sp+(rnd()-.5)*300,
       m:Math.max(.2,W*Hh*Dd/1500),col:cl,dark,glow:col,kind,life:6+rnd()*2.5,bleed:kind==='shard'?0:.5+rnd()*.7,fluid};
     rbSetup(g,W,Hh,Dd,q);g.y=pos.y-g.h/2;
+    // with the character model loaded the piece is drawn as that part of the body (its pose at death, carried rigidly)
+    if(P&&SKN.gibRanges&&kind!=='shard'){g.mesh={part:GIB_PART[segNow],P0:P,c0:V(g.x,g.y+g.h/2,g.z),q0:g.q.slice(),col:e.col};}
     // the blast pushes on the near side: off-centre pushes start them spinning
     const r=vsub(pos,c);g.av=vadd(vscale(vcross(r,vscale(d,1)),.12),V((rnd()-.5)*16,(rnd()-.5)*16,(rnd()-.5)*16));
     gibs.push(g);
   };
   if(H){
     for(const [bn,ch,xs,kind] of GIB_SEGS){
+      if(SKN.gibRanges&&GIB_PART[bn]===null)continue; // (drawn as part of the torso piece)
       const i=bi[bn],a=H[i];let len=xs[1]||11,mid=a;
       if(ch){const b=H[bi[ch]];len=Math.max(6,vlen(vsub(b,a)));mid=vscale(vadd(a,b),.5);}
       else mid=vadd(a,qrot(P.q[i],V(0,5,0)));
-      add(mid,P.q[i],xs[0],len,xs[2],kind,kind==='limb'?(bn.includes('Up')||bn.endsWith('Arm')?col.map(v=>v*.6+.04):dark):col.map(v=>v*.55+.05));
+      segNow=bn;add(mid,P.q[i],xs[0],len,xs[2],kind,kind==='limb'?(bn.includes('Up')||bn.endsWith('Arm')?col.map(v=>v*.6+.04):dark):col.map(v=>v*.55+.05));
     }
   }else{
     for(const [sx,sy,sz,hy,kind] of [[10,11,10,e.h-6,'head'],[16,18,10,36,'chest'],[14,8,9,24,'pelvis'],[5,14,5,36,'limb'],[5,14,5,36,'limb'],[6.8,17,6.8,14,'limb'],[6.8,17,6.8,14,'limb']])
@@ -760,6 +766,11 @@ function updateGibs(dt){
 function drawGibs(){
   for(const g of gibs){
     const al=Math.min(1,g.life),W=g.W,H=g.H,D=g.D;
+    if(g.mesh&&SKN.ready&&SKN.gibRanges){ // the real body part: its death pose moved with the tumbling piece
+      const M=g.mesh;if(!M.part)continue;const rg=SKN.gibRanges[M.part];if(!rg)continue;
+      const qr=qmul(g.q,qconj(M.q0)),c=V(g.x,g.y+g.h/2,g.z),P0=M.P0;
+      const P={hip:vadd(c,qrot(qr,vsub(P0.hip,M.c0))),q:P0.q.map(q=>qmul(qr,q)),K:P0.K};
+      drawPose(P,M.col,al,0,rg);beginMain();continue;}
     rbDraw(g,V(0,0,0),V(W,H,D),g.col,null,null,al);
     if(g.kind==='shard')continue;
     // torn ends: dark joint caps with a glowing core where it ripped

@@ -19,9 +19,9 @@ let chars=[],player=null;
 const DODGE_STAM=.3;
 const DODGES={
   back:{clip:'dodging_back',f0:8,f1:60,rate:1.45,mirror:false,fb:V(0,0,-80)},
-  // side dodges: three strides of jogging_strafe_left (a 21-frame cycle, 72 px each) at double speed; right is its mirror
-  left:{clip:'jogging_strafe_left',f0:0,f1:63,cyc:21,rate:2,mirror:false,fb:V(216,0,0)},
-  right:{clip:'jogging_strafe_left',f0:0,f1:63,cyc:21,rate:2,mirror:true,fb:V(-216,0,0)},
+  // side dodges: dodge_right_02 (ends facing forward: no turn-back needed), its travel stretched 2.6x; left is its mirror
+  right:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:false,scale:2.6,fb:V(-82,0,-5)},
+  left:{clip:'dodge_right_02',f0:14,f1:85,rate:2,mirror:true,scale:2.6,fb:V(82,0,-5)},
   // forward (double-tap W): the dive-and-roll of cover_jump_over, from the take-off run to standing up again
   fwd:{clip:'cover_jump_over',f0:8,f1:68,rate:1.6,mirror:false,fb:V(0,0,252)},
 };

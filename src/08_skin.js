@@ -26,7 +26,7 @@ void main(){
   float dif=max(dot(n,uSun),0.0),hemi=n.y*0.5+0.5;
   vec3 col=base*(0.34+0.30*hemi+0.62*dif);
   float rim=pow(1.0-abs(n.z*0.3+n.x*0.0),3.0)*0.0;
-  col+=uGlow*(1.0-body)*0.55+uGlow*body*0.06;
+  col+=uGlow*0.06; // (joints no longer glow: they're a darker shade of the body)
   {float ld=length(vW-uLP.xyz),la=clamp(1.0-ld/uLP.w,0.0,1.0);col+=base*uLC*la*la*1.1;}
   float f=exp(-pow(vD*uFogD,2.0));
   gl_FragColor=vec4(mix(uFog,col,f),uAlpha);
@@ -50,7 +50,7 @@ void main(){
   col+=env*fres*(0.75+0.55*body);
   col+=vec3(1.0)*pow(max(dot(n,normalize(uSun+v)),0.0),70.0)*(0.7+0.8*body)+vec3(0.25)*pow(max(dot(n,normalize(uSun+v)),0.0),12.0)*body;
   col+=uGlow*pow(1.0-ndv,3.0)*0.7;
-  col+=uGlow*(1.0-body)*0.55+uGlow*body*0.06;
+  col+=uGlow*0.06; // (joints no longer glow: they're a darker shade of the body)
   {vec3 lv=uLP.xyz-vW;float ld=length(lv),la=clamp(1.0-ld/uLP.w,0.0,1.0);
    col+=base*uLC*la*la*1.1+uLC*pow(max(dot(n,normalize(lv/ld+v)),0.0),40.0)*la*1.4;}
   float f=exp(-pow(vD*uFogD,2.0));
@@ -109,6 +109,22 @@ function buildLineMesh(gl,u8,vOff,ni,idx){
       for(let k=0;k<3;k++)out[dst+20+k]=(j===k||!vis[k])?255:0;}}
   const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,out,gl.STATIC_DRAW);return {b,n:ni,lines:sharpE.size,raw:raw.size};
 }
+// body parts for gibs: which part each bone belongs to
+function gibPart(name){
+  if(/Head|Neck/.test(name))return 'head';
+  for(const s of ['Left','Right']){const k=s[0];
+    if(name===s+'Arm')return 'arm'+k;if(name===s+'ForeArm'||name.startsWith(s+'Hand'))return 'fore'+k;
+    if(name===s+'UpLeg')return 'thigh'+k;if(name===s+'Leg'||name===s+'Foot'||name.startsWith(s+'Toe'))return 'shin'+k;}
+  return 'torso';
+}
+// each triangle goes to the part of the bone that moves it most; the index list is sorted by part
+function groupTris(u8,vOff,idx,names){
+  const part=names.map(gibPart),dom=i=>{const o=vOff+i*20;let b=0,w=-1;for(let k=0;k<4;k++)if(u8[o+16+k]>w){w=u8[o+16+k];b=u8[o+12+k];}return part[b]||'torso';};
+  const groups={};for(let t=0;t<idx.length/3;t++){const ps=[dom(idx[t*3]),dom(idx[t*3+1]),dom(idx[t*3+2])],g=ps[1]===ps[2]?ps[1]:ps[0];(groups[g]||(groups[g]=[])).push(t);}
+  const out=new Uint16Array(idx.length);let n=0;SKN.gibRanges={};
+  for(const [g,ts] of Object.entries(groups)){SKN.gibRanges[g]=[n,ts.length*3];for(const t of ts){out[n++]=idx[t*3];out[n++]=idx[t*3+1];out[n++]=idx[t*3+2];}}
+  return out;
+}
 async function loadModel(){
   try{
     if(typeof MODEL_B64==='undefined'||!R.ok||typeof DecompressionStream==='undefined'){SKN.failed=true;return;}
@@ -126,7 +142,9 @@ async function loadModel(){
     const loc={};for(const a of ['aPos','aNor','aJ','aW'])loc[a]=gl.getAttribLocation(p,a);
     for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC'])loc[u]=gl.getUniformLocation(p,u);
     SKN.vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,SKN.vb);gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(buf,vOff,vLen),gl.STATIC_DRAW);
-    SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(buf.slice(iOff,iOff+meta.ni*2)),gl.STATIC_DRAW);
+    // triangles sorted by body part, so a gib can draw just its own piece (SKN.gibRanges)
+    const idxS=groupTris(new Uint8Array(buf),vOff,new Uint16Array(buf.slice(iOff,iOff+meta.ni*2)),meta.bones.map(b=>b.name));
+    SKN.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,SKN.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idxS,gl.STATIC_DRAW);
     SKN.p=p;SKN.loc=loc;SKN.meta=meta;SKN.ni=meta.ni;
     try{ // the "shiny" variant: same mesh, glossy fragment shader
       const sp=gl.createProgram();
@@ -144,7 +162,7 @@ async function loadModel(){
       gl.linkProgram(lp);if(!gl.getProgramParameter(lp,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(lp));
       const ll={};for(const a of ['aPos','aNor','aJ','aW','aB'])ll[a]=gl.getAttribLocation(lp,a);
       for(const u of ['uVP','uWorldFix','uB','uQ','uBody','uJoint','uGlow','uSun','uFog','uFogD','uAlpha','uLP','uLC','uLine'])ll[u]=gl.getUniformLocation(lp,u);
-      const u8=new Uint8Array(buf),idx=new Uint16Array(buf.slice(iOff,iOff+meta.ni*2));
+      const u8=new Uint8Array(buf),idx=idxS;
       SKN.lm=buildLineMesh(gl,u8,vOff,meta.ni,idx);SKN.lp=lp;SKN.ll=ll;
     }catch(err){console.warn('line style unavailable:',err);}
     // "ink" and "ink gloss": the solid / glossy shading with the same creases drawn as dark lines on top
@@ -746,7 +764,7 @@ function corpsesToDolls(){
   corpses=[];
 }
 
-function drawPose(P,col,alpha,flash){
+function drawPose(P,col,alpha,flash,range){ // range: [first index, count] to draw only part of the body (gibs)
   // which look: lines (glowing creases), solid, shiny, ink (solid + dark creases), inkShiny (shiny + dark creases)
   const st=SETTINGS.charStyle,gl=R.gl;
   let prog=SKN.p,L=SKN.loc,unpacked=false,glowLines=false,camU=false;
@@ -765,13 +783,14 @@ function drawPose(P,col,alpha,flash){
   gl.enableVertexAttribArray(L.aJ);gl.vertexAttribPointer(L.aJ,4,gl.UNSIGNED_BYTE,false,ST,12);
   gl.enableVertexAttribArray(L.aW);gl.vertexAttribPointer(L.aW,4,gl.UNSIGNED_BYTE,true,ST,16);
   if(lines){gl.enableVertexAttribArray(L.aB);gl.vertexAttribPointer(L.aB,3,gl.UNSIGNED_BYTE,true,ST,20);if(glowLines)gl.uniform3f(L.uLine,col[0],col[1],col[2]);}
-  const draw=()=>{if(lines)gl.drawArrays(gl.TRIANGLES,0,SKN.lm.n);else gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);};
+  const draw=()=>{if(range){if(lines)gl.drawArrays(gl.TRIANGLES,range[0],range[1]);else gl.drawElements(gl.TRIANGLES,range[1],gl.UNSIGNED_SHORT,range[0]*2);}
+    else if(lines)gl.drawArrays(gl.TRIANGLES,0,SKN.lm.n);else gl.drawElements(gl.TRIANGLES,SKN.ni,gl.UNSIGNED_SHORT,0);};
   gl.uniformMatrix4fv(L.uVP,false,FR.vp);gl.uniformMatrix4fv(L.uWorldFix,false,FR.fix);
   gl.uniformMatrix4fv(L.uB,false,SKN.mats);gl.uniform1f(L.uQ,SKN.meta.q);
   const s=vnorm(V(.35,.85,.25));gl.uniform3f(L.uSun,s.x,s.y,s.z);gl.uniform3f(L.uFog,.05,.03,.1);gl.uniform1f(L.uFogD,1/1500);
   {const li=FR.light;if(li){gl.uniform4f(L.uLP,li.p.x,li.p.y,li.p.z,li.r);gl.uniform3f(L.uLC,li.c[0],li.c[1],li.c[2]);}else{gl.uniform4f(L.uLP,0,-1e5,0,1);gl.uniform3f(L.uLC,0,0,0);}}
   const fl=flash||0;
-  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);{const k=.68,b=[col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06];gl.uniform3f(L.uJoint,b[0]*k,b[1]*k,b[2]*k);} // joints: the fighter's colour, a shade darker
+  gl.uniform3f(L.uBody,col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06);{const k=.55,b=[col[0]*(.55+fl*.5)+.05,col[1]*(.55+fl*.5)+.05,col[2]*(.55+fl*.5)+.06];gl.uniform3f(L.uJoint,b[0]*k,b[1]*k,b[2]*k);} // joints: the fighter's colour, a shade darker
   gl.uniform3f(L.uGlow,col[0]*(.35+fl),col[1]*(.35+fl),col[2]*(.35+fl));
   if(alpha<.99){
     // see-through: lay down the body's depth first, so only its front shows and nothing behind it (guns, its own far side) bleeds through
