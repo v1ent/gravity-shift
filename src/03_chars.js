@@ -257,11 +257,11 @@ function updateChar(e,dt){
   }
   // reloads
   if(e.reload>0){
-    if(!e.rl||e.rl.w!==e.weapon)e.rl={w:e.weapon,a0:e.ammo,n:Math.max(1,magOf(e)-e.ammo),dur:e.reload};
+    if(!e.rl||e.rl.w!==e.weapon){e.rl={w:e.weapon,a0:e.ammo,n:Math.max(1,magOf(e)-e.ammo),dur:e.reload};sfx('reloadStart',e);}
     e.reload-=dt;
     // shells go in one at a time
-    if(e.weapon==='shotgun'){const p=clamp((1-e.reload/e.rl.dur-.12)/.8,0,1),k=Math.floor(p*e.rl.n+.12);const a=Math.min(magOf(e),e.rl.a0+k);if(a>e.ammo){e.ammo=a;sfx('reload',e);}}
-    if(e.reload<=0){e.reload=0;e.ammo=magOf(e);sfx('reload',e);e.rl=null;}}
+    if(e.weapon==='shotgun'){const p=clamp((1-e.reload/e.rl.dur-.12)/.8,0,1),k=Math.floor(p*e.rl.n+.12);const a=Math.min(magOf(e),e.rl.a0+k);if(a>e.ammo){e.ammo=a;sfx('reloadEnd',e);}}
+    if(e.reload<=0){e.reload=0;e.ammo=magOf(e);sfx('reloadEnd',e);e.rl=null;}}
   else if(c.reload&&e.weapon!=='rocket'&&e.ammo<magOf(e))e.reload=reloadOf(e);
   if(c.reload&&e.weapon==='rocket'&&e.bigLauncher&&e.rockets<RMAG&&e.rreload<=0)e.rreload=RRELOAD;
   if(e.reload<=0)e.rl=null;

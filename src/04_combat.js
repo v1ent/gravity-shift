@@ -88,13 +88,19 @@ function sfxSample(kind,at){
   const me=at===player;
   switch(kind){
     case 'shot':return playS(me?'pistol_player_shot':'pistol_enemy_shot',at,{vol:me?.75:.85});
+    case 'rifle':return playS(me?'ar_player_shot':'ar_npc_shot',at,{vol:me?.7:.85,jit:.05});        // automatic rifle: yours / a bot's
+    case 'shotgun':return playS(me?'shotgun_player_shot':'shotgun_npc_shot',at,{vol:me?.8:.95,range:1600});
+    case 'heal':return playS('medkit',at,{vol:.8,jit:0});
+    // reloads: the recording plays as the reload starts; the clicks at the end (and per shotgun shell) are then left out
+    case 'reloadStart':{const w=at&&at.weapon==='rifle'?'ar':at&&at.weapon;return playS(w+'_reload',at,{vol:me?.7:.8,range:900,jit:.03});}
+    case 'reloadEnd':{const w=at&&at.weapon==='rifle'?'ar':at&&at.weapon;if(SNDG[w+'_reload'])return true;sfx('reload',at);return true;}
     case 'rocket':return playS('launcher_shot',at,{vol:.9});
     case 'boom':return playS('launcher_impact',at,{vol:1,range:1800,jit:.1});
     case 'land':return playS('land',at,{vol:me?.55:.7,range:900});
     case 'crate':return playS('box_collide',at,{vol:.8,range:1000,jit:.15});
     case 'boxkick':return playS('box_kick',at,{vol:.85});
     case 'jump':return playS('jump',at,{vol:me?.45:.55,range:900});
-    case 'step':{const soft=at&&at.stepSoft;return playS('footstep',at,{vol:(me?.28:.4)*(soft?.55:1),rate:soft?.88:1,range:soft?450:650,jit:.12});} // walking: softer, slower
+    case 'step':{const soft=at&&at.stepSoft;return playS(me?'footstep':'npc_footsteps',at,{vol:(me?.28:.75)*(soft?.55:1),rate:soft?.88:1,range:soft?450:650,jit:.12});} // walking: softer, slower; bots have their own steps
     case 'flyby':return playS('bullet_flyby',at,{vol:.75,range:400});
     case 'hurt':return playS('player_taking_damage',null,{vol:.75});
     case 'die':return me?playS('player_death',null,{vol:.9}):false;
